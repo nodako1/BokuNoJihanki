@@ -75,7 +75,7 @@
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-22T12:06:00Z",
+  "lastUpdated": "2026-07-22T12:08:00Z",
   "developmentRulesVersion": "2.2",
   "evidence": {
     "m11ImplementationPullRequest": 12,
