@@ -40,7 +40,7 @@ export function DeveloperHud({
   return (
     <aside className="developer-hud" aria-label="開発用情報">
       <header>
-        <strong>M1 STREAMING HUD</strong>
+        <strong>M1.1 VISUAL HUD</strong>
         <span className={snapshot.fps >= 45 ? 'hud-ok' : 'hud-warn'}>{snapshot.fps} FPS</span>
       </header>
       <dl>
