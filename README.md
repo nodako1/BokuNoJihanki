@@ -11,13 +11,16 @@
 
 ## 現在の状態
 
-バージョン `0.1.0`、マイルストーン **M1**。主人公が住宅街から「なつかぜ公園」まで画面切り替えなしで歩ける町探索基盤を実装しています。
+バージョン `0.1.0`、マイルストーン **M1完了・Production実ブラウザー確認済み**です。主人公が住宅街から「なつかぜ公園」まで画面切り替えなしで歩ける町探索基盤をProductionへ反映しています。
 
-2026-07-22に、ProductionでHUDだけが表示されゲーム画面が黒くなる実行時不具合を確認しました。原因は生成SVGのdata URL形式とPhaserローダーの不一致です。修正コードはmainへマージ済みで、Playwright Chromiumによるローカル本番ビルドの起動・描画・移動確認にも成功しています。現在はVercel Hobbyのビルドレート制限解除後のProduction再反映とProduction Browser Smokeを待っています。
+2026-07-22に、生成SVGのdata URL形式とPhaserローダーの不一致によってProductionが黒画面になる不具合が発生しました。SVGをUTF-8対応のbase64 Data URIへ変更し、Vercel再デプロイ後にPlaywright ChromiumでProductionを実際に開いて、開始、描画、FPS、主人公座標、チャンク読み込み、キーボード移動、ブラウザー例外を確認しました。
 
 - 黒画面修正マージコミット: `28b7ab6454d523d8ba4c4572e5c940356d8a5513`
-- 現在公開中の旧Productionコミット: `a169757a823e4ad19205072ab3ea1fc8651547aa`
-- 状態: `runtime-fix-merged-awaiting-production-verification`
+- Production確認済みコミット: `6b20507c35e49af4e058d7a6f6ffa57c4e5f991f`
+- Vercel status: `success`
+- Production Smoke: `success`
+- Production Browser Smoke: `success`
+- 状態: `completed-production-verified`
 - 次のマイルストーン: **M2 自販機探索と所持金**
 
 ### M1実装済み
@@ -109,12 +112,12 @@ main反映後は二段階で確認します。
 1. `Production Smoke`: 公開バンドルに対象コードが含まれるかを高速確認
 2. `Browser Smoke`: Chromiumで開始ボタンを押し、ゲームが実際に描画・操作できることを確認
 
-M1完了は`Browser Smoke`がProductionで成功してから確定します。
+マイルストーン完了は`Browser Smoke`がProductionで成功してから確定します。
 
 ## ロードマップ
 
 - M0: React＋Phaser、横画面、PWA基盤、時間帯、音声、CI — 完了
-- M1: 移動、住宅街・公園、ストリーミング、衝突、2.5D、時間帯連動 — Runtime修正のProduction確認待ち
+- M1: 移動、住宅街・公園、ストリーミング、衝突、2.5D、時間帯連動 — 完了・Production実ブラウザー確認済み
 - M2: 自販機探索、所持金、15分経過、固定乱数、当日状態、ローカルセーブ基盤
 - M3: 1日の開始・終了、ゲームショップ、3本在庫、日記、複数日
 - M4以降: 南北エリア、バス、埋蔵金、NPC、イベント、31日、エンディング
