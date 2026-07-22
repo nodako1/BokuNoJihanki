@@ -6,6 +6,11 @@ on:
       - codex/m1-real-complete
     paths:
       - .github/workflows/capture-m1-check.yml
+      - package.json
+      - package-lock.json
+      - scripts/**
+      - src/**
+      - tests/**
   workflow_dispatch:
 
 permissions:
