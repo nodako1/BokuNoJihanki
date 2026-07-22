@@ -5,7 +5,7 @@ on:
     branches:
       - feat/m0-foundation
     paths:
-      - bootstrap/m0-project.tar.gz.b64
+      - bootstrap/READY
 
 permissions:
   contents: write
@@ -29,7 +29,8 @@ jobs:
 
       - name: Extract project files
         run: |
-          base64 --decode bootstrap/m0-project.tar.gz.b64 > /tmp/m0-project.tar.gz
+          cat bootstrap/part-* | base64 --decode > /tmp/m0-project.tar.gz
+          echo "1dce8c8b207d69ee6649445f2c5b1fa112686fb6cbc81908508b20eaab527ab1  /tmp/m0-project.tar.gz" | sha256sum --check
           tar -xzf /tmp/m0-project.tar.gz -C .
           rm -rf bootstrap
           rm -f .github/workflows/bootstrap-m0.yml
