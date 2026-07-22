@@ -61,6 +61,8 @@ PRではViteの本番ビルドをローカル起動し、mainではVercel Produc
 - 住宅街と公園の境界に不自然な空白やハードシームがないこと
 - 朝、昼、夕方、夜の差が読み取れること
 
+Visual Evidenceは「画面が描画された」という機能確認だけでなく、説明資料と実装画面の差を明示するために使用します。資料のラスターペイント品質と差が残る場合は、完了報告と既知の課題へ記録します。
+
 ### Artifact
 
 - 6枚の実スクリーンショット
@@ -70,12 +72,31 @@ PRではViteの本番ビルドをローカル起動し、mainではVercel Produc
 
 ## M1.1 PR確認値
 
+- PR head: `2317ef3ce567cde0fdbc86c1c1d4a6277cbee44d`
+- Quality: success
+- Browser Smoke: success
 - 初期座標: `650,590`
 - 公園内部座標: `3180,590`
 - ロード済みチャンク: 2〜3
 - pageerror: 0
 - failed request: 0
 - Headless Chromium FPS: 8〜9（software WebGL、trace・画面取得中）
+
+## M1.1 Production確認値
+
+- Production commit: `f06f5ef138d8871d7768103591ecf88dcd846626`
+- Vercel: success
+- Production Smoke: success
+- Production Browser Smoke: success
+- Production Browser Evidence run: `29915997279`
+- 初期座標: `650,590`
+- 公園内部座標: `3180,590`
+- 初期チャンク: `residential-west`
+- 公園チャンク: `park-west`
+- ロード済みチャンク: 2〜3
+- pageerror: 0
+- failed request: 0
+- 朝・昼・夕方・夜の住宅街と公園内部のProduction画像を取得済み
 
 Headless ChromiumのFPSは性能の絶対値ではありません。正式公開前に、代表的なiPhoneとAndroid実機で操作感・発熱・メモリを確認します。
 

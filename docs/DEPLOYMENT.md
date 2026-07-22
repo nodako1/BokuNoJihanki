@@ -25,6 +25,13 @@ Vercelが`Ready`でも、古いコミット、古いJavaScript、実行時例外
 
 公開HTMLとJavaScriptバンドル内にマイルストーン固有の文字列が存在するか確認します。配備されたコードの種類を高速に判定できますが、JavaScriptの実行成功までは保証しません。
 
+M1.1では次を検査します。
+
+- `M1.1 VISUAL HUD`
+- `m11-bg-residential-west`
+- `m11-bg-park-west`
+- `なつかぜ公園`
+
 ### Browser Smoke
 
 Playwright ChromiumでProductionを開き、実際にボタンを押し、canvas・FPS・座標・チャンク・キーボード移動・主要エリア到達・ブラウザー例外を確認します。ゲーム動作の完了判定に使用します。
@@ -32,6 +39,8 @@ Playwright ChromiumでProductionを開き、実際にボタンを押し、canvas
 ### Visual Evidence
 
 ビジュアル変更では、Productionから朝・昼・夕方・夜・主要エリアを撮影します。説明資料のモックアップではなく、Productionの実スクリーンショットを完了報告へ使用します。
+
+実画面と基準画像に差が残る場合は、その差を隠さず既知の課題へ記録します。
 
 ## M1黒画面の原因と対策
 
@@ -49,20 +58,26 @@ Playwright ChromiumでProductionを開き、実際にボタンを押し、canvas
 - Production: https://boku-no-jihanki.vercel.app
 - 黒画面修正マージ: `28b7ab6454d523d8ba4c4572e5c940356d8a5513`
 - M1 Production確認済みコミット: `6b20507c35e49af4e058d7a6f6ffa57c4e5f991f`
-- Vercel status: `success`
-- Production Smoke: `success`
-- Production Browser Smoke: `success`
-
-## M1.1デプロイ条件
-
-Pull Request #12のQualityとBrowser Smokeは成功済みです。mainへマージした後、次を満たしたコミットをM1.1 Production確認済みとして記録します。
-
 - Vercel status: success
 - Production Smoke: success
 - Production Browser Smoke: success
-- 初期座標が初期化される
-- 住宅街から公園内部へ実移動できる
-- 朝・昼・夕方・夜・公園のProduction実画面が取得できる
+
+## M1.1確認済みProduction
+
+- M1.1実装PR: #12
+- M1.1実装マージ: `8b9e4c2b77cb65750ae4b74ba14695636241269f`
+- Production検証更新PR: #13
+- Production確認済みコミット: `f06f5ef138d8871d7768103591ecf88dcd846626`
+- Production: https://boku-no-jihanki.vercel.app
+- Vercel status: success
+- Production Smoke: success
+- Production Browser Smoke: success
+- Production Browser Evidence run: `29915997279`
+- 初期座標: `650,590`
+- 公園内部座標: `3180,590`
+- 初期チャンク: `residential-west`
+- 公園チャンク: `park-west`
+- 朝・昼・夕方・夜・公園のProduction実画面取得済み
 - pageerror: 0
 - failed request: 0
 
