@@ -52,72 +52,85 @@ jobs:
             console.log(`[${kind}] ${text}`);
           };
 
-          const browser = await chromium.launch({
-            headless: true,
-            args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
-          });
-          const context = await browser.newContext({
-            viewport: { width: 1600, height: 900 },
-            deviceScaleFactor: 1,
-            locale: 'ja-JP',
-          });
-          const page = await context.newPage();
-          page.on('console', (message) => record(`console:${message.type()}`, message.text()));
-          page.on('pageerror', (error) => record('pageerror', error.stack ?? error.message));
-          page.on('requestfailed', (request) => record('requestfailed', `${request.method()} ${request.url()} :: ${request.failure()?.errorText}`));
-          page.on('response', (response) => {
-            if (response.status() >= 400) record('http', `${response.status()} ${response.url()}`);
-          });
+          let browser;
+          let context;
+          let exitCode = 0;
+          try {
+            browser = await chromium.launch({
+              headless: true,
+              args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
+            });
+            context = await browser.newContext({
+              viewport: { width: 1600, height: 900 },
+              deviceScaleFactor: 1,
+              locale: 'ja-JP',
+            });
+            await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+            const page = await context.newPage();
+            page.on('console', (message) => record(`console:${message.type()}`, message.text()));
+            page.on('pageerror', (error) => record('pageerror', error.stack ?? error.message));
+            page.on('requestfailed', (request) => record('requestfailed', `${request.method()} ${request.url()} :: ${request.failure()?.errorText}`));
+            page.on('response', (response) => {
+              if (response.status() >= 400) record('http', `${response.status()} ${response.url()}`);
+            });
 
-          const url = `${process.env.PRODUCTION_URL}/?diagnostic=${Date.now()}`;
-          record('navigate', url);
-          const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
-          record('document-status', response?.status() ?? null);
-          await page.screenshot({ path: 'diagnostics/browser/before-start.png', fullPage: true });
+            const url = `${process.env.PRODUCTION_URL}/?diagnostic=${Date.now()}`;
+            record('navigate', url);
+            const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 60000 });
+            record('document-status', response?.status() ?? null);
+            await page.screenshot({ path: 'diagnostics/browser/before-start.png', fullPage: true });
 
-          const startButton = page.getByRole('button', { name: '夏休みを始める' });
-          record('start-button-count', await startButton.count());
-          if (await startButton.count()) {
-            await startButton.click();
+            const startButton = page.getByRole('button', { name: '夏休みを始める' });
+            const startCount = await startButton.count();
+            record('start-button-count', startCount);
+            if (startCount > 0) {
+              await startButton.click();
+            }
+            await page.waitForTimeout(7000);
+            await page.screenshot({ path: 'diagnostics/browser/after-start.png', fullPage: true });
+
+            const state = await page.evaluate(() => {
+              const canvases = [...document.querySelectorAll('canvas')].map((canvas) => ({
+                width: canvas.width,
+                height: canvas.height,
+                clientWidth: canvas.clientWidth,
+                clientHeight: canvas.clientHeight,
+                rect: canvas.getBoundingClientRect().toJSON(),
+              }));
+              const testCanvas = document.createElement('canvas');
+              return {
+                title: document.title,
+                bodyText: document.body.innerText,
+                canvasCount: canvases.length,
+                canvases,
+                webgl: Boolean(testCanvas.getContext('webgl')),
+                webgl2: Boolean(testCanvas.getContext('webgl2')),
+                userAgent: navigator.userAgent,
+                visibilityState: document.visibilityState,
+              };
+            });
+            record('page-state', state);
+            fs.writeFileSync('diagnostics/browser/state.json', `${JSON.stringify(state, null, 2)}\n`);
+          } catch (error) {
+            exitCode = 1;
+            record('diagnostic-error', error?.stack ?? String(error));
+          } finally {
+            fs.writeFileSync('diagnostics/browser/runtime.log', `${output.join('\n')}\n`);
+            if (context) {
+              try {
+                await context.tracing.stop({ path: 'diagnostics/browser/trace.zip' });
+              } catch (error) {
+                record('trace-error', error?.stack ?? String(error));
+              }
+            }
+            if (browser) await browser.close();
           }
-          await page.waitForTimeout(7000);
-          await page.screenshot({ path: 'diagnostics/browser/after-start.png', fullPage: true });
-
-          const state = await page.evaluate(() => {
-            const canvases = [...document.querySelectorAll('canvas')].map((canvas) => ({
-              width: canvas.width,
-              height: canvas.height,
-              clientWidth: canvas.clientWidth,
-              clientHeight: canvas.clientHeight,
-              rect: canvas.getBoundingClientRect().toJSON(),
-            }));
-            const testCanvas = document.createElement('canvas');
-            const webgl2 = Boolean(testCanvas.getContext('webgl2'));
-            const webgl = Boolean(testCanvas.getContext('webgl'));
-            return {
-              title: document.title,
-              bodyText: document.body.innerText,
-              canvasCount: canvases.length,
-              canvases,
-              webgl,
-              webgl2,
-              userAgent: navigator.userAgent,
-              visibilityState: document.visibilityState,
-            };
-          });
-          record('page-state', state);
-          fs.writeFileSync('diagnostics/browser/runtime.log', `${output.join('\n')}\n`);
-          fs.writeFileSync('diagnostics/browser/state.json', `${JSON.stringify(state, null, 2)}\n`);
-          await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
-          await page.reload({ waitUntil: 'networkidle' });
-          await page.getByRole('button', { name: '夏休みを始める' }).click();
-          await page.waitForTimeout(3000);
-          await context.tracing.stop({ path: 'diagnostics/browser/trace.zip' });
-          await browser.close();
+          process.exitCode = exitCode;
           SCRIPT
           node /tmp/diagnose.mjs
 
       - name: Upload browser diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: m1-production-browser-diagnostics
