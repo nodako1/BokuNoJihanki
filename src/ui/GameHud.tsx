@@ -64,7 +64,7 @@ export function GameHud({
 
       <VirtualJoystick />
       <div className="future-action-space" aria-hidden="true"><span>M2</span><small>調べる</small></div>
-      <p className="control-hint">スマホ：左スティック　PC：WASD / 矢印キー　道路を右へ進むと公園です</p>
+      <p className="control-hint">スマホ: 左スティック / PC: WASD・矢印キー / 道路を右へ進むと公園です</p>
     </main>
   );
 }
