@@ -33,10 +33,53 @@ jobs:
           ref: codex/m1-real-complete
           fetch-depth: 0
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Capture uploaded-part diagnostics
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          {
+            echo "Generated at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "Byte counts"
+            wc -c bootstrap/m1-real/part-* | sort -k2
+            echo
+            echo "SHA-256"
+            sha256sum bootstrap/m1-real/part-* | sort -k2
+            echo
+            cat bootstrap/m1-real/part-* > /tmp/m1-real.b64
+            echo "Combined base64 bytes: $(wc -c < /tmp/m1-real.b64)"
+            echo "Combined base64 SHA-256: $(sha256sum /tmp/m1-real.b64 | cut -d' ' -f1)"
+          } > diagnostics/m1-real-parts.txt
+          git add diagnostics/m1-real-parts.txt
+          git commit -m "chore: capture real M1 payload diagnostics" || true
+          git push origin HEAD:codex/m1-real-complete
+
+      - name: Validate uploaded parts
+        shell: bash
+        run: |
+          cat <<'CHECKSUMS' | sha256sum --check
+          47e87707768f6bc1cafb7fa6c1e2060061715db93a90549af30c666a279397bc  bootstrap/m1-real/part-00
+          6fe02128ee2ccfd48b87b822df4bcfabaa489e1e09142f12d1b03b1c4be82592  bootstrap/m1-real/part-01
+          e5d07e19eb5d2d7d1d2328b429bc87fca2a269510c1a4d176edb85e4cdb5e95b  bootstrap/m1-real/part-02a
+          adba43b548ce248b91a121d3aabca8735a4a84f63c7387c30f6fecf302043d6d  bootstrap/m1-real/part-02b
+          47ae019d4d0b3c0adb21e8f7c4a903184529de74da534d11fcd81ed8eaec82a9  bootstrap/m1-real/part-03
+          f330fbc629fc083c2184af05fa7cb2687db16d2f774255b02c4d9b16153de569  bootstrap/m1-real/part-04a
+          e34b83eef2589eebabcbc2272fc292bcfa28f6fde4b0db5e3a3a82785151322a  bootstrap/m1-real/part-04b
+          cc2dbe5d0363c3df36e12e145853078a3b532a8541ae1c7f82e604bfce36dbde  bootstrap/m1-real/part-05a
+          259faee700f56f7fda169c112c0754fb7faf83a475d7b7d7e664dc39876672ad  bootstrap/m1-real/part-05b
+          CHECKSUMS
+
       - name: Rebuild and verify source archive
         shell: bash
         run: |
-          cat bootstrap/m1-real/part-* | base64 --decode > /tmp/m1-real.tar.gz
+          cat bootstrap/m1-real/part-* > /tmp/m1-real.b64
+          echo "12e4c2e8a4d156c5f68a423cb327e5c0520e2329b7f93181e4a429b3cb840749  /tmp/m1-real.b64" | sha256sum --check
+          base64 --decode /tmp/m1-real.b64 > /tmp/m1-real.tar.gz
           echo "3f9893932f74f149dd2815c471c779a8a0fb0eb0fd8f6112f65aa12d4094894f  /tmp/m1-real.tar.gz" | sha256sum --check
 
       - name: Replace branch contents with verified M1 source
@@ -60,8 +103,6 @@ jobs:
       - name: Commit verified M1
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "feat: implement real M1 town exploration"
           git push origin HEAD:codex/m1-real-complete
