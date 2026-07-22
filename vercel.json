@@ -7,10 +7,14 @@
   "git": {
     "deploymentEnabled": {
       "feat/**": false,
+      "feature/**": false,
       "fix/**": false,
       "chore/**": false,
       "docs/**": false,
-      "codex/**": false
+      "codex/**": false,
+      "ci/**": false,
+      "diag/**": false,
+      "test/**": false
     }
   },
   "rewrites": [

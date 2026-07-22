@@ -6,7 +6,7 @@
   "status": "completed-production-verified",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "a169757a823e4ad19205072ab3ea1fc8651547aa",
+  "lastProductionCommit": "6b20507c35e49af4e058d7a6f6ffa57c4e5f991f",
   "completed": [
     "m0-development-foundation",
     "player-four-direction-movement",
@@ -29,10 +29,12 @@
     "m1-original-vector-assets",
     "m1-specification",
     "m1-quality-automation",
-    "m1-main-merge",
-    "m1-quality-check-passed",
-    "m1-vercel-production-verified",
-    "m1-production-smoke-passed"
+    "m1-runtime-root-cause-identified",
+    "m1-svg-loader-fix-merged",
+    "m1-browser-smoke-local-passed",
+    "m1-vercel-rate-limit-recovered",
+    "m1-production-smoke-passed",
+    "m1-browser-smoke-production-passed"
   ],
   "inProgress": [],
   "notStarted": [
@@ -52,8 +54,12 @@
     {
       "severity": "light",
       "description": "M1 uses original SVG vector assets optimized for implementation consistency; visual detail and animation frames will be refined incrementally without changing the fixed 2.5D camera."
+    },
+    {
+      "severity": "light",
+      "description": "Headless Chromium uses software WebGL and reported lower FPS than a normal desktop browser; device performance still needs user-side confirmation on representative smartphones."
     }
   ],
-  "lastUpdated": "2026-07-22T05:59:35Z",
-  "developmentRulesVersion": "2.0"
+  "lastUpdated": "2026-07-22T08:33:15Z",
+  "developmentRulesVersion": "2.1"
 }

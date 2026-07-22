@@ -18,7 +18,7 @@ test('M1 state points to vending-machine interaction as M2', async () => {
   assert.equal(state.currentMilestone, 'M1');
   assert.equal(state.nextMilestone, 'M2');
   assert.equal(state.nextTask, 'vending-machine-search-and-money-system');
-  assert.equal(state.developmentRulesVersion, '2.0');
+  assert.equal(state.developmentRulesVersion, '2.1');
 });
 
 test('Vercel only deploys main to the normal production flow', async () => {
@@ -26,7 +26,19 @@ test('Vercel only deploys main to the normal production flow', async () => {
   assert.equal(config.framework, 'vite');
   assert.equal(config.buildCommand, 'npm run build');
   assert.equal(config.outputDirectory, 'dist');
-  assert.equal(config.git.deploymentEnabled['feat/**'], false);
+  for (const pattern of [
+    'feat/**',
+    'feature/**',
+    'fix/**',
+    'chore/**',
+    'docs/**',
+    'codex/**',
+    'ci/**',
+    'diag/**',
+    'test/**',
+  ]) {
+    assert.equal(config.git.deploymentEnabled[pattern], false);
+  }
 });
 
 test('M1 asset manifest records an original reusable vector set', async () => {

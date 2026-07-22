@@ -79,8 +79,8 @@ if (projectState.currentMilestone !== 'M1') {
 if (projectState.nextMilestone !== 'M2') {
   failures.push('PROJECT_STATE.json nextMilestone must be M2.');
 }
-if (projectState.developmentRulesVersion !== '2.0') {
-  failures.push('PROJECT_STATE.json developmentRulesVersion must be 2.0.');
+if (projectState.developmentRulesVersion !== '2.1') {
+  failures.push('PROJECT_STATE.json developmentRulesVersion must be 2.1.');
 }
 if (manifest.orientation !== 'landscape') {
   failures.push('PWA manifest orientation must be landscape.');
@@ -91,8 +91,10 @@ if (manifest.display !== 'standalone') {
 if (vercel.framework !== 'vite' || vercel.outputDirectory !== 'dist') {
   failures.push('Vercel must build the Vite app into dist.');
 }
-if (vercel.git?.deploymentEnabled?.['feat/**'] !== false) {
-  failures.push('Normal Vercel Preview deployment for feat/** must remain disabled.');
+for (const pattern of ['feat/**', 'feature/**', 'fix/**', 'chore/**', 'docs/**', 'codex/**', 'ci/**', 'diag/**', 'test/**']) {
+  if (vercel.git?.deploymentEnabled?.[pattern] !== false) {
+    failures.push(`Normal Vercel deployment for ${pattern} must remain disabled.`);
+  }
 }
 if (!createGame.includes('ExplorationScene') || createGame.includes('scene: [FoundationScene]')) {
   failures.push('Phaser must start the M1 ExplorationScene.');
