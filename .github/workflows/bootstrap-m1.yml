@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   bootstrap:
-    name: Apply, verify and commit M1
+    name: Apply, generate, verify and commit M1
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -27,17 +27,20 @@ jobs:
           ref: feat/m1-streaming-map
           fetch-depth: 0
 
-      - name: Apply M1 project payload
+      - name: Apply M1 text payload
         shell: bash
         run: |
           test -f bootstrap/m1/READY
-          cat bootstrap/m1/part-* | base64 --decode > /tmp/m1-project.tar.gz
-          echo "7892c4fde5441b7e1caf107270fe17deecd3a18431143463aead3da78bbfc07f  /tmp/m1-project.tar.gz" | sha256sum --check
-          tar -xzf /tmp/m1-project.tar.gz -C .
+          cat bootstrap/m1/part-* | base64 --decode > /tmp/m1-text.tar.gz
+          echo "8fc6f00e4e40f0832bd5d09c2e77e1e623b5cd3cb3ae3b420416d1f9397a5a8a  /tmp/m1-text.tar.gz" | sha256sum --check
+          tar -xzf /tmp/m1-text.tar.gz -C .
           rm -rf bootstrap
           rm -f .m1-source-trigger
           rm -f .github/workflows/source-snapshot.yml
           rm -f .github/workflows/bootstrap-m1.yml
+
+      - name: Generate M1 image assets
+        run: python scripts/generate_m1_assets.py
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
