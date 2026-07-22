@@ -1,0 +1,105 @@
+name: Browser Smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/browser-smoke.yml'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'public/**'
+      - 'scripts/browser-smoke.mjs'
+      - 'src/**'
+      - 'vite.config.ts'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/browser-smoke.yml'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'public/**'
+      - 'scripts/browser-smoke.mjs'
+      - 'src/**'
+      - 'vite.config.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  statuses: read
+
+concurrency:
+  group: browser-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Render and operate the real game in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build application
+        env:
+          VERCEL_GIT_COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Start local production build
+        if: github.event_name == 'pull_request'
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/vite-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/vite-preview.log
+          exit 1
+
+      - name: Test pull request build in a real browser
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}
+          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke
+          PRODUCTION_WAIT_MS: '30000'
+        run: node scripts/browser-smoke.mjs
+
+      - name: Test deployed Production in a real browser
+        if: github.event_name != 'pull_request'
+        env:
+          BASE_URL: https://boku-no-jihanki.vercel.app
+          EXPECTED_COMMIT: ${{ github.sha }}
+          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke
+          PRODUCTION_WAIT_MS: '600000'
+        run: node scripts/browser-smoke.mjs
+
+      - name: Upload screenshots, logs and trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-${{ github.run_id }}
+          path: diagnostics/browser-smoke
+          if-no-files-found: error
+          retention-days: 14
