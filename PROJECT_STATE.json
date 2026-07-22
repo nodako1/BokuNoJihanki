@@ -3,10 +3,10 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1.1",
-  "status": "implementation-and-pr-browser-verified-awaiting-production",
+  "status": "completed-production-verified",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "6b20507c35e49af4e058d7a6f6ffa57c4e5f991f",
+  "lastProductionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
@@ -41,15 +41,15 @@
     "m1.1-pr-quality-passed",
     "m1.1-pr-browser-smoke-passed",
     "m1.1-four-time-period-screenshots-captured",
-    "m1.1-park-interior-screenshot-captured"
-  ],
-  "inProgress": [
+    "m1.1-park-interior-screenshot-captured",
     "m1.1-main-merge",
     "m1.1-vercel-production-deployment",
-    "m1.1-production-smoke",
-    "m1.1-production-browser-smoke",
+    "m1.1-production-smoke-passed",
+    "m1.1-production-browser-smoke-passed",
+    "m1.1-production-visual-evidence-captured",
     "m1.1-final-documentation"
   ],
+  "inProgress": [],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -61,22 +61,18 @@
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
-      "severity": "temporary",
-      "description": "Vercel Production still serves the verified M1 build until Pull Request #12 is merged and the M1.1 Production Browser Smoke succeeds."
-    },
-    {
       "severity": "light",
       "description": "The M1.1 world uses original textured SVG illustration. It matches the approved reference in density, warmth and composition, but does not reproduce its painterly raster micro-texture exactly."
     },
     {
       "severity": "light",
-      "description": "Headless Chromium with software WebGL reported 8-9 FPS while tracing and taking screenshots; representative iPhone and Android performance still requires user-side confirmation."
+      "description": "Headless Chromium with software WebGL reported 8-10 FPS while tracing and taking screenshots; representative iPhone and Android performance still requires user-side confirmation."
     },
     {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-22T10:55:00Z",
+  "lastUpdated": "2026-07-22T11:36:00Z",
   "developmentRulesVersion": "2.2"
 }
