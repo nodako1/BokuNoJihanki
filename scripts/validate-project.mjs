@@ -121,7 +121,16 @@ if (!visualAssets.includes('M11_BACKGROUND_ASSETS') || !visualAssets.includes('M
 if (!Array.isArray(assetManifest.files) || assetManifest.files.length < 30) {
   failures.push('M1.1 asset manifest must contain at least 30 original SVG assets.');
 }
-for (const expectedAsset of ['m11-bg-residential-west', 'm11-bg-park-west', 'player-left-0', 'player-right-0', 'house-d', 'slide', 'swing']) {
+for (const expectedAsset of [
+  'm11-bg-residential-west',
+  'm11-bg-park-west',
+  'player-left-0',
+  'player-right-0',
+  'house-d',
+  'playground-slide',
+  'playground-swing',
+  'trash-can',
+]) {
   if (!assetManifest.files.includes(expectedAsset)) {
     failures.push(`M1.1 asset manifest is missing ${expectedAsset}.`);
   }
