@@ -4,20 +4,22 @@
 
 React＋Phaser＋Vite、横画面、PWAマニフェスト、タイトル、時間帯補間、Web Audio、ビルド表示、CI、Vercel。
 
-## M1 町を歩く基盤 — 完了・Production確認済み
+## M1 町を歩く基盤 — Runtime修正のProduction確認待ち
 
 4方向移動、仮想スティック、キーボード、カメラ、住宅街・公園、4チャンクストリーミング、衝突、Yソート、時間帯、環境音、HUD、オリジナルSVG。
 
-- M1機能マージ: `432108024b40c9f3fc20aeec38b7bf871c192da1`
-- Production確認済みコミット: `a169757a823e4ad19205072ab3ea1fc8651547aa`
-- Vercel status: success
-- Production Smoke: success
+2026-07-22、旧ProductionでSVGローダーの実行時例外により黒画面になることが判明しました。修正コードはmainへマージ済みで、ローカル本番ビルドに対するPlaywright Browser Smokeでは描画と移動に成功しています。Vercel Hobbyのビルドレート制限解除後にProductionへ反映し、Production Browser Smoke成功をもってM1を再確定します。
 
-## M2 自販機探索と経済 — 次回
+- 黒画面修正マージ: `28b7ab6454d523d8ba4c4572e5c940356d8a5513`
+- 旧Production: `a169757a823e4ad19205072ab3ea1fc8651547aa`
+- ローカルBrowser Smoke: success
+- Production Browser Smoke: pending
+
+## M2 自販機探索と経済 — M1再確認後
 
 自販機接近、状況対応ボタン、下／返却口、接写画面、固定乱数、空振りから1000円、所持金、15分経過、当日一回、18時制限、一時セーブ。
 
-M2の完了条件は「自販機を見つけ、調べ、結果を確認し、15分と所持金が動く」一連の中心体験がProductionで動作することです。
+M2の完了条件は「自販機を見つけ、調べ、結果を確認し、15分と所持金が動く」一連の中心体験がProductionの実ブラウザーで動作することです。
 
 ## M3 1日の完成
 
