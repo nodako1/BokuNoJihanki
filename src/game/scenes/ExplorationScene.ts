@@ -54,7 +54,10 @@ export class ExplorationScene extends Phaser.Scene {
   private footstepDistance = 0;
   private hudElapsed = 0;
   private atmosphereElapsed = 0;
-  private lastPosition = { x: PLAYER_START.x, y: PLAYER_START.y };
+  private lastPosition: { x: number; y: number } = {
+    x: PLAYER_START.x,
+    y: PLAYER_START.y,
+  };
   private lastInputSource: 'keyboard' | 'touch' | 'none' = 'none';
   private cleanedUp = false;
   private streamSnapshot: StreamSnapshot = {
