@@ -1,4 +1,5 @@
 name: Report M1.2 Workflow Status
+# refresh: 2026-07-23T00:00:00Z
 
 on:
   push:
