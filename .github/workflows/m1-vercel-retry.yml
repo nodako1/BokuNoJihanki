@@ -1,0 +1,146 @@
+name: One-time M1 Vercel Production retry
+
+on:
+  push:
+    branches:
+      - chore/m1-vercel-retry
+    paths:
+      - .github/workflows/m1-vercel-retry.yml
+
+permissions:
+  contents: write
+  statuses: write
+
+concurrency:
+  group: one-time-m1-vercel-retry
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    name: Retry deployment and operate Production in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PRODUCTION_URL: https://boku-no-jihanki.vercel.app
+      RETRY_AT_UTC: '2026-07-22T08:05:00Z'
+
+    steps:
+      - name: Wait for the Hobby hourly build window to reset
+        shell: bash
+        run: |
+          TARGET=$(date -u -d "${RETRY_AT_UTC}" +%s)
+          NOW=$(date -u +%s)
+          WAIT=$((TARGET - NOW))
+          if (( WAIT > 0 )); then
+            echo "Waiting ${WAIT} seconds until ${RETRY_AT_UTC}."
+            sleep "${WAIT}"
+          else
+            echo "Retry time has already arrived."
+          fi
+
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Create one clean Production retry commit
+        id: trigger
+        shell: bash
+        run: |
+          git pull --ff-only origin main
+          printf 'M1 black-screen fix Production retry at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .m1-vercel-production-retry
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f .m1-vercel-production-retry
+          git commit -m "chore: retry M1 Production after Vercel rate reset"
+          git push origin HEAD:main
+          SHA=$(git rev-parse HEAD)
+          echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state='pending' \
+            -f context='Production Smoke' \
+            -f description='Waiting for Vercel and real browser operation' \
+            -f target_url="${PRODUCTION_URL}"
+
+      - name: Wait for Vercel deployment
+        id: vercel
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA='${{ steps.trigger.outputs.sha }}'
+          for attempt in $(seq 1 90); do
+            STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${SHA}/status" --jq '[.statuses[] | select(.context=="Vercel")][0].state // "missing"')
+            echo "Vercel state: ${STATE} (attempt ${attempt}/90)"
+            if [[ "${STATE}" == "success" ]]; then
+              exit 0
+            fi
+            if [[ "${STATE}" == "failure" || "${STATE}" == "error" ]]; then
+              echo "Vercel deployment failed for ${SHA}." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for Vercel deployment." >&2
+          exit 1
+
+      - name: Setup Node.js
+        if: steps.vercel.outcome == 'success'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install browser verification dependencies
+        if: steps.vercel.outcome == 'success'
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Launch and operate Vercel Production
+        id: browser
+        if: steps.vercel.outcome == 'success'
+        continue-on-error: true
+        env:
+          BASE_URL: https://boku-no-jihanki.vercel.app
+          EXPECTED_COMMIT: ${{ steps.trigger.outputs.sha }}
+          BROWSER_ARTIFACT_DIR: diagnostics/production-retry
+          PRODUCTION_WAIT_MS: '120000'
+        run: node scripts/browser-smoke.mjs
+
+      - name: Publish final Production Smoke status
+        if: always()
+        shell: bash
+        run: |
+          SHA='${{ steps.trigger.outputs.sha }}'
+          if [[ '${{ steps.vercel.outcome }}' == 'success' && '${{ steps.browser.outcome }}' == 'success' ]]; then
+            STATE='success'
+            DESCRIPTION='Production rendered and keyboard movement succeeded in Chromium'
+          else
+            STATE='failure'
+            DESCRIPTION='Vercel deployment or real browser operation failed'
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
+            -f state="${STATE}" \
+            -f context='Production Smoke' \
+            -f description="${DESCRIPTION}" \
+            -f target_url="${PRODUCTION_URL}"
+
+      - name: Upload Production evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-production-retry-${{ steps.trigger.outputs.sha }}
+          path: diagnostics/production-retry
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Fail when Production verification failed
+        if: steps.vercel.outcome != 'success' || steps.browser.outcome != 'success'
+        run: exit 1
