@@ -3,10 +3,10 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1",
-  "status": "implementation-complete-awaiting-production-verification",
+  "status": "completed-production-verified",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "558721ae2cd3a2b5174caadfd7660400b5fd6324",
+  "lastProductionCommit": "a169757a823e4ad19205072ab3ea1fc8651547aa",
   "completed": [
     "m0-development-foundation",
     "player-four-direction-movement",
@@ -28,12 +28,13 @@
     "developer-hud",
     "m1-original-vector-assets",
     "m1-specification",
-    "m1-quality-automation"
-  ],
-  "inProgress": [
+    "m1-quality-automation",
     "m1-main-merge",
-    "m1-production-verification"
+    "m1-quality-check-passed",
+    "m1-vercel-production-verified",
+    "m1-production-smoke-passed"
   ],
+  "inProgress": [],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -50,9 +51,9 @@
     },
     {
       "severity": "light",
-      "description": "M1 uses original SVG vector assets optimized for implementation consistency; detail will be refined incrementally without changing the fixed 2.5D camera."
+      "description": "M1 uses original SVG vector assets optimized for implementation consistency; visual detail and animation frames will be refined incrementally without changing the fixed 2.5D camera."
     }
   ],
-  "lastUpdated": "2026-07-22T00:00:00Z",
+  "lastUpdated": "2026-07-22T05:59:35Z",
   "developmentRulesVersion": "2.0"
 }
