@@ -38,27 +38,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Capture uploaded-part diagnostics
-        shell: bash
-        run: |
-          mkdir -p diagnostics
-          {
-            echo "Generated at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo
-            echo "Byte counts"
-            wc -c bootstrap/m1-real/part-* | sort -k2
-            echo
-            echo "SHA-256"
-            sha256sum bootstrap/m1-real/part-* | sort -k2
-            echo
-            cat bootstrap/m1-real/part-* > /tmp/m1-real.b64
-            echo "Combined base64 bytes: $(wc -c < /tmp/m1-real.b64)"
-            echo "Combined base64 SHA-256: $(sha256sum /tmp/m1-real.b64 | cut -d' ' -f1)"
-          } > diagnostics/m1-real-parts.txt
-          git add diagnostics/m1-real-parts.txt
-          git commit -m "chore: capture real M1 payload diagnostics" || true
-          git push origin HEAD:codex/m1-real-complete
-
       - name: Validate uploaded parts
         shell: bash
         run: |
@@ -97,9 +76,26 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Verify M1
-        run: npm run check
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee /tmp/m1-verify.log
+
+      - name: Commit source and verification diagnostics
+        if: steps.verify.outcome == 'failure'
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          cp /tmp/m1-verify.log diagnostics/m1-verify.log
+          git add -A
+          git commit -m "chore: capture real M1 verification failure"
+          git push origin HEAD:codex/m1-real-complete
+          exit 1
 
       - name: Commit verified M1
+        if: steps.verify.outcome == 'success'
         shell: bash
         run: |
           git add -A
