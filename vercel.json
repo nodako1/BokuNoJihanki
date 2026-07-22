@@ -4,6 +4,15 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm install --no-audit --no-fund",
+  "git": {
+    "deploymentEnabled": {
+      "feat/**": false,
+      "fix/**": false,
+      "chore/**": false,
+      "docs/**": false,
+      "codex/**": false
+    }
+  },
   "rewrites": [
     { "source": "/((?!assets/|favicon.svg|manifest.webmanifest|robots.txt).*)", "destination": "/index.html" }
   ],
