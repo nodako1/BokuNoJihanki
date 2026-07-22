@@ -1,0 +1,31 @@
+{
+  "project": "BokuNoJihanki",
+  "gameTitle": "ぼくの自販機",
+  "currentMilestone": "M0",
+  "status": "implemented-awaiting-production-verification",
+  "version": "0.0.1",
+  "completed": [
+    "project-bootstrap",
+    "react-phaser-shell",
+    "landscape-orientation-guard",
+    "pwa-manifest-foundation",
+    "title-screen",
+    "time-of-day-atmosphere-foundation",
+    "procedural-audio-foundation",
+    "build-metadata-display",
+    "github-actions-quality-workflow",
+    "vercel-configuration",
+    "m0-specification"
+  ],
+  "nextMilestone": "M1",
+  "nextTask": "player-movement-and-first-streaming-map",
+  "productionBranch": "main",
+  "lastProductionCommit": null,
+  "knownIssues": [
+    "Vercel project connection and production URL must be verified after main is updated.",
+    "M0 uses procedural placeholder scenery; final generated art assets are introduced incrementally from M1 onward.",
+    "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
+  ],
+  "openDecisions": [],
+  "updatedAt": "2026-07-22"
+}
