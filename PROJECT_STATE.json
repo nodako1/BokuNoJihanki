@@ -3,7 +3,7 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1",
-  "status": "completed-production-verified",
+  "status": "runtime-fix-merged-awaiting-production-verification",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
   "lastProductionCommit": "a169757a823e4ad19205072ab3ea1fc8651547aa",
@@ -29,12 +29,14 @@
     "m1-original-vector-assets",
     "m1-specification",
     "m1-quality-automation",
-    "m1-main-merge",
-    "m1-quality-check-passed",
-    "m1-vercel-production-verified",
-    "m1-production-smoke-passed"
+    "m1-runtime-root-cause-identified",
+    "m1-svg-loader-fix-merged",
+    "m1-browser-smoke-local-passed"
   ],
-  "inProgress": [],
+  "inProgress": [
+    "m1-vercel-rate-limit-recovery",
+    "m1-browser-smoke-production-verification"
+  ],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -46,6 +48,10 @@
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
+      "severity": "blocking",
+      "description": "The corrected M1 runtime is merged to main, but Vercel Production is still serving the previous black-screen build until the Hobby build-rate window allows a new deployment."
+    },
+    {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     },
@@ -54,6 +60,6 @@
       "description": "M1 uses original SVG vector assets optimized for implementation consistency; visual detail and animation frames will be refined incrementally without changing the fixed 2.5D camera."
     }
   ],
-  "lastUpdated": "2026-07-22T05:59:35Z",
-  "developmentRulesVersion": "2.0"
+  "lastUpdated": "2026-07-22T07:00:00Z",
+  "developmentRulesVersion": "2.1"
 }
