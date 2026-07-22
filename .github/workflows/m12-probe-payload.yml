@@ -28,10 +28,24 @@ jobs:
           BLOB_SHA: 59648b20ddae1bcb229e56a56d66373302c10be6
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           mkdir -p diagnostics/m12-payload
-          gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${BLOB_SHA}" --jq -r '.content' \
-            | tr -d '\n' | base64 --decode > diagnostics/m12-payload/payload.bin
+          set +e
+          gh api "repos/${GITHUB_REPOSITORY}/git/blobs/${BLOB_SHA}" > diagnostics/m12-payload/blob.json 2> diagnostics/m12-payload/gh-error.log
+          GH_EXIT=$?
+          set -e
+          echo "gh_exit=${GH_EXIT}" | tee diagnostics/m12-payload/probe.log
+          cat diagnostics/m12-payload/gh-error.log | tee -a diagnostics/m12-payload/probe.log
+          if [[ ${GH_EXIT} -ne 0 ]]; then
+            exit ${GH_EXIT}
+          fi
+          python - <<'PY'
+          import base64, json
+          from pathlib import Path
+          payload = json.loads(Path('diagnostics/m12-payload/blob.json').read_text())
+          Path('diagnostics/m12-payload/payload.bin').write_bytes(base64.b64decode(payload['content']))
+          print({k: payload.get(k) for k in ('sha', 'encoding', 'size')})
+          PY
           {
             file diagnostics/m12-payload/payload.bin
             wc -c diagnostics/m12-payload/payload.bin
@@ -40,7 +54,7 @@ jobs:
             gzip -t diagnostics/m12-payload/payload.bin
             echo '--- tar listing ---'
             tar -tzf diagnostics/m12-payload/payload.bin | sed -n '1,200p'
-          } | tee diagnostics/m12-payload/probe.log
+          } | tee -a diagnostics/m12-payload/probe.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
