@@ -52,7 +52,7 @@ jobs:
           tar -xzf /tmp/m0-project.tar.gz -C .
           sed -i 's/new Phaser\.Geom\.Point/new Phaser.Math.Vector2/g' src/game/scenes/FoundationScene.ts
           rm -rf bootstrap diagnostics
-          rm -f .github/workflows/bootstrap-m0.yml
+          rm -f .github/workflows/quality.yml
 
       - name: Setup Node.js
         if: steps.state.outputs.needed == 'true'
