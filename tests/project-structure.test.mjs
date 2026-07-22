@@ -54,8 +54,9 @@ test('M1.1 asset manifest records the expanded original visual set', async () =>
     'player-right-0',
     'house-d',
     'vending',
-    'slide',
-    'swing',
+    'playground-slide',
+    'playground-swing',
+    'trash-can',
   ]) {
     assert.ok(assets.files.includes(asset), `${asset} should be listed in the asset manifest`);
   }
