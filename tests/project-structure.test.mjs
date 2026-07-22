@@ -13,16 +13,27 @@ test('PWA is configured for a landscape standalone experience', async () => {
   assert.equal(manifest.lang, 'ja');
 });
 
-test('M0 project state points to M1 as the next milestone', async () => {
+test('M1 state points to vending-machine interaction as M2', async () => {
   const state = await readJson('PROJECT_STATE.json');
-  assert.equal(state.currentMilestone, 'M0');
-  assert.equal(state.nextMilestone, 'M1');
-  assert.equal(state.nextTask, 'player-movement-and-first-streaming-map');
+  assert.equal(state.currentMilestone, 'M1');
+  assert.equal(state.nextMilestone, 'M2');
+  assert.equal(state.nextTask, 'vending-machine-search-and-money-system');
+  assert.equal(state.developmentRulesVersion, '2.0');
 });
 
-test('Vercel builds the Vite application into dist', async () => {
+test('Vercel only deploys main to the normal production flow', async () => {
   const config = await readJson('vercel.json');
   assert.equal(config.framework, 'vite');
   assert.equal(config.buildCommand, 'npm run build');
   assert.equal(config.outputDirectory, 'dist');
+  assert.equal(config.git.deploymentEnabled['feat/**'], false);
+});
+
+test('M1 asset manifest records an original reusable vector set', async () => {
+  const assets = await readJson('public/assets/images/m1/asset-manifest.json');
+  assert.equal(assets.version, '0.1.0');
+  assert.match(assets.license, /Project-original/);
+  assert.ok(assets.files.length >= 20);
+  assert.ok(assets.files.includes('player-down-0'));
+  assert.ok(assets.files.includes('vending'));
 });

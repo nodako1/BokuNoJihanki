@@ -1,7 +1,7 @@
 {
   "name": "boku-no-jihanki",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "夏休みの町を歩き回り、お金を集めてゲームを買いまくる探索RPG。",
   "type": "module",
   "scripts": {

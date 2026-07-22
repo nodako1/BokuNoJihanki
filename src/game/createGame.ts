@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { FoundationScene } from './scenes/FoundationScene';
+import { ExplorationScene } from './scenes/ExplorationScene';
 
 export function createGame(parent: HTMLElement): Phaser.Game {
   const config: Phaser.Types.Core.GameConfig = {
@@ -26,9 +26,9 @@ export function createGame(parent: HTMLElement): Phaser.Game {
       forceSetTimeOut: false,
     },
     input: {
-      activePointers: 3,
+      activePointers: 4,
     },
-    scene: [FoundationScene],
+    scene: [ExplorationScene],
   };
 
   return new Phaser.Game(config);
