@@ -39,6 +39,21 @@ Playwright ChromiumでProductionを開き、実際にボタンを押し、canvas
 - 非mainブランチのVercelビルドを抑制する
 - Actions artifactを開発担当AIが取得し、画面・console・network・traceを確認する
 
+## M1復旧確認結果
+
+- Production: https://boku-no-jihanki.vercel.app
+- 黒画面修正マージ: `28b7ab6454d523d8ba4c4572e5c940356d8a5513`
+- Production確認済みコミット: `6b20507c35e49af4e058d7a6f6ffa57c4e5f991f`
+- Vercel status: `success`
+- Production Smoke: `success`
+- Production Browser Smoke: `success`
+- 初期FPS: 31（Headless Chromium・software WebGL）
+- 初期座標: `540,604`
+- ArrowRight後座標: `606,604`
+- ロード済みチャンク: 2
+- pageerror: 0
+- failed request: 0
+
 ## Vercel Hobbyのビルド制限
 
-Hobbyでは短時間の大量ビルドを避けます。レート制限時は空コミットを連続作成せず、制限窓が解除された後に一度だけ再デプロイします。Production確認前は`PROJECT_STATE.json`を完了へ戻しません。
+Hobbyでは短時間の大量ビルドを避けます。レート制限時は空コミットを連続作成せず、制限窓が解除された後に一度だけ再デプロイします。Production Browser Smoke確認前は`PROJECT_STATE.json`を完了へ戻しません。
