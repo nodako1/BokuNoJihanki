@@ -1,0 +1,59 @@
+name: Generate M1.2 Raster Assets
+
+on:
+  push:
+    branches:
+      - feat/m1-2-painterly-raster
+    paths:
+      - '.github/workflows/generate-m12-raster-assets.yml'
+      - 'tools/art/generate_m12_assets.py'
+      - 'tools/art/reference/parts/**'
+      - 'tools/art/player-svg/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: m12-raster-assets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image tooling
+        run: pip install --disable-pip-version-check pillow opencv-python-headless cairosvg
+      - name: Generate painterly raster layers
+        run: python tools/art/generate_m12_assets.py
+      - name: Verify generated assets
+        run: |
+          test -f public/assets/images/m12/bg-residential-west-morning.webp
+          test -f public/assets/images/m12/bg-park-west-night.webp
+          test -f public/assets/images/m12/fg-park-west-morning.webp
+          test -f public/assets/images/m12/player-up-0.webp
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('public/assets/images/m12/asset-manifest.json')
+          data=json.loads(p.read_text())
+          assert data['revision']=='M1.2'
+          assert len(data['files']) >= 40
+          PY
+      - name: Commit generated raster assets
+        run: |
+          rm -f tools/art/reference/m12-approved-concept.jpg
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/assets/images/m12
+          if git diff --cached --quiet; then
+            echo 'Raster assets are already current.'
+            exit 0
+          fi
+          git commit -m 'art: generate M1.2 painterly raster assets'
+          git push
