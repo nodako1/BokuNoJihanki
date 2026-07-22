@@ -1,0 +1,44 @@
+name: One-time M1 Vercel production retry
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/m1-vercel-delayed-retry.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: m1-vercel-delayed-retry
+  cancel-in-progress: false
+
+jobs:
+  retry:
+    name: Retry M1 production after Vercel Hobby window resets
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+
+    steps:
+      - name: Wait for Vercel build window
+        run: sleep 3300
+
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Trigger one clean production deployment and remove this workflow
+        shell: bash
+        run: |
+          git pull --ff-only origin main
+          printf 'M1 production retry requested at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .m1-vercel-production-retry
+          git rm .github/workflows/m1-vercel-delayed-retry.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f .m1-vercel-production-retry
+          git commit -m "chore: retry M1 Vercel production deployment [skip ci]"
+          git push origin HEAD:main
