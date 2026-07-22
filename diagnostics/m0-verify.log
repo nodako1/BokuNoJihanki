@@ -1,0 +1,38 @@
+
+> boku-no-jihanki@0.0.1 check
+> npm run validate && npm run lint && npm run typecheck && npm test && npm run build
+
+
+> boku-no-jihanki@0.0.1 validate
+> node scripts/validate-project.mjs
+
+Project validation passed (9 required files).
+
+> boku-no-jihanki@0.0.1 lint
+> eslint . --max-warnings 0
+
+
+> boku-no-jihanki@0.0.1 typecheck
+> tsc -b --pretty false
+
+src/game/scenes/FoundationScene.ts(160,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(161,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(162,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(163,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(164,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(165,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(166,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(167,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(168,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(169,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(213,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(214,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(215,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(270,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(271,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(272,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(273,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(281,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(282,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(283,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
+src/game/scenes/FoundationScene.ts(284,25): error TS2551: Property 'Point' does not exist on type 'typeof Geom'. Did you mean 'POINT'?
