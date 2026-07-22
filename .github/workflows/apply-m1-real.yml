@@ -6,6 +6,12 @@ on:
       - codex/m1-real-complete
     paths:
       - bootstrap/m1-real/READY
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/apply-m1-real.yml
+      - bootstrap/m1-real/**
 
 permissions:
   contents: write
