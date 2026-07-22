@@ -1,0 +1,88 @@
+name: M1.1 Visual Polish
+
+on:
+  push:
+    branches:
+      - feat/m1-1-visual-complete
+    paths:
+      - '.github/workflows/m11-visual-polish.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/m1-1-visual-complete
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Improve composition, depth, texture and runtime cost
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          background = Path('src/game/world/m11BackgroundAssets.ts')
+          text = background.read_text(encoding='utf-8')
+          text = text.replace(
+              "  const laneLeftTop = laneCenter - 96;\n  const laneRightTop = laneCenter + 84;\n  const laneLeftBottom = laneCenter - 154;\n  const laneRightBottom = laneCenter + 174;",
+              "  const laneDirection = east ? -1 : 1;\n  const laneLeftTop = laneCenter - 108;\n  const laneRightTop = laneCenter + 78;\n  const laneLeftBottom = laneCenter - 148 + laneDirection * 112;\n  const laneRightBottom = laneCenter + 182 + laneDirection * 112;",
+          )
+          text = text.replace(
+              "  const curbBlocks = repeat(28, (index) => {",
+              "  const backgroundCanopies = repeat(20, (index) => {\n    const x = -30 + index * 70 + (index % 3) * 17;\n    const y = 118 + (index % 4) * 23;\n    const radius = 39 + (index % 5) * 8;\n    const fill = index % 3 === 0 ? '#315f3e' : index % 3 === 1 ? '#47764a' : '#5a8650';\n    return `<circle cx=\"${x}\" cy=\"${y}\" r=\"${radius}\" fill=\"${fill}\" opacity=\"${0.52 + (index % 2) * 0.12}\"/>`;\n  });\n\n  const curbBlocks = repeat(28, (index) => {",
+          )
+          text = text.replace(
+              "    <g filter=\"url(#paper-grain)\">${distantRoofs}</g>\n",
+              "    <g filter=\"url(#paper-grain)\">${distantRoofs}</g>\n    <g filter=\"url(#leaf-texture)\">${backgroundCanopies}</g>\n",
+          )
+          text = text.replace(
+              "  const crosswalk = east\n    ? repeat(6, (index) => `<path d=\"M${780 + index * 34} 488 L${804 + index * 34} 550\" stroke=\"#f3ede2\" stroke-width=\"17\" opacity=\".74\"/>`)\n    : repeat(5, (index) => `<rect x=\"${610 + index * 34}\" y=\"498\" width=\"20\" height=\"72\" rx=\"2\" fill=\"#f3ede2\" opacity=\".68\"/>`);",
+              "  const crosswalkCenter = (laneLeftBottom + laneRightBottom) / 2;\n  const crosswalk = east\n    ? repeat(6, (index) => `<path d=\"M${crosswalkCenter - 105 + index * 34} 488 L${crosswalkCenter - 81 + index * 34} 550\" stroke=\"#f3ede2\" stroke-width=\"17\" opacity=\".74\"/>`)\n    : repeat(6, (index) => `<rect x=\"${crosswalkCenter - 102 + index * 34}\" y=\"498\" width=\"20\" height=\"72\" rx=\"2\" fill=\"#f3ede2\" opacity=\".68\"/>`);",
+          )
+          background.write_text(text, encoding='utf-8')
+
+          props = Path('src/game/world/m11PropAssets.ts')
+          text = props.read_text(encoding='utf-8')
+          text = text.replace(
+              '      <rect x="54" y="115" width="300" height="174" rx="10" fill="${palette.wall}" stroke="#604d3c" stroke-width="3"/>\n      ${roofDetail}',
+              '      <rect x="54" y="115" width="300" height="174" rx="10" fill="${palette.wall}" stroke="#604d3c" stroke-width="3"/>\n      <path d="M354 115 L386 139 V281 L354 289Z" fill="${palette.wallShade}" stroke="#5f4938" stroke-width="3"/>\n      <path d="M354 115 L386 139 L372 154 L347 132Z" fill="${palette.accent}" opacity=".86"/>\n      ${roofDetail}',
+              1,
+          )
+          text = text.replace(
+              '      <path d="M55 127 H355" stroke="${palette.trim}" stroke-width="13"/>',
+              '      <path d="M55 127 H355" stroke="${palette.trim}" stroke-width="13"/>\n      <path d="M355 127 L386 146" stroke="#3f3028" stroke-width="7" opacity=".62"/>',
+              1,
+          )
+          props.write_text(text, encoding='utf-8')
+
+          atmosphere = Path('src/game/world/AtmosphereLayer.ts')
+          text = atmosphere.read_text(encoding='utf-8')
+          text = text.replace('const PARTICLES = Array.from({ length: 26 }', 'const PARTICLES = Array.from({ length: 18 }')
+          text = text.replace('    const positions = [120, 680, 1190];', '    const positions = [170, 875];')
+          text = text.replace('    for (let ring = 4; ring >= 1; ring -= 1) {', '    for (let ring = 2; ring >= 1; ring -= 1) {')
+          text = text.replace('      graphics.fillCircle(sunX, sunY, 80 + ring * 70);', '      graphics.fillCircle(sunX, sunY, 70 + ring * 58);')
+          atmosphere.write_text(text, encoding='utf-8')
+
+          scene = Path('src/game/scenes/ExplorationScene.ts')
+          text = scene.read_text(encoding='utf-8').replace('const ATMOSPHERE_INTERVAL = 50;', 'const ATMOSPHERE_INTERVAL = 120;')
+          scene.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify complete quality gate
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+      - name: Commit polish and remove one-time workflow
+        run: |
+          rm .github/workflows/m11-visual-polish.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/game/world/m11BackgroundAssets.ts src/game/world/m11PropAssets.ts src/game/world/AtmosphereLayer.ts src/game/scenes/ExplorationScene.ts .github/workflows/m11-visual-polish.yml
+          git commit -m 'feat: polish M1.1 visual depth and performance'
+          git push origin HEAD:feat/m1-1-visual-complete
