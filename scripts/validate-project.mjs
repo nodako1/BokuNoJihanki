@@ -9,7 +9,9 @@ const requiredFiles = [
   'vercel.json',
   'public/manifest.webmanifest',
   'public/assets/images/m1/asset-manifest.json',
+  '.github/workflows/browser-smoke.yml',
   '.github/workflows/production-smoke.yml',
+  'scripts/browser-smoke.mjs',
   'src/game/world/generatedAssets.ts',
   'src/game/scenes/ExplorationScene.ts',
   'src/game/systems/inputSystem.ts',
@@ -42,16 +44,29 @@ for (const file of requiredFiles) {
   }
 }
 
-const [packageJson, packageLock, projectState, manifest, vercel, assetManifest, createGame] =
-  await Promise.all([
-    readFile('package.json', 'utf-8').then(JSON.parse),
-    readFile('package-lock.json', 'utf-8').then(JSON.parse),
-    readFile('PROJECT_STATE.json', 'utf-8').then(JSON.parse),
-    readFile('public/manifest.webmanifest', 'utf-8').then(JSON.parse),
-    readFile('vercel.json', 'utf-8').then(JSON.parse),
-    readFile('public/assets/images/m1/asset-manifest.json', 'utf-8').then(JSON.parse),
-    readFile('src/game/createGame.ts', 'utf-8'),
-  ]);
+const [
+  packageJson,
+  packageLock,
+  projectState,
+  manifest,
+  vercel,
+  assetManifest,
+  createGame,
+  browserSmokeWorkflow,
+  productionSmokeWorkflow,
+  browserSmokeScript,
+] = await Promise.all([
+  readFile('package.json', 'utf-8').then(JSON.parse),
+  readFile('package-lock.json', 'utf-8').then(JSON.parse),
+  readFile('PROJECT_STATE.json', 'utf-8').then(JSON.parse),
+  readFile('public/manifest.webmanifest', 'utf-8').then(JSON.parse),
+  readFile('vercel.json', 'utf-8').then(JSON.parse),
+  readFile('public/assets/images/m1/asset-manifest.json', 'utf-8').then(JSON.parse),
+  readFile('src/game/createGame.ts', 'utf-8'),
+  readFile('.github/workflows/browser-smoke.yml', 'utf-8'),
+  readFile('.github/workflows/production-smoke.yml', 'utf-8'),
+  readFile('scripts/browser-smoke.mjs', 'utf-8'),
+]);
 
 if (packageJson.name !== 'boku-no-jihanki') {
   failures.push('package.json name must be boku-no-jihanki.');
@@ -88,6 +103,15 @@ if (!createGame.includes('ExplorationScene') || createGame.includes('scene: [Fou
 }
 if (!Array.isArray(assetManifest.files) || assetManifest.files.length < 20) {
   failures.push('M1 asset manifest must contain at least 20 original SVG assets.');
+}
+if (!browserSmokeWorkflow.includes('scripts/browser-smoke.mjs')) {
+  failures.push('Pull requests must run the browser gameplay smoke script.');
+}
+if (!productionSmokeWorkflow.includes('scripts/browser-smoke.mjs')) {
+  failures.push('Vercel Production must run the browser gameplay smoke script.');
+}
+if (!browserSmokeScript.includes("page.on('pageerror'") || !browserSmokeScript.includes('ArrowRight')) {
+  failures.push('Browser smoke must detect runtime exceptions and verify keyboard movement.');
 }
 
 if (failures.length > 0) {
