@@ -19,24 +19,33 @@ concurrency:
 
 jobs:
   smoke:
-    name: Verify Vercel Production contains M1
+    name: Launch and operate M1 on Vercel Production
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       GH_TOKEN: ${{ github.token }}
       PRODUCTION_URL: https://boku-no-jihanki.vercel.app
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Mark production smoke pending
         shell: bash
         run: |
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state='pending' \
             -f context='Production Smoke' \
-            -f description='Waiting for Vercel Production and M1 bundle verification' \
+            -f description='Waiting for Vercel and browser gameplay verification' \
             -f target_url="${PRODUCTION_URL}"
 
-      - name: Verify Vercel Production and M1 bundle
+      - name: Wait for Vercel and run browser gameplay smoke
         id: smoke
         continue-on-error: true
         shell: bash
@@ -60,27 +69,22 @@ jobs:
             sleep 10
           done
 
-          curl --fail --silent --show-error --location \
-            --retry 6 --retry-all-errors --retry-delay 5 \
-            "${PRODUCTION_URL}/?commit=${GITHUB_SHA}" -o /tmp/index.html
+          npm ci --no-audit --no-fund
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
 
-          mapfile -t SCRIPTS < <(grep -oE 'src="/assets/[^"]+\.js"' /tmp/index.html | sed -E 's/^src="(.*)"$/\1/' | sort -u)
-          if [[ ${#SCRIPTS[@]} -eq 0 ]]; then
-            echo "No JavaScript bundle was found in Production HTML." >&2
-            cat /tmp/index.html >&2
-            exit 1
-          fi
+          EXPECTED_COMMIT_SHA="${GITHUB_SHA}" \
+          BROWSER_SMOKE_OUTPUT_DIR=/tmp/production-browser-smoke \
+          node scripts/browser-smoke.mjs "${PRODUCTION_URL}/?commit=${GITHUB_SHA}"
 
-          : > /tmp/production-bundle.js
-          for script in "${SCRIPTS[@]}"; do
-            curl --fail --silent --show-error --location \
-              --retry 4 --retry-all-errors --retry-delay 3 \
-              "${PRODUCTION_URL}${script}" >> /tmp/production-bundle.js
-          done
-
-          grep -q 'M1 STREAMING HUD' /tmp/production-bundle.js
-          grep -q 'なつかぜ公園' /tmp/production-bundle.js
-          echo "Production contains the M1 streaming exploration bundle."
+      - name: Upload production browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-browser-smoke-${{ github.sha }}
+          path: /tmp/production-browser-smoke
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Publish production smoke status
         if: always()
@@ -88,10 +92,10 @@ jobs:
         run: |
           if [[ "${{ steps.smoke.outcome }}" == "success" ]]; then
             STATE='success'
-            DESCRIPTION='Vercel Production contains the M1 streaming exploration bundle'
+            DESCRIPTION='Production launched, rendered, moved and entered the park'
           else
             STATE='failure'
-            DESCRIPTION='Vercel Production did not pass the M1 bundle verification'
+            DESCRIPTION='Production failed browser launch or gameplay verification'
           fi
 
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
