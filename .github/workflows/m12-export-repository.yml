@@ -6,6 +6,11 @@ on:
       - feat/m1-2-painterly-raster
     paths:
       - '.github/workflows/m12-export-repository.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/m12-export-repository.yml'
   workflow_dispatch:
 
 permissions:
