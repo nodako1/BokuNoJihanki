@@ -39,6 +39,15 @@ const FOOTSTEP_DISTANCE = 42;
 const HUD_INTERVAL = 180;
 const ATMOSPHERE_INTERVAL = 50;
 
+function toSvgBase64DataUri(svg: string): string {
+  const bytes = new TextEncoder().encode(svg);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return `data:image/svg+xml;base64,${window.btoa(binary)}`;
+}
+
 export class ExplorationScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Image;
   private playerShadow!: Phaser.GameObjects.Ellipse;
@@ -90,7 +99,7 @@ export class ExplorationScene extends Phaser.Scene {
 
   preload(): void {
     for (const [key, svg] of Object.entries(GENERATED_SVG_ASSETS)) {
-      this.load.svg(key, `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`);
+      this.load.svg(key, toSvgBase64DataUri(svg));
     }
   }
 
