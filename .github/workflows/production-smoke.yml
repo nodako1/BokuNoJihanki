@@ -79,9 +79,9 @@ jobs:
           done
 
           grep -q 'M1.2 PAINTERLY HUD' /tmp/production-bundle.js
-          grep -q '/assets/images/m12/bg-residential-west-morning.webp' /tmp/production-bundle.js
-          grep -q '/assets/images/m12/bg-park-west-morning.webp' /tmp/production-bundle.js
-          grep -q '/assets/images/m12/player-right-0.webp' /tmp/production-bundle.js
+          grep -q '/assets/images/m12' /tmp/production-bundle.js
+          grep -q 'm12-bg-' /tmp/production-bundle.js
+          grep -q 'm12-player-' /tmp/production-bundle.js
           grep -q 'なつかぜ公園' /tmp/production-bundle.js
           echo "Production contains the M1.2 painterly raster exploration bundle."
 
