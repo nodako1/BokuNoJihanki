@@ -50,7 +50,8 @@ jobs:
           cat bootstrap/part-* | base64 --decode > /tmp/m0-project.tar.gz
           echo "1dce8c8b207d69ee6649445f2c5b1fa112686fb6cbc81908508b20eaab527ab1  /tmp/m0-project.tar.gz" | sha256sum --check
           tar -xzf /tmp/m0-project.tar.gz -C .
-          rm -rf bootstrap
+          sed -i 's/new Phaser\.Geom\.Point/new Phaser.Math.Vector2/g' src/game/scenes/FoundationScene.ts
+          rm -rf bootstrap diagnostics
           rm -f .github/workflows/bootstrap-m0.yml
 
       - name: Setup Node.js
