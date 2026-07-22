@@ -2,7 +2,7 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "currentMilestone": "M0",
-  "status": "implemented-ci-passed-production-retry-scheduled",
+  "status": "completed-production-verified",
   "version": "0.0.1",
   "completed": [
     "project-bootstrap",
@@ -18,14 +18,14 @@
     "vercel-work-branch-preview-suppression",
     "m0-specification",
     "m0-main-merge",
-    "m0-quality-check-passed"
+    "m0-quality-check-passed",
+    "m0-vercel-production-verified"
   ],
   "nextMilestone": "M1",
   "nextTask": "player-movement-and-first-streaming-map",
   "productionBranch": "main",
-  "lastProductionCommit": null,
+  "lastProductionCommit": "de511ccd353e3533feb5c25e64d3b889ccfb0838",
   "knownIssues": [
-    "Vercel連携は確認済みだが、M0構築中の連続PushでHobbyプランの時間当たりビルド上限に達した。2026-07-22T03:37:00Zに本番デプロイを自動再試行する。",
     "M0 uses procedural placeholder scenery; final generated art assets are introduced incrementally from M1 onward.",
     "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
   ],
