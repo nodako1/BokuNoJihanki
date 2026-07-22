@@ -1,9 +1,9 @@
 {
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
-  "currentMilestone": "M0",
+  "currentMilestone": "M1",
   "status": "completed-production-verified",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "completed": [
     "project-bootstrap",
     "react-phaser-shell",
@@ -19,12 +19,15 @@
     "m0-specification",
     "m0-main-merge",
     "m0-quality-check-passed",
-    "m0-vercel-production-verified"
+    "m0-vercel-production-verified",
+    "m1-main-merge",
+    "m1-quality-check-passed",
+    "m1-vercel-production-verified"
   ],
-  "nextMilestone": "M1",
-  "nextTask": "player-movement-and-first-streaming-map",
+  "nextMilestone": "M2",
+  "nextTask": "vending-machine-interaction-and-time-economy",
   "productionBranch": "main",
-  "lastProductionCommit": "de511ccd353e3533feb5c25e64d3b889ccfb0838",
+  "lastProductionCommit": "558721ae2cd3a2b5174caadfd7660400b5fd6324",
   "knownIssues": [
     "M0 uses procedural placeholder scenery; final generated art assets are introduced incrementally from M1 onward.",
     "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
