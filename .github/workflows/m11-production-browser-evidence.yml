@@ -1,0 +1,53 @@
+name: M1.1 Production Browser Evidence
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/m11-production-browser-evidence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Operate deployed M1.1 Production in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Verify deployed M1.1 Production
+        env:
+          BASE_URL: https://boku-no-jihanki.vercel.app
+          EXPECTED_COMMIT: f06f5ef138d8871d7768103591ecf88dcd846626
+          BROWSER_ARTIFACT_DIR: diagnostics/m11-production-browser
+          PRODUCTION_WAIT_MS: '180000'
+        run: node scripts/browser-smoke.mjs
+
+      - name: Upload Production screenshots, state, logs and trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m11-production-browser-evidence-${{ github.run_id }}
+          path: diagnostics/m11-production-browser
+          if-no-files-found: error
+          retention-days: 14
