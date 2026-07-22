@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   smoke:
-    name: Verify Vercel Production contains M1
+    name: Verify Vercel Production contains M1.1
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -33,19 +33,19 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state='pending' \
             -f context='Production Smoke' \
-            -f description='Waiting for Vercel Production and M1 bundle verification' \
+            -f description='Waiting for Vercel Production and M1.1 bundle verification' \
             -f target_url="${PRODUCTION_URL}"
 
-      - name: Verify Vercel Production and M1 bundle
+      - name: Verify Vercel Production and M1.1 bundle
         id: smoke
         continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
 
-          for attempt in $(seq 1 60); do
+          for attempt in $(seq 1 90); do
             STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status" --jq '[.statuses[] | select(.context=="Vercel")][0].state // "missing"')
-            echo "Vercel state: ${STATE} (attempt ${attempt}/60)"
+            echo "Vercel state: ${STATE} (attempt ${attempt}/90)"
             if [[ "${STATE}" == "success" ]]; then
               break
             fi
@@ -53,7 +53,7 @@ jobs:
               echo "Vercel deployment failed for ${GITHUB_SHA}." >&2
               exit 1
             fi
-            if [[ "${attempt}" == "60" ]]; then
+            if [[ "${attempt}" == "90" ]]; then
               echo "Timed out waiting for Vercel deployment." >&2
               exit 1
             fi
@@ -61,10 +61,10 @@ jobs:
           done
 
           curl --fail --silent --show-error --location \
-            --retry 6 --retry-all-errors --retry-delay 5 \
-            "${PRODUCTION_URL}/?commit=${GITHUB_SHA}" -o /tmp/index.html
+            --retry 8 --retry-all-errors --retry-delay 5 \
+            "${PRODUCTION_URL}/?commit=${GITHUB_SHA}&smoke=$(date +%s)" -o /tmp/index.html
 
-          mapfile -t SCRIPTS < <(grep -oE 'src="/assets/[^"]+\.js"' /tmp/index.html | sed -E 's/^src="(.*)"$/\1/' | sort -u)
+          mapfile -t SCRIPTS < <(grep -oE 'src="/assets/[^" ]+\.js"' /tmp/index.html | sed -E 's/^src="(.*)"$/\1/' | sort -u)
           if [[ ${#SCRIPTS[@]} -eq 0 ]]; then
             echo "No JavaScript bundle was found in Production HTML." >&2
             cat /tmp/index.html >&2
@@ -74,13 +74,15 @@ jobs:
           : > /tmp/production-bundle.js
           for script in "${SCRIPTS[@]}"; do
             curl --fail --silent --show-error --location \
-              --retry 4 --retry-all-errors --retry-delay 3 \
+              --retry 6 --retry-all-errors --retry-delay 3 \
               "${PRODUCTION_URL}${script}" >> /tmp/production-bundle.js
           done
 
-          grep -q 'M1 STREAMING HUD' /tmp/production-bundle.js
+          grep -q 'M1.1 VISUAL HUD' /tmp/production-bundle.js
+          grep -q 'm11-bg-residential-west' /tmp/production-bundle.js
+          grep -q 'm11-bg-park-west' /tmp/production-bundle.js
           grep -q 'なつかぜ公園' /tmp/production-bundle.js
-          echo "Production contains the M1 streaming exploration bundle."
+          echo "Production contains the M1.1 visual exploration bundle."
 
       - name: Publish production smoke status
         if: always()
@@ -88,10 +90,10 @@ jobs:
         run: |
           if [[ "${{ steps.smoke.outcome }}" == "success" ]]; then
             STATE='success'
-            DESCRIPTION='Vercel Production contains the M1 streaming exploration bundle'
+            DESCRIPTION='Vercel Production contains the M1.1 visual exploration bundle'
           else
             STATE='failure'
-            DESCRIPTION='Vercel Production did not pass the M1 bundle verification'
+            DESCRIPTION='Vercel Production did not pass the M1.1 bundle verification'
           fi
 
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
