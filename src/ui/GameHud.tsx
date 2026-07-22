@@ -32,6 +32,11 @@ export function GameHud({
   onToggleCollisionDebug,
 }: GameHudProps): React.JSX.Element {
   const atmosphere = getAtmosphere(minutes);
+  const phaseIcon = atmosphere.phase === 'night'
+    ? '☾'
+    : atmosphere.phase === 'evening'
+      ? '◒'
+      : '☀';
 
   return (
     <main className="game-ui-layer">
@@ -39,11 +44,38 @@ export function GameHud({
         <div className="game-date-chip" aria-live="polite">
           <span>8月1日（土）</span>
           <strong>{formatGameTime(minutes)}</strong>
-          <small>{atmosphere.phaseLabel}</small>
+          <small><b aria-hidden="true">{phaseIcon}</b>{atmosphere.phaseLabel}</small>
         </div>
-        <div className="area-purpose-chip">
-          <span>M1</span>
-          <div><strong>町を歩く基盤</strong><small>住宅街 ↔ なつかぜ公園</small></div>
+
+        <div className="game-actions" aria-label="ゲーム操作">
+          <button
+            type="button"
+            className="hud-icon-button"
+            onClick={onToggleMuted}
+            disabled={!audioAvailable}
+            aria-label={!audioAvailable ? '音声非対応' : muted ? '音をオンにする' : '音をオフにする'}
+            title={!audioAvailable ? '音声非対応' : muted ? '音をオンにする' : '音をオフにする'}
+          >
+            {muted || !audioAvailable ? '×' : '♪'}
+          </button>
+          <button
+            type="button"
+            className="hud-icon-button"
+            onClick={onToggleAutoPlay}
+            aria-label={autoPlay ? '時間の自動再生を止める' : '時間の自動再生を始める'}
+            title={autoPlay ? '時間停止' : '時間再生'}
+          >
+            {autoPlay ? 'Ⅱ' : '▶'}
+          </button>
+          <details className="dev-tool-drawer">
+            <summary>開発</summary>
+            <section className="dev-control-panel" aria-label="M1.1開発操作">
+              <button type="button" onClick={onStepTime}>＋15分</button>
+              <button type="button" onClick={onResetTime}>朝へ戻す</button>
+              <button type="button" onClick={onToggleDeveloperHud}>{developerHudVisible ? 'HUDを隠す' : 'HUDを表示'}</button>
+              <button type="button" onClick={onToggleCollisionDebug}>{collisionDebug ? '当たり判定を隠す' : '当たり判定を表示'}</button>
+            </section>
+          </details>
         </div>
       </header>
 
@@ -53,18 +85,11 @@ export function GameHud({
         phaseLabel={atmosphere.phaseLabel}
       />
 
-      <section className="dev-control-rail" aria-label="M1開発操作">
-        <button type="button" onClick={onStepTime}>＋15分</button>
-        <button type="button" onClick={onToggleAutoPlay}>{autoPlay ? '時間停止' : '時間再生'}</button>
-        <button type="button" onClick={onResetTime}>朝へ</button>
-        <button type="button" onClick={onToggleDeveloperHud}>{developerHudVisible ? 'HUD非表示' : 'HUD表示'}</button>
-        <button type="button" onClick={onToggleCollisionDebug}>{collisionDebug ? '当たり判定OFF' : '当たり判定ON'}</button>
-        <button type="button" onClick={onToggleMuted} disabled={!audioAvailable}>{!audioAvailable ? '音声非対応' : muted ? '音ON' : '音OFF'}</button>
-      </section>
-
       <VirtualJoystick />
-      <div className="future-action-space" aria-hidden="true"><span>M2</span><small>調べる</small></div>
-      <p className="control-hint">スマホ: 左スティック / PC: WASD・矢印キー / 道路を右へ進むと公園です</p>
+      <button type="button" className="future-action-button" disabled aria-label="調べる機能はM2で実装予定">
+        <span>調べる</span>
+      </button>
+      <p className="control-hint">左スティック / WASD・矢印キー　右へ進むと、なつかぜ公園</p>
     </main>
   );
 }
