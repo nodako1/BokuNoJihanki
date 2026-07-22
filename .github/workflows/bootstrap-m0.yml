@@ -12,6 +12,7 @@ on:
     paths:
       - bootstrap/READY
       - bootstrap/part-*
+      - .github/workflows/bootstrap-m0.yml
 
 permissions:
   contents: write
@@ -63,11 +64,30 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Verify M0
+        id: verify
         if: steps.state.outputs.needed == 'true'
-        run: npm run check
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee /tmp/m0-verify.log
+
+      - name: Store verification diagnostics
+        if: steps.state.outputs.needed == 'true' && steps.verify.outcome == 'failure'
+        shell: bash
+        run: |
+          git reset --hard HEAD
+          mkdir -p diagnostics
+          cp /tmp/m0-verify.log diagnostics/m0-verify.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostics/m0-verify.log
+          git commit -m "chore: capture M0 verification failure"
+          git push origin HEAD:feat/m0-foundation
+          exit 1
 
       - name: Commit verified project
-        if: steps.state.outputs.needed == 'true'
+        if: steps.state.outputs.needed == 'true' && steps.verify.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
