@@ -21,7 +21,7 @@ import {
   getTimePhase,
 } from '../systems/timeOfDay';
 import { AtmosphereLayer } from '../world/AtmosphereLayer';
-import { GENERATED_SVG_ASSETS } from '../world/generatedAssets';
+import { M11_VISUAL_ASSETS } from '../world/m11VisualAssets';
 import { MapStreamer, type StreamSnapshot } from '../world/MapStreamer';
 import {
   PLAYER_BODY,
@@ -34,8 +34,8 @@ import {
 type FacingDirection = 'down' | 'up' | 'left' | 'right';
 
 const PLAYER_SPEED = 220;
-const PLAYER_SCALE = 0.68;
-const FOOTSTEP_DISTANCE = 42;
+const PLAYER_SCALE = 0.62;
+const FOOTSTEP_DISTANCE = 40;
 const HUD_INTERVAL = 180;
 const ATMOSPHERE_INTERVAL = 50;
 
@@ -98,13 +98,17 @@ export class ExplorationScene extends Phaser.Scene {
   }
 
   preload(): void {
-    for (const [key, svg] of Object.entries(GENERATED_SVG_ASSETS)) {
+    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      console.error(`M1.1 visual asset failed to load: ${file.key}`);
+    });
+
+    for (const [key, svg] of Object.entries(M11_VISUAL_ASSETS)) {
       this.load.svg(key, svgToBase64DataUrl(svg));
     }
   }
 
   create(): void {
-    this.cameras.main.setBackgroundColor('#6bb8e8');
+    this.cameras.main.setBackgroundColor('#75966b');
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
     this.cameras.main.setRoundPixels(false);
 
@@ -112,9 +116,10 @@ export class ExplorationScene extends Phaser.Scene {
     this.mapStreamer = new MapStreamer(this);
     this.inputSystem = new InputSystem(this);
     this.streamSnapshot = this.mapStreamer.update(PLAYER_START.x, 0);
+    this.atmosphereLayer.setArea(this.streamSnapshot.area);
 
     this.playerShadow = this.add
-      .ellipse(PLAYER_START.x + 4, PLAYER_START.y + 2, 50, 17, 0x173643, 0.24)
+      .ellipse(PLAYER_START.x + 4, PLAYER_START.y + 3, 58, 18, 0x173643, 0.24)
       .setDepth(depthForFootY(PLAYER_START.y, -1));
     this.player = this.add
       .image(PLAYER_START.x, PLAYER_START.y, 'player-down-0')
@@ -122,8 +127,8 @@ export class ExplorationScene extends Phaser.Scene {
       .setScale(PLAYER_SCALE)
       .setDepth(depthForFootY(PLAYER_START.y, 1));
 
-    this.cameras.main.startFollow(this.player, true, 0.095, 0.095);
-    this.cameras.main.setDeadzone(240, 115);
+    this.cameras.main.startFollow(this.player, true, 0.105, 0.105);
+    this.cameras.main.setDeadzone(190, 105);
 
     this.started = isGameStarted();
     this.mapStreamer.setCollisionDebug(isCollisionDebugEnabled());
@@ -182,12 +187,13 @@ export class ExplorationScene extends Phaser.Scene {
     this.player.setTexture(`player-${this.facing}-${this.walkFrame}`);
     this.player.setDepth(depthForFootY(this.player.y, 1));
     this.playerShadow
-      .setPosition(this.player.x + 4, this.player.y + 2)
+      .setPosition(this.player.x + 4, this.player.y + 3)
       .setDepth(depthForFootY(this.player.y, -1));
 
     const directionX = next.x - this.lastPosition.x;
     this.streamSnapshot = this.mapStreamer.update(next.x, directionX);
     this.lastPosition = next;
+    this.atmosphereLayer.setArea(this.streamSnapshot.area);
     audioEngine.setArea(this.streamSnapshot.area);
 
     this.atmosphereElapsed += safeDelta;
@@ -228,14 +234,16 @@ export class ExplorationScene extends Phaser.Scene {
     this.mapStreamer.applyAtmosphere(atmosphere);
     this.player.setTint(
       atmosphere.phase === 'night'
-        ? 0x9aa8c8
+        ? 0x91a4cc
         : atmosphere.phase === 'evening'
-          ? 0xffd4ac
-          : 0xffffff,
+          ? 0xffc89f
+          : atmosphere.phase === 'morning'
+            ? 0xfff4df
+            : 0xffffff,
     );
     this.playerShadow.setFillStyle(
       atmosphere.shadow,
-      0.2 + atmosphere.starAlpha * 0.12,
+      0.19 + atmosphere.starAlpha * 0.12,
     );
     audioEngine.setPhase(getTimePhase(this.displayedMinutes));
   }
