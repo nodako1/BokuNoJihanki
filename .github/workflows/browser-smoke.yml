@@ -1,0 +1,82 @@
+name: Browser Smoke
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/browser-smoke.yml
+      - .github/workflows/production-smoke.yml
+      - scripts/browser-smoke.mjs
+      - package.json
+      - package-lock.json
+      - index.html
+      - vite.config.ts
+      - src/**
+      - public/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gameplay:
+    name: Start game, move through town and enter park
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run static quality checks and production build
+        run: npm run check
+
+      - name: Install Playwright Chromium
+        shell: bash
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start local production server
+        shell: bash
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/vite-preview.log 2>&1 &
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/vite-preview.log
+          exit 1
+
+      - name: Run browser gameplay smoke
+        env:
+          EXPECTED_COMMIT_SHA: ${{ github.sha }}
+          BROWSER_SMOKE_OUTPUT_DIR: /tmp/browser-smoke
+        run: node scripts/browser-smoke.mjs http://127.0.0.1:4173/
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke-${{ github.sha }}
+          path: |
+            /tmp/browser-smoke
+            /tmp/vite-preview.log
+          if-no-files-found: warn
+          retention-days: 7
