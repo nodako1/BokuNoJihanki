@@ -1,0 +1,147 @@
+name: Runtime Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/m1-black-screen
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-diagnostic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser:
+    name: Launch M1 in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Start local production server
+        run: |
+          npm run preview -- --host 127.0.0.1 > /tmp/vite-preview.log 2>&1 &
+          echo $! > /tmp/vite-preview.pid
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/vite-preview.log
+          exit 1
+
+      - name: Inspect browser runtime
+        shell: bash
+        run: |
+          mkdir -p diagnostics/runtime
+          cat > /tmp/runtime-diagnostic.mjs <<'NODE'
+          import { chromium } from 'playwright';
+          import { writeFile } from 'node:fs/promises';
+
+          const messages = [];
+          const errors = [];
+          const browser = await chromium.launch({
+            headless: true,
+            args: ['--use-gl=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'],
+          });
+          const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+          page.on('console', (message) => {
+            messages.push(`[console:${message.type()}] ${message.text()}`);
+          });
+          page.on('pageerror', (error) => {
+            errors.push(`[pageerror] ${error.stack ?? error.message}`);
+          });
+          page.on('requestfailed', (request) => {
+            errors.push(`[requestfailed] ${request.url()} :: ${request.failure()?.errorText ?? 'unknown'}`);
+          });
+
+          await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
+          await page.screenshot({ path: 'diagnostics/runtime/before-start.png', fullPage: true });
+          const canvasBefore = await page.locator('canvas').count();
+          await page.getByRole('button', { name: '夏休みを始める' }).click();
+          await page.waitForTimeout(3500);
+          await page.screenshot({ path: 'diagnostics/runtime/after-start.png', fullPage: true });
+
+          const canvasCount = await page.locator('canvas').count();
+          const hud = await page.locator('.developer-hud').innerText().catch(() => 'HUD_NOT_FOUND');
+          const canvasPixels = await page.locator('canvas').evaluate((canvas) => {
+            const source = canvas;
+            const probe = document.createElement('canvas');
+            probe.width = source.width;
+            probe.height = source.height;
+            const context = probe.getContext('2d', { willReadFrequently: true });
+            if (!context) return { supported: false, nonBlack: -1, sampled: 0 };
+            context.drawImage(source, 0, 0);
+            const width = probe.width;
+            const height = probe.height;
+            const image = context.getImageData(0, 0, width, height).data;
+            let nonBlack = 0;
+            let sampled = 0;
+            const stepX = Math.max(1, Math.floor(width / 80));
+            const stepY = Math.max(1, Math.floor(height / 45));
+            for (let y = 0; y < height; y += stepY) {
+              for (let x = 0; x < width; x += stepX) {
+                const index = (y * width + x) * 4;
+                const r = image[index] ?? 0;
+                const g = image[index + 1] ?? 0;
+                const b = image[index + 2] ?? 0;
+                const a = image[index + 3] ?? 0;
+                sampled += 1;
+                if (a > 0 && (r > 8 || g > 8 || b > 8)) nonBlack += 1;
+              }
+            }
+            return { supported: true, nonBlack, sampled };
+          }).catch((error) => ({ supported: false, nonBlack: -1, sampled: 0, error: String(error) }));
+
+          const report = {
+            canvasBefore,
+            canvasCount,
+            hud,
+            canvasPixels,
+            messages,
+            errors,
+          };
+          await writeFile('diagnostics/runtime/report.json', JSON.stringify(report, null, 2));
+          console.log(JSON.stringify(report, null, 2));
+          await browser.close();
+
+          const hudHealthy = !/0 FPS/.test(hud) && !/POSITION\s+0,\s*0/.test(hud) && !/準備中/.test(hud);
+          const canvasHealthy = canvasPixels.supported && canvasPixels.nonBlack > Math.max(20, canvasPixels.sampled * 0.05);
+          if (errors.length > 0 || canvasCount !== 1 || !hudHealthy || !canvasHealthy) {
+            process.exit(1);
+          }
+          NODE
+          node /tmp/runtime-diagnostic.mjs
+
+      - name: Upload runtime diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-diagnostic-${{ github.sha }}
+          path: |
+            diagnostics/runtime
+            /tmp/vite-preview.log
+          if-no-files-found: warn
+          retention-days: 3
