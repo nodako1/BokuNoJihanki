@@ -1,0 +1,136 @@
+name: M1 production supervisor
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/m1-production-supervisor.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+  statuses: read
+
+concurrency:
+  group: m1-production-supervisor
+  cancel-in-progress: false
+
+jobs:
+  verify-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Wait until verified M1 PR is merged
+        shell: bash
+        run: |
+          for attempt in $(seq 1 80); do
+            if [[ "$(gh api repos/nodako1/BokuNoJihanki/pulls/4 --jq .merged)" == "true" ]]; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "M1 PR was not merged by the verified finalizer." >&2
+          exit 1
+
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Check current Vercel production status
+        id: initial
+        shell: bash
+        run: |
+          git pull --ff-only origin main
+          SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          for attempt in $(seq 1 40); do
+            STATE=$(gh api "repos/nodako1/BokuNoJihanki/commits/$SHA/status" --jq '[.statuses[] | select(.context=="Vercel")][0].state // "missing"')
+            if [[ "$STATE" == "success" ]]; then
+              echo "success=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "success=false" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Hobby build window when required
+        if: steps.initial.outputs.success != 'true'
+        run: sleep 2700
+
+      - name: Trigger one clean Vercel production build
+        id: retry
+        if: steps.initial.outputs.success != 'true'
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          rm -f .github/workflows/m1-vercel-delayed-retry.yml
+          rm -f .github/workflows/m1-vercel-delayed-retry-v2.yml
+          printf 'M1 production supervised retry at %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .m1-vercel-production-retry
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: trigger M1 Vercel production deployment"
+          git push origin HEAD:main
+          SHA=$(git rev-parse HEAD)
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Vercel production deployment
+        id: production
+        shell: bash
+        run: |
+          SHA="${{ steps.initial.outputs.sha }}"
+          if [[ "${{ steps.initial.outputs.success }}" != "true" ]]; then
+            SHA="${{ steps.retry.outputs.sha }}"
+          fi
+          for attempt in $(seq 1 60); do
+            STATE=$(gh api "repos/nodako1/BokuNoJihanki/commits/$SHA/status" --jq '[.statuses[] | select(.context=="Vercel")][0].state // "missing"')
+            URL=$(gh api "repos/nodako1/BokuNoJihanki/commits/$SHA/status" --jq '[.statuses[] | select(.context=="Vercel")][0].target_url // ""')
+            if [[ "$STATE" == "success" ]]; then
+              echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+              echo "url=$URL" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "Vercel production did not become successful." >&2
+          exit 1
+
+      - name: Record completed M1 and remove temporary supervisor
+        shell: bash
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path('PROJECT_STATE.json')
+          state = json.loads(path.read_text(encoding='utf-8'))
+          state['currentMilestone'] = 'M1'
+          state['status'] = 'completed-production-verified'
+          state['version'] = '0.1.0'
+          completed = state.setdefault('completed', [])
+          for item in ['m1-main-merge', 'm1-quality-check-passed', 'm1-vercel-production-verified']:
+              if item not in completed:
+                  completed.append(item)
+          state['nextMilestone'] = 'M2'
+          state['nextTask'] = 'vending-machine-interaction-and-time-economy'
+          state['lastProductionCommit'] = '${{ steps.production.outputs.sha }}'
+          state['updatedAt'] = '2026-07-22'
+          path.write_text(json.dumps(state, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
+          rm -f .github/workflows/m1-production-supervisor.yml
+          rm -f .github/workflows/m1-vercel-delayed-retry.yml
+          rm -f .github/workflows/m1-vercel-delayed-retry-v2.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "docs: record M1 production verification [skip ci]"
+          git push origin HEAD:main
