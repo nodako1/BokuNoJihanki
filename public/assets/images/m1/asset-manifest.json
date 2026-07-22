@@ -1,0 +1,28 @@
+{
+  "version": "0.1.0",
+  "style": "warm modern 2.5D vector illustration",
+  "storage": "SVG strings embedded in src/game/world/generatedAssets.ts and loaded as data URLs",
+  "license": "Project-original; created specifically for BokuNoJihanki",
+  "files": [
+    "bench",
+    "fence",
+    "flowerbed",
+    "hedge",
+    "house-a",
+    "house-b",
+    "park-sign",
+    "player-down-0",
+    "player-down-1",
+    "player-left-0",
+    "player-left-1",
+    "player-right-0",
+    "player-right-1",
+    "player-up-0",
+    "player-up-1",
+    "playground",
+    "street-lamp",
+    "tree",
+    "utility-pole",
+    "vending"
+  ]
+}

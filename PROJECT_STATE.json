@@ -1,37 +1,58 @@
 {
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
-  "currentMilestone": "M1",
-  "status": "completed-production-verified",
   "version": "0.1.0",
+  "currentMilestone": "M1",
+  "status": "implementation-complete-awaiting-production-verification",
+  "productionBranch": "main",
+  "productionUrl": "https://boku-no-jihanki.vercel.app",
+  "lastProductionCommit": "558721ae2cd3a2b5174caadfd7660400b5fd6324",
   "completed": [
-    "project-bootstrap",
-    "react-phaser-shell",
-    "landscape-orientation-guard",
-    "pwa-manifest-foundation",
-    "title-screen",
-    "time-of-day-atmosphere-foundation",
-    "procedural-audio-foundation",
-    "build-metadata-display",
-    "github-actions-quality-workflow",
-    "vercel-configuration",
-    "vercel-work-branch-preview-suppression",
-    "m0-specification",
-    "m0-main-merge",
-    "m0-quality-check-passed",
-    "m0-vercel-production-verified",
+    "m0-development-foundation",
+    "player-four-direction-movement",
+    "player-walk-animation",
+    "virtual-joystick",
+    "keyboard-input",
+    "shared-input-interface",
+    "camera-follow",
+    "residential-area",
+    "park-area",
+    "seamless-map-streaming",
+    "chunk-prefetch-and-release",
+    "collision-system",
+    "y-sort-2.5d",
+    "time-of-day-map-integration",
+    "environment-audio",
+    "procedural-footsteps",
+    "mobile-safe-area",
+    "developer-hud",
+    "m1-original-vector-assets",
+    "m1-specification",
+    "m1-quality-automation"
+  ],
+  "inProgress": [
     "m1-main-merge",
-    "m1-quality-check-passed",
-    "m1-vercel-production-verified"
+    "m1-production-verification"
+  ],
+  "notStarted": [
+    "vending-machine-search",
+    "money-system",
+    "action-time-consumption",
+    "daily-search-state",
+    "m2-local-save"
   ],
   "nextMilestone": "M2",
-  "nextTask": "vending-machine-interaction-and-time-economy",
-  "productionBranch": "main",
-  "lastProductionCommit": "558721ae2cd3a2b5174caadfd7660400b5fd6324",
+  "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
-    "M0 uses procedural placeholder scenery; final generated art assets are introduced incrementally from M1 onward.",
-    "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
+    {
+      "severity": "light",
+      "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
+    },
+    {
+      "severity": "light",
+      "description": "M1 uses original SVG vector assets optimized for implementation consistency; detail will be refined incrementally without changing the fixed 2.5D camera."
+    }
   ],
-  "openDecisions": [],
-  "updatedAt": "2026-07-22"
+  "lastUpdated": "2026-07-22T00:00:00Z",
+  "developmentRulesVersion": "2.0"
 }
