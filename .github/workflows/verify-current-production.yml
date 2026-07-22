@@ -6,6 +6,11 @@ on:
       - fix/m1-production-verification
     paths:
       - .github/workflows/verify-current-production.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/workflows/verify-current-production.yml
 
 permissions:
   contents: read
