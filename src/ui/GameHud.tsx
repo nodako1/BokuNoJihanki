@@ -69,7 +69,7 @@ export function GameHud({
           </button>
           <details className="dev-tool-drawer">
             <summary>開発</summary>
-            <section className="dev-control-panel" aria-label="M1.1開発操作">
+            <section className="dev-control-panel" aria-label="M1.2開発操作">
               <button type="button" onClick={onStepTime}>＋15分</button>
               <button type="button" onClick={onResetTime}>朝へ戻す</button>
               <button type="button" onClick={onToggleDeveloperHud}>{developerHudVisible ? 'HUDを隠す' : 'HUDを表示'}</button>

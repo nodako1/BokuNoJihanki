@@ -1,4 +1,6 @@
 import type { AreaId } from '../gameBridge';
+import type { TimePhase } from '../systems/timeOfDay';
+import { m12BackgroundKey, m12ForegroundKey, type M12ChunkId } from './m12RasterAssets';
 
 export const VIEW_WIDTH = 1280;
 export const VIEW_HEIGHT = 720;
@@ -6,7 +8,7 @@ export const CHUNK_WIDTH = 1280;
 export const WORLD_HEIGHT = 720;
 export const WORLD_CHUNK_COUNT = 4;
 export const WORLD_WIDTH = CHUNK_WIDTH * WORLD_CHUNK_COUNT;
-export const PLAYER_START = { x: 650, y: 590 } as const;
+export const PLAYER_START = { x: 650, y: 550 } as const;
 export const PLAYER_BODY = { width: 34, height: 28 } as const;
 export const PLAYER_BOUNDS = {
   left: 24,
@@ -84,8 +86,29 @@ export interface ChunkDefinition {
   area: AreaId;
   x: number;
   width: number;
-  backgroundTexture: string;
+  backgroundTextures: Readonly<Record<TimePhase, string>>;
+  foregroundTextures: Readonly<Record<TimePhase, string>>;
+  bakedVisuals?: boolean;
   props: readonly PropDefinition[];
+}
+
+
+function m12PhaseTextures(chunkId: M12ChunkId): Readonly<Record<TimePhase, string>> {
+  return {
+    morning: m12BackgroundKey(chunkId, 'morning'),
+    day: m12BackgroundKey(chunkId, 'day'),
+    evening: m12BackgroundKey(chunkId, 'evening'),
+    night: m12BackgroundKey(chunkId, 'night'),
+  };
+}
+
+function m12PhaseForegrounds(chunkId: M12ChunkId): Readonly<Record<TimePhase, string>> {
+  return {
+    morning: m12ForegroundKey(chunkId, 'morning'),
+    day: m12ForegroundKey(chunkId, 'day'),
+    evening: m12ForegroundKey(chunkId, 'evening'),
+    night: m12ForegroundKey(chunkId, 'night'),
+  };
 }
 
 const houseCollision: CollisionShape = { xOffset: -142, yOffset: -51, width: 284, height: 51 };
@@ -135,7 +158,9 @@ export const WORLD_CHUNKS: readonly ChunkDefinition[] = [
     area: 'residential',
     x: 0,
     width: CHUNK_WIDTH,
-    backgroundTexture: 'm11-bg-residential-west',
+    backgroundTextures: m12PhaseTextures('residential-west'),
+    foregroundTextures: m12PhaseForegrounds('residential-west'),
+    bakedVisuals: true,
     props: [
       { id: 'house-01', kind: 'house', texture: 'house-b', x: 190, y: 432, scale: 0.75, collision: houseCollision, lights: compactHouseLights, shadow: { width: 250, height: 25, alpha: 0.22 } },
       { id: 'house-02', kind: 'house', texture: 'house-a', x: 520, y: 438, scale: 0.62, collision: houseCollision, lights: warmHouseLights, shadow: { width: 220, height: 22, alpha: 0.2 } },
@@ -161,7 +186,9 @@ export const WORLD_CHUNKS: readonly ChunkDefinition[] = [
     area: 'residential',
     x: CHUNK_WIDTH,
     width: CHUNK_WIDTH,
-    backgroundTexture: 'm11-bg-residential-east',
+    backgroundTextures: m12PhaseTextures('residential-east'),
+    foregroundTextures: m12PhaseForegrounds('residential-east'),
+    bakedVisuals: true,
     props: [
       { id: 'house-04', kind: 'house', texture: 'house-c', x: 1430, y: 430, scale: 0.7, collision: houseCollision, lights: compactHouseLights },
       { id: 'house-05', kind: 'house', texture: 'house-b', x: 1810, y: 436, scale: 0.68, collision: houseCollision, lights: compactHouseLights },
@@ -187,7 +214,9 @@ export const WORLD_CHUNKS: readonly ChunkDefinition[] = [
     area: 'park',
     x: CHUNK_WIDTH * 2,
     width: CHUNK_WIDTH,
-    backgroundTexture: 'm11-bg-park-west',
+    backgroundTextures: m12PhaseTextures('park-west'),
+    foregroundTextures: m12PhaseForegrounds('park-west'),
+    bakedVisuals: true,
     props: [
       { id: 'sign-01', kind: 'sign', texture: 'park-sign', x: 2690, y: 467, scale: 0.72, collision: signCollision },
       { id: 'tree-05', kind: 'tree', texture: 'tree-b', x: 2790, y: 426, scale: 0.83, collision: treeCollision },
@@ -214,7 +243,9 @@ export const WORLD_CHUNKS: readonly ChunkDefinition[] = [
     area: 'park',
     x: CHUNK_WIDTH * 3,
     width: CHUNK_WIDTH,
-    backgroundTexture: 'm11-bg-park-east',
+    backgroundTextures: m12PhaseTextures('park-east'),
+    foregroundTextures: m12PhaseForegrounds('park-east'),
+    bakedVisuals: true,
     props: [
       { id: 'tree-09', kind: 'tree', texture: 'tree-a', x: 3920, y: 424, scale: 0.9, collision: treeCollision },
       { id: 'tree-10', kind: 'tree', texture: 'tree-b', x: 4215, y: 688, scale: 0.96, collision: treeCollision },

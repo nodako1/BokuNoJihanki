@@ -2,8 +2,8 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
-  "currentMilestone": "M1.1",
-  "status": "completed-production-verified",
+  "currentMilestone": "M1.2",
+  "status": "implementation-in-progress",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
   "lastProductionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
@@ -49,9 +49,14 @@
     "m1.1-park-interior-screenshot-captured",
     "m1.1-documentation-finalized"
   ],
-  "inProgress": [],
+  "inProgress": [
+    "m1.2-approved-concept-raster-master",
+    "m1.2-four-chunk-time-of-day-backgrounds",
+    "m1.2-foreground-occlusion-layers",
+    "m1.2-raster-player-sprites",
+    "m1.2-quality-and-browser-verification"
+  ],
   "notStarted": [
-    "m1.2-painterly-raster-art-pipeline",
     "vending-machine-search",
     "money-system",
     "action-time-consumption",
@@ -60,33 +65,29 @@
   ],
   "nextMilestone": "M2",
   "nextTask": "vending-machine-search-and-money-system",
-  "optionalRecommendedBeforePublicRelease": "M1.2 painterly high-fidelity art pipeline",
   "knownIssues": [
     {
-      "severity": "medium",
-      "description": "M1.1 is a high-density textured SVG implementation. It does not yet match the approved concept image's painterly raster micro-detail, air perspective, material texture, and lighting fidelity. A layered raster or pre-rendered 3D asset pipeline is required for that target."
+      "severity": "temporary",
+      "description": "M1.2 painterly raster implementation is on feature branch and has not yet been verified on Vercel Production."
     },
     {
       "severity": "light",
-      "description": "Headless Chromium with software WebGL reported lower FPS while tracing and taking screenshots; representative iPhone and Android performance still requires user-side confirmation."
+      "description": "The M1.2 master world reuses mirrored approved-scene compositions across four chunks to guarantee visual continuity; future areas need additional master paintings."
+    },
+    {
+      "severity": "light",
+      "description": "Representative iPhone and Android performance still requires device confirmation."
     },
     {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-22T12:08:00Z",
-  "developmentRulesVersion": "2.2",
+  "lastUpdated": "2026-07-22T13:35:00Z",
+  "developmentRulesVersion": "2.3",
   "evidence": {
-    "m11ImplementationPullRequest": 12,
-    "m11ImplementationMergeCommit": "8b9e4c2b77cb65750ae4b74ba14695636241269f",
-    "m11ProductionVerificationPullRequest": 13,
-    "productionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
-    "productionBrowserEvidenceRun": 29915997279,
-    "documentationFinalizationPullRequest": 15,
-    "initialPosition": "650,590",
-    "parkInteriorPosition": "3180,590",
-    "pageErrors": 0,
-    "failedRequests": 0
+    "m11ProductionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
+    "m12ImplementationPullRequest": 16,
+    "approvedConceptSource": "tools/art/reference/parts"
   }
 }
