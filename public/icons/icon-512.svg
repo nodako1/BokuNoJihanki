@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="ぼくの自販機">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4aa5df"/>
+      <stop offset="1" stop-color="#ffd08b"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#sky)"/>
+  <circle cx="97" cy="28" r="13" fill="#fff2ad"/>
+  <path d="M0 83 31 58l24 18 23-25 50 39v38H0Z" fill="#3f7d57"/>
+  <rect x="38" y="30" width="53" height="85" rx="8" fill="#f5eee0" stroke="#17365d" stroke-width="5"/>
+  <rect x="46" y="39" width="37" height="35" rx="4" fill="#5eb0d6"/>
+  <circle cx="56" cy="50" r="5" fill="#ffdd75"/>
+  <circle cx="72" cy="50" r="5" fill="#f48668"/>
+  <rect x="49" y="82" width="31" height="8" rx="4" fill="#17365d"/>
+  <rect x="55" y="98" width="19" height="8" rx="3" fill="#17365d"/>
+  <circle cx="90" cy="94" r="12" fill="#f6d36c" stroke="#8d6424" stroke-width="3"/>
+  <text x="90" y="99" text-anchor="middle" font-family="sans-serif" font-size="14" font-weight="700" fill="#6d4b16">¥</text>
+</svg>

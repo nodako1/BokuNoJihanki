@@ -1,0 +1,26 @@
+{
+  "name": "ぼくの自販機",
+  "short_name": "ぼくの自販機",
+  "description": "夏休みの町を歩き回り、お金を集めてゲームを買いまくる探索RPG。",
+  "lang": "ja",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#102746",
+  "theme_color": "#17365d",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
