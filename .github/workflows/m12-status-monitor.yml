@@ -1,5 +1,5 @@
 name: Report M1.2 Workflow Status
-# refresh: 2026-07-23T00:00:00Z
+# refresh: final-apply
 
 on:
   push:
@@ -21,27 +21,33 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Query recent feature-branch workflow runs
+      - name: Query M1.2 workflow runs
         shell: bash
         run: |
           gh run list --repo nodako1/BokuNoJihanki \
             --branch feat/m1-2-painterly-raster \
-            --limit 30 \
+            --limit 12 \
             --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url \
-            > /tmp/runs.json
+            > /tmp/feature-runs.json
+          gh run list --repo nodako1/BokuNoJihanki \
+            --branch ci/m12-apply-final \
+            --limit 5 \
+            --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url \
+            > /tmp/apply-runs.json
 
           python - <<'PY'
           import json
           from pathlib import Path
 
-          runs = json.loads(Path('/tmp/runs.json').read_text())
+          runs = json.loads(Path('/tmp/apply-runs.json').read_text()) + json.loads(Path('/tmp/feature-runs.json').read_text())
+          runs.sort(key=lambda run: run['updatedAt'], reverse=True)
           lines = [
-              '## M1.2 workflow status report',
+              '## M1.2 latest workflow status',
               '',
-              '| Run | Workflow | Event | Status | Conclusion | Head | Updated |',
+              '| Run | Workflow | Branch event | Status | Conclusion | Head | Updated |',
               '|---:|---|---|---|---|---|---|',
           ]
-          for run in runs:
+          for run in runs[:15]:
               lines.append(
                   f"| [{run['databaseId']}]({run['url']}) | {run['name']} | {run['event']} | "
                   f"{run['status']} | {run.get('conclusion') or '—'} | "
@@ -50,4 +56,5 @@ jobs:
           Path('/tmp/comment.md').write_text('\n'.join(lines) + '\n')
           PY
 
-          gh pr comment 16 --repo nodako1/BokuNoJihanki --body-file /tmp/comment.md
+          gh api --method PATCH repos/nodako1/BokuNoJihanki/issues/comments/5052404384 \
+            -f body="$(cat /tmp/comment.md)"
