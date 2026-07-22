@@ -1,0 +1,61 @@
+name: Apply Real M1
+
+on:
+  push:
+    branches:
+      - codex/m1-real-complete
+    paths:
+      - bootstrap/m1-real/READY
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-real-m1
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Restore, verify and commit real M1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout M1 branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/m1-real-complete
+          fetch-depth: 0
+
+      - name: Rebuild and verify source archive
+        shell: bash
+        run: |
+          cat bootstrap/m1-real/part-* | base64 --decode > /tmp/m1-real.tar.gz
+          echo "3f9893932f74f149dd2815c471c779a8a0fb0eb0fd8f6112f65aa12d4094894f  /tmp/m1-real.tar.gz" | sha256sum --check
+
+      - name: Replace branch contents with verified M1 source
+        shell: bash
+        run: |
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          tar -xzf /tmp/m1-real.tar.gz -C .
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Clean install
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify M1
+        run: npm run check
+
+      - name: Commit verified M1
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: implement real M1 town exploration"
+          git push origin HEAD:codex/m1-real-complete
