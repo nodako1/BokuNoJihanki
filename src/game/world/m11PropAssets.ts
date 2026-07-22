@@ -62,7 +62,7 @@ function createHouse(palette: HousePalette, variant: number): string {
 }
 
 function createTree(variant: number): string {
-  const canopy = variant === 0
+  const canopy: readonly (readonly [number, number, number])[] = variant === 0
     ? [[61, 126, 57], [111, 86, 66], [168, 91, 71], [221, 128, 58], [144, 139, 82], [90, 157, 59], [198, 159, 55]]
     : variant === 1
       ? [[54, 138, 51], [96, 92, 57], [149, 70, 66], [204, 96, 61], [232, 145, 50], [165, 146, 78], [91, 165, 54]]

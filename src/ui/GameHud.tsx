@@ -89,7 +89,7 @@ export function GameHud({
       <button type="button" className="future-action-button" disabled aria-label="調べる機能はM2で実装予定">
         <span>調べる</span>
       </button>
-      <p className="control-hint">左スティック / WASD・矢印キー　右へ進むと、なつかぜ公園</p>
+      <p className="control-hint">左スティック / WASD・矢印キー / 右へ進むと、なつかぜ公園</p>
     </main>
   );
 }

@@ -24,7 +24,6 @@ export class AtmosphereLayer {
   private readonly particles: Phaser.GameObjects.Graphics;
   private cloudOffset = 0;
   private particleTime = 0;
-  private displayedMinutes = 360;
   private area: AreaId = 'residential';
 
   constructor(scene: Phaser.Scene) {
@@ -51,8 +50,7 @@ export class AtmosphereLayer {
     this.area = area;
   }
 
-  update(atmosphere: Atmosphere, minutes: number, delta: number): void {
-    this.displayedMinutes = minutes;
+  update(atmosphere: Atmosphere, _minutes: number, delta: number): void {
     this.cloudOffset = (this.cloudOffset + delta * 0.018) % (VIEW_WIDTH + 520);
     this.particleTime += delta;
     this.draw(atmosphere);
