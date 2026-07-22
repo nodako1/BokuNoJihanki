@@ -58,7 +58,7 @@ try {
     ],
   });
   context = await browser.newContext({
-    viewport: { width: 1600, height: 900 },
+    viewport: { width: 1280, height: 720 },
     deviceScaleFactor: 1,
     locale: 'ja-JP',
   });
@@ -131,21 +131,29 @@ try {
     throw new Error(`Browser page errors were reported: ${pageErrors.join(' | ')}`);
   }
 
+  await page.getByRole('button', { name: 'HUDを隠す' }).click();
+  await developerSummary.click();
   await page.screenshot({ path: path.join(outputDir, '02-morning-residential.png'), fullPage: true });
 
-  const stepButton = page.getByRole('button', { name: '＋15分' });
-  await advanceTime(page, stepButton, 24);
-  await page.screenshot({ path: path.join(outputDir, '03-noon-residential.png'), fullPage: true });
-  await advanceTime(page, stepButton, 24);
-  await page.screenshot({ path: path.join(outputDir, '04-evening-residential.png'), fullPage: true });
-  await advanceTime(page, stepButton, 12);
-  await page.screenshot({ path: path.join(outputDir, '05-night-residential.png'), fullPage: true });
-  await page.getByRole('button', { name: '朝へ戻す' }).click();
-  await page.waitForTimeout(900);
+  const captureAt = async (steps, filename) => {
+    await developerSummary.click();
+    const stepButton = page.getByRole('button', { name: '＋15分' });
+    await advanceTime(page, stepButton, steps);
+    await developerSummary.click();
+    await page.screenshot({ path: path.join(outputDir, filename), fullPage: true });
+  };
+  await captureAt(24, '03-noon-residential.png');
+  await captureAt(24, '04-evening-residential.png');
+  await captureAt(12, '05-night-residential.png');
+
   await developerSummary.click();
+  await page.getByRole('button', { name: '朝へ戻す' }).click();
+  await page.getByRole('button', { name: 'HUDを表示' }).click();
+  await developerSummary.click();
+  await page.waitForTimeout(900);
 
   let reachedPark = false;
-  for (let attempt = 0; attempt < 14; attempt += 1) {
+  for (let attempt = 0; attempt < 45; attempt += 1) {
     await page.keyboard.down('ArrowRight');
     await page.waitForTimeout(850);
     await page.keyboard.up('ArrowRight');
@@ -166,6 +174,9 @@ try {
     throw new Error(`Seamless park traversal failed at x=${afterMove.playerX}, area=${afterMove.area}.`);
   }
 
+  await developerSummary.click();
+  await page.getByRole('button', { name: 'HUDを隠す' }).click();
+  await developerSummary.click();
   await page.screenshot({ path: path.join(outputDir, '06-morning-park.png'), fullPage: true });
 
   if (pageErrors.length > 0) {
