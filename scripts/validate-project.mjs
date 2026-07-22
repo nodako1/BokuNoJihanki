@@ -10,6 +10,8 @@ const requiredFiles = [
   'public/manifest.webmanifest',
   'public/assets/images/m1/asset-manifest.json',
   '.github/workflows/production-smoke.yml',
+  '.github/workflows/browser-smoke.yml',
+  'scripts/browser-smoke.mjs',
   'src/game/world/generatedAssets.ts',
   'src/game/scenes/ExplorationScene.ts',
   'src/game/systems/inputSystem.ts',
@@ -42,16 +44,25 @@ for (const file of requiredFiles) {
   }
 }
 
-const [packageJson, packageLock, projectState, manifest, vercel, assetManifest, createGame] =
-  await Promise.all([
-    readFile('package.json', 'utf-8').then(JSON.parse),
-    readFile('package-lock.json', 'utf-8').then(JSON.parse),
-    readFile('PROJECT_STATE.json', 'utf-8').then(JSON.parse),
-    readFile('public/manifest.webmanifest', 'utf-8').then(JSON.parse),
-    readFile('vercel.json', 'utf-8').then(JSON.parse),
-    readFile('public/assets/images/m1/asset-manifest.json', 'utf-8').then(JSON.parse),
-    readFile('src/game/createGame.ts', 'utf-8'),
-  ]);
+const [
+  packageJson,
+  packageLock,
+  projectState,
+  manifest,
+  vercel,
+  assetManifest,
+  createGame,
+  explorationScene,
+] = await Promise.all([
+  readFile('package.json', 'utf-8').then(JSON.parse),
+  readFile('package-lock.json', 'utf-8').then(JSON.parse),
+  readFile('PROJECT_STATE.json', 'utf-8').then(JSON.parse),
+  readFile('public/manifest.webmanifest', 'utf-8').then(JSON.parse),
+  readFile('vercel.json', 'utf-8').then(JSON.parse),
+  readFile('public/assets/images/m1/asset-manifest.json', 'utf-8').then(JSON.parse),
+  readFile('src/game/createGame.ts', 'utf-8'),
+  readFile('src/game/scenes/ExplorationScene.ts', 'utf-8'),
+]);
 
 if (packageJson.name !== 'boku-no-jihanki') {
   failures.push('package.json name must be boku-no-jihanki.');
@@ -85,6 +96,9 @@ if (vercel.git?.deploymentEnabled?.['feat/**'] !== false) {
 }
 if (!createGame.includes('ExplorationScene') || createGame.includes('scene: [FoundationScene]')) {
   failures.push('Phaser must start the M1 ExplorationScene.');
+}
+if (!explorationScene.includes('data:image/svg+xml;base64')) {
+  failures.push('Generated SVG assets must use a valid base64 data URL for the Phaser loader.');
 }
 if (!Array.isArray(assetManifest.files) || assetManifest.files.length < 20) {
   failures.push('M1 asset manifest must contain at least 20 original SVG assets.');
