@@ -4,16 +4,21 @@
 
 React＋Phaser＋Vite、横画面、PWAマニフェスト、タイトル、時間帯補間、Web Audio、ビルド表示、CI、Vercel。
 
-## M1 町を歩く基盤 — 完了・Production確認済み
+## M1 町を歩く基盤 — ランタイム修正・Production再確認中
 
 4方向移動、仮想スティック、キーボード、カメラ、住宅街・公園、4チャンクストリーミング、衝突、Yソート、時間帯、環境音、HUD、オリジナルSVG。
 
-- M1機能マージ: `432108024b40c9f3fc20aeec38b7bf871c192da1`
-- Production確認済みコミット: `a169757a823e4ad19205072ab3ea1fc8651547aa`
-- Vercel status: success
-- Production Smoke: success
+- 初回M1機能マージ: `432108024b40c9f3fc20aeec38b7bf871c192da1`
+- 完了扱いを取り消したProductionコミット: `a169757a823e4ad19205072ab3ea1fc8651547aa`
+- 判明した障害: PhaserのSVG Data URI復号例外により、開始後のCanvasが黒画面・0 FPSになる
+- 黒画面修正マージ: `28b7ab6454d523d8ba4c4572e5c940356d8a5513`
+- 修正: UTF-8 SVGをbase64 Data URIとして読み込む
+- 再発防止: PRとmainの`Browser Smoke`で実ブラウザーの開始、FPS、座標、チャンク、移動、pageerrorを検査
+- 現在: Vercel Hobbyのbuild rate limit解除後にProduction再試行予定
 
-## M2 自販機探索と経済 — 次回
+M1は、修正コミットがVercelへ反映され、Productionで開始、描画、移動が実ブラウザー確認できた時点で再び完了とします。
+
+## M2 自販機探索と経済 — M1再確認後
 
 自販機接近、状況対応ボタン、下／返却口、接写画面、固定乱数、空振りから1000円、所持金、15分経過、当日一回、18時制限、一時セーブ。
 
