@@ -1,0 +1,52 @@
+name: Verify Current M1 Production
+
+on:
+  push:
+    branches:
+      - fix/m1-production-verification
+    paths:
+      - .github/workflows/verify-current-production.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Open and operate Vercel Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Run Production browser smoke
+        env:
+          BASE_URL: https://boku-no-jihanki.vercel.app
+          EXPECTED_COMMIT: 6b20507c35e49af4e058d7a6f6ffa57c4e5f991f
+          BROWSER_ARTIFACT_DIR: diagnostics/current-production
+          PRODUCTION_WAIT_MS: '120000'
+        run: node scripts/browser-smoke.mjs
+
+      - name: Upload screenshots, logs and trace
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-m1-production-verification
+          path: diagnostics/current-production
+          if-no-files-found: error
+          retention-days: 7
