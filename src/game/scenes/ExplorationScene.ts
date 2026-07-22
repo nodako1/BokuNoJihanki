@@ -37,7 +37,7 @@ const PLAYER_SPEED = 220;
 const PLAYER_SCALE = 0.62;
 const FOOTSTEP_DISTANCE = 40;
 const HUD_INTERVAL = 180;
-const ATMOSPHERE_INTERVAL = 50;
+const ATMOSPHERE_INTERVAL = 120;
 
 function svgToBase64DataUrl(svg: string): string {
   const bytes = new TextEncoder().encode(svg);

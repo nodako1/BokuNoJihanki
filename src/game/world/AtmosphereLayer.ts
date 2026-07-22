@@ -8,7 +8,7 @@ const STAR_POSITIONS = [
   [629, 49], [735, 96], [832, 40], [936, 78], [1046, 52], [1160, 100], [1230, 36],
 ] as const;
 
-const PARTICLES = Array.from({ length: 26 }, (_, index) => ({
+const PARTICLES = Array.from({ length: 18 }, (_, index) => ({
   x: (index * 173 + 47) % VIEW_WIDTH,
   y: 125 + ((index * 97 + 31) % 500),
   speed: 0.015 + (index % 5) * 0.006,
@@ -102,7 +102,7 @@ export class AtmosphereLayer {
     if (atmosphere.phase === 'night') return;
 
     const alpha = atmosphere.phase === 'evening' ? 0.035 : 0.055;
-    const positions = [120, 680, 1190];
+    const positions = [170, 875];
     for (let index = 0; index < positions.length; index += 1) {
       const x = ((positions[index]! + this.cloudOffset * (0.65 + index * 0.1)) % (VIEW_WIDTH + 480)) - 240;
       const y = 250 + index * 135;
@@ -151,9 +151,9 @@ export class AtmosphereLayer {
     const sunY = VIEW_HEIGHT * atmosphere.sunY;
     const lightAlpha = atmosphere.phase === 'night' ? 0.015 : 0.035 + atmosphere.sunAlpha * 0.025;
 
-    for (let ring = 4; ring >= 1; ring -= 1) {
+    for (let ring = 2; ring >= 1; ring -= 1) {
       graphics.fillStyle(atmosphere.sunColor, lightAlpha / ring);
-      graphics.fillCircle(sunX, sunY, 80 + ring * 70);
+      graphics.fillCircle(sunX, sunY, 70 + ring * 58);
     }
 
     if (atmosphere.phase === 'morning' || atmosphere.phase === 'evening') {

@@ -41,10 +41,11 @@ function residentialBackground(east: boolean): string {
     .map(({ x, y, r }) => `<circle cx="${x}" cy="${70 + y}" r="${r * 0.58}" fill="#d5e7a6" opacity=".18"/>`)
     .join('\n');
   const laneCenter = east ? 930 : 735;
-  const laneLeftTop = laneCenter - 96;
-  const laneRightTop = laneCenter + 84;
-  const laneLeftBottom = laneCenter - 154;
-  const laneRightBottom = laneCenter + 174;
+  const laneDirection = east ? -1 : 1;
+  const laneLeftTop = laneCenter - 108;
+  const laneRightTop = laneCenter + 78;
+  const laneLeftBottom = laneCenter - 148 + laneDirection * 112;
+  const laneRightBottom = laneCenter + 182 + laneDirection * 112;
   const manholeX = east ? 470 : 1040;
 
   const distantRoofs = repeat(7, (index) => {
@@ -54,6 +55,14 @@ function residentialBackground(east: boolean): string {
       <path d="M${x} 145 L${x + 96} ${70 + (index % 2) * 18} L${x + 194} 145 Z" fill="${roof}"/>
       <rect x="${x + 24}" y="138" width="148" height="55" rx="5" fill="#c9bf9f"/>
     </g>`;
+  });
+
+  const backgroundCanopies = repeat(20, (index) => {
+    const x = -30 + index * 70 + (index % 3) * 17;
+    const y = 118 + (index % 4) * 23;
+    const radius = 39 + (index % 5) * 8;
+    const fill = index % 3 === 0 ? '#315f3e' : index % 3 === 1 ? '#47764a' : '#5a8650';
+    return `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fill}" opacity="${0.52 + (index % 2) * 0.12}"/>`;
   });
 
   const curbBlocks = repeat(28, (index) => {
@@ -73,9 +82,10 @@ function residentialBackground(east: boolean): string {
     <path d="M${laneCenter - 5} 90 L${laneCenter + 8} 450" stroke="#eef1df" stroke-width="4" stroke-dasharray="22 25" opacity=".35"/>
   </g>`;
 
+  const crosswalkCenter = (laneLeftBottom + laneRightBottom) / 2;
   const crosswalk = east
-    ? repeat(6, (index) => `<path d="M${780 + index * 34} 488 L${804 + index * 34} 550" stroke="#f3ede2" stroke-width="17" opacity=".74"/>`)
-    : repeat(5, (index) => `<rect x="${610 + index * 34}" y="498" width="20" height="72" rx="2" fill="#f3ede2" opacity=".68"/>`);
+    ? repeat(6, (index) => `<path d="M${crosswalkCenter - 105 + index * 34} 488 L${crosswalkCenter - 81 + index * 34} 550" stroke="#f3ede2" stroke-width="17" opacity=".74"/>`)
+    : repeat(6, (index) => `<rect x="${crosswalkCenter - 102 + index * 34}" y="498" width="20" height="72" rx="2" fill="#f3ede2" opacity=".68"/>`);
 
   return createSvg(
     1280,
@@ -83,6 +93,7 @@ function residentialBackground(east: boolean): string {
     `<rect width="1280" height="720" fill="url(#grass-bg)"/>
     <rect width="1280" height="720" fill="url(#grass-lines)" opacity=".55"/>
     <g filter="url(#paper-grain)">${distantRoofs}</g>
+    <g filter="url(#leaf-texture)">${backgroundCanopies}</g>
     <path d="M0 186 C150 155 242 190 365 162 C505 130 626 190 770 154 C938 112 1087 181 1280 135 V328 H0Z" fill="#476f48" opacity=".78"/>
     <path d="M0 222 C180 178 295 222 418 188 C568 145 704 216 874 171 C1032 132 1150 184 1280 154 V344 H0Z" fill="#5d8551" opacity=".83"/>
     ${grassPoints}

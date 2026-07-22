@@ -31,9 +31,12 @@ function createHouse(palette: HousePalette, variant: number): string {
       <ellipse cx="214" cy="305" rx="172" ry="19" fill="#17353d" opacity=".22"/>
       <path d="M78 123 H345 L372 153 V286 H78Z" fill="${palette.wallShade}"/>
       <rect x="54" y="115" width="300" height="174" rx="10" fill="${palette.wall}" stroke="#604d3c" stroke-width="3"/>
+      <path d="M354 115 L386 139 V281 L354 289Z" fill="${palette.wallShade}" stroke="#5f4938" stroke-width="3"/>
+      <path d="M354 115 L386 139 L372 154 L347 132Z" fill="${palette.accent}" opacity=".86"/>
       ${roofDetail}
       ${tileLines}
       <path d="M55 127 H355" stroke="${palette.trim}" stroke-width="13"/>
+      <path d="M355 127 L386 146" stroke="#3f3028" stroke-width="7" opacity=".62"/>
       <path d="M55 136 H355" stroke="#4a3428" stroke-width="3" opacity=".55"/>
       ${verticalWallLines}
       <g filter="url(#small-shadow)">
