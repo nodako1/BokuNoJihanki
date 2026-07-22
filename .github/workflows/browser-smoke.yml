@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - '.github/workflows/browser-smoke.yml'
+      - '.github/workflows/production-smoke.yml'
       - '.vercel-production-retry'
       - 'index.html'
       - 'package.json'
@@ -20,6 +21,7 @@ on:
       - main
     paths:
       - '.github/workflows/browser-smoke.yml'
+      - '.github/workflows/production-smoke.yml'
       - '.vercel-production-retry'
       - 'index.html'
       - 'package.json'
@@ -96,7 +98,7 @@ jobs:
           BASE_URL: https://boku-no-jihanki.vercel.app
           EXPECTED_COMMIT: ${{ github.sha }}
           BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke
-          PRODUCTION_WAIT_MS: '600000'
+          PRODUCTION_WAIT_MS: '900000'
         run: node scripts/browser-smoke.mjs
 
       - name: Upload screenshots, logs and trace
