@@ -1,0 +1,134 @@
+name: M1 Runtime Diagnostic
+
+on:
+  push:
+    branches:
+      - fix/m1-render-black-screen
+    paths:
+      - .github/workflows/runtime-diagnostic.yml
+      - src/**
+      - package.json
+      - package-lock.json
+      - index.html
+      - vite.config.ts
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m1-runtime-diagnostic
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    name: Launch M1 in Chromium and capture runtime errors
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install application dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build application
+        run: npm run build
+
+      - name: Start local production server
+        shell: bash
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/vite-preview.log 2>&1 &
+          echo $! > /tmp/vite-preview.pid
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/vite-preview.log
+          exit 1
+
+      - name: Install browser diagnostic runtime
+        shell: bash
+        run: |
+          mkdir -p /tmp/m1-browser-diagnostic
+          cd /tmp/m1-browser-diagnostic
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Run browser diagnostic
+        shell: bash
+        run: |
+          cat > /tmp/m1-browser-diagnostic/diagnose.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import { writeFile } from 'node:fs/promises';
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
+          const events = [];
+          const record = (line) => {
+            events.push(line);
+            console.log(line);
+          };
+
+          page.on('console', (message) => record(`[console:${message.type()}] ${message.text()}`));
+          page.on('pageerror', (error) => record(`[pageerror] ${error.stack ?? error.message}`));
+          page.on('requestfailed', (request) => record(`[requestfailed] ${request.method()} ${request.url()} ${request.failure()?.errorText ?? ''}`));
+
+          await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
+          record(`[title] ${await page.title()}`);
+          record(`[canvas-before] ${await page.locator('canvas').count()}`);
+
+          const startButton = page.getByRole('button', { name: /夏休みを始める/ });
+          await startButton.waitFor({ state: 'visible', timeout: 10000 });
+          await startButton.click();
+          await page.waitForTimeout(3500);
+
+          record(`[canvas-after] ${await page.locator('canvas').count()}`);
+          const hud = page.locator('.developer-hud');
+          if (await hud.count()) {
+            record(`[hud] ${(await hud.innerText()).replaceAll('\n', ' | ')}`);
+          }
+
+          const canvasState = await page.evaluate(() => {
+            const canvas = document.querySelector('canvas');
+            if (!(canvas instanceof HTMLCanvasElement)) return { found: false };
+            const rect = canvas.getBoundingClientRect();
+            return {
+              found: true,
+              width: canvas.width,
+              height: canvas.height,
+              clientWidth: rect.width,
+              clientHeight: rect.height,
+              connected: canvas.isConnected,
+              webgl: Boolean(canvas.getContext('webgl2') || canvas.getContext('webgl')),
+            };
+          });
+          record(`[canvas-state] ${JSON.stringify(canvasState)}`);
+
+          await page.screenshot({ path: '/tmp/m1-browser-diagnostic/runtime.png', fullPage: true });
+          await writeFile('/tmp/m1-browser-diagnostic/runtime.log', `${events.join('\n')}\n`, 'utf8');
+          await browser.close();
+          EOF
+          cd /tmp/m1-browser-diagnostic
+          node diagnose.mjs
+
+      - name: Upload runtime diagnostic
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-runtime-diagnostic-${{ github.sha }}
+          path: |
+            /tmp/m1-browser-diagnostic/runtime.png
+            /tmp/m1-browser-diagnostic/runtime.log
+            /tmp/vite-preview.log
+          if-no-files-found: warn
+          retention-days: 2
