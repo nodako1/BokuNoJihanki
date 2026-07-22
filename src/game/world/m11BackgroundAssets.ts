@@ -32,6 +32,11 @@ function createBackgroundDefs(seed: number): string {
     <pattern id="grass-lines" width="34" height="34" patternUnits="userSpaceOnUse">
       <path d="M8 29 Q10 20 13 27 M23 31 Q21 22 18 27 M29 17 Q27 10 24 15" fill="none" stroke="#e2edbd" stroke-width="1.2" opacity=".22"/>
     </pattern>
+    <linearGradient id="transition-fade" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#5d8551" stop-opacity=".96"/>
+      <stop offset=".72" stop-color="#5d8551" stop-opacity=".38"/>
+      <stop offset="1" stop-color="#5d8551" stop-opacity="0"/>
+    </linearGradient>
   `;
 }
 
@@ -148,6 +153,16 @@ function parkBackground(east: boolean): string {
   const secondary = east
     ? 'M540 760 C610 560 740 465 895 350 C1015 262 1115 195 1280 148'
     : 'M760 735 C724 575 705 456 690 255 C680 170 670 110 650 40';
+  const residentialTransition = east ? '' : `<g>
+    <rect x="0" y="0" width="430" height="430" fill="url(#transition-fade)"/>
+    <path d="M0 428 H244 C301 442 345 469 394 515 L306 545 C254 510 202 495 0 495Z" fill="url(#sidewalk)"/>
+    <path d="M0 428 H244 C301 442 345 469 394 515" fill="none" stroke="#eee4ce" stroke-width="7" opacity=".68"/>
+    <path d="M0 495 H252 C326 514 390 582 486 720 H0Z" fill="url(#road)"/>
+    <path d="M0 495 H252 C326 514 390 582 486 720 H0Z" fill="url(#asphalt-speck)"/>
+    <path d="M0 495 H252" stroke="#82796c" stroke-width="5" opacity=".52"/>
+    ${repeat(6, (index) => `<path d="M${72 + index * 33} 497 L${92 + index * 33} 556" stroke="#f3ede2" stroke-width="16" opacity=".72"/>`)}
+    <path d="M242 505 C318 544 363 606 434 720" fill="none" stroke="#d8c498" stroke-width="7" opacity=".48"/>
+  </g>`;
 
   return createSvg(
     1280,
@@ -163,6 +178,7 @@ function parkBackground(east: boolean): string {
     <path d="${path}" fill="none" stroke="#e1c692" stroke-width="13" stroke-linecap="round" opacity=".55"/>
     <path d="${secondary}" fill="none" stroke="#765f45" stroke-width="88" stroke-linecap="round" opacity=".24"/>
     <path d="${secondary}" fill="none" stroke="#b99464" stroke-width="74" stroke-linecap="round"/>
+    ${residentialTransition}
     <g fill="#f0dbac" opacity=".36">
       ${repeat(34, (index) => {
         const x = (index * 113 + 42) % 1260;

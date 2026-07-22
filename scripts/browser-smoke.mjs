@@ -153,12 +153,12 @@ try {
   await page.waitForTimeout(900);
 
   let reachedPark = false;
-  for (let attempt = 0; attempt < 45; attempt += 1) {
+  for (let attempt = 0; attempt < 70; attempt += 1) {
     await page.keyboard.down('ArrowRight');
     await page.waitForTimeout(850);
     await page.keyboard.up('ArrowRight');
     const current = parseHud(await page.locator('body').innerText());
-    if (current.area.includes('なつかぜ公園') || current.playerX >= 2560) {
+    if (current.area.includes('なつかぜ公園') && current.playerX >= 3150) {
       reachedPark = true;
       break;
     }
