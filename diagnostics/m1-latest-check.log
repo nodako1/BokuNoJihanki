@@ -15,6 +15,6 @@ Project validation passed (28 required files).
 > boku-no-jihanki@0.1.0 typecheck
 > tsc -b --pretty false
 
-src/game/scenes/ExplorationScene.ts(16,8): error TS7016: Could not find a declaration file for module '../systems/worldMath.mjs'. '/home/runner/work/BokuNoJihanki/BokuNoJihanki/src/game/systems/worldMath.mjs' implicitly has an 'any' type.
-src/game/systems/inputSystem.ts(7,32): error TS7016: Could not find a declaration file for module './worldMath.mjs'. '/home/runner/work/BokuNoJihanki/BokuNoJihanki/src/game/systems/worldMath.mjs' implicitly has an 'any' type.
-src/game/world/MapStreamer.ts(10,8): error TS7016: Could not find a declaration file for module '../systems/worldMath.mjs'. '/home/runner/work/BokuNoJihanki/BokuNoJihanki/src/game/systems/worldMath.mjs' implicitly has an 'any' type.
+src/game/scenes/ExplorationScene.ts(178,5): error TS2322: Type 'Point' is not assignable to type '{ x: 540; y: 604; }'.
+  Types of property 'x' are incompatible.
+    Type 'number' is not assignable to type '540'.
