@@ -4,10 +4,14 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - README.md
+      - PROJECT_STATE.json
+      - docs/**
 
 permissions:
   contents: read
-  statuses: read
+  statuses: write
 
 concurrency:
   group: production-smoke-${{ github.ref }}
@@ -23,27 +27,39 @@ jobs:
       PRODUCTION_URL: https://boku-no-jihanki.vercel.app
 
     steps:
-      - name: Wait for Vercel production deployment
+      - name: Mark production smoke pending
         shell: bash
         run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state='pending' \
+            -f context='Production Smoke' \
+            -f description='Waiting for Vercel Production and M1 bundle verification' \
+            -f target_url="${PRODUCTION_URL}"
+
+      - name: Verify Vercel Production and M1 bundle
+        id: smoke
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+
           for attempt in $(seq 1 60); do
             STATE=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/status" --jq '[.statuses[] | select(.context=="Vercel")][0].state // "missing"')
             echo "Vercel state: ${STATE} (attempt ${attempt}/60)"
             if [[ "${STATE}" == "success" ]]; then
-              exit 0
+              break
             fi
             if [[ "${STATE}" == "failure" || "${STATE}" == "error" ]]; then
               echo "Vercel deployment failed for ${GITHUB_SHA}." >&2
               exit 1
             fi
+            if [[ "${attempt}" == "60" ]]; then
+              echo "Timed out waiting for Vercel deployment." >&2
+              exit 1
+            fi
             sleep 10
           done
-          echo "Timed out waiting for Vercel deployment." >&2
-          exit 1
 
-      - name: Verify production HTML and M1 bundle marker
-        shell: bash
-        run: |
           curl --fail --silent --show-error --location \
             --retry 6 --retry-all-errors --retry-delay 5 \
             "${PRODUCTION_URL}/?commit=${GITHUB_SHA}" -o /tmp/index.html
@@ -65,3 +81,25 @@ jobs:
           grep -q 'M1 STREAMING HUD' /tmp/production-bundle.js
           grep -q 'なつかぜ公園' /tmp/production-bundle.js
           echo "Production contains the M1 streaming exploration bundle."
+
+      - name: Publish production smoke status
+        if: always()
+        shell: bash
+        run: |
+          if [[ "${{ steps.smoke.outcome }}" == "success" ]]; then
+            STATE='success'
+            DESCRIPTION='Vercel Production contains the M1 streaming exploration bundle'
+          else
+            STATE='failure'
+            DESCRIPTION='Vercel Production did not pass the M1 bundle verification'
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state="${STATE}" \
+            -f context='Production Smoke' \
+            -f description="${DESCRIPTION}" \
+            -f target_url="${PRODUCTION_URL}"
+
+      - name: Fail when production smoke failed
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
