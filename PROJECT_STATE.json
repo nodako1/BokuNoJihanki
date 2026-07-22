@@ -3,7 +3,7 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1",
-  "status": "completed-production-verified",
+  "status": "runtime-fix-awaiting-production-verification",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
   "lastProductionCommit": "a169757a823e4ad19205072ab3ea1fc8651547aa",
@@ -28,13 +28,17 @@
     "developer-hud",
     "m1-original-vector-assets",
     "m1-specification",
-    "m1-quality-automation",
+    "m1-static-quality-automation",
     "m1-main-merge",
-    "m1-quality-check-passed",
-    "m1-vercel-production-verified",
-    "m1-production-smoke-passed"
+    "m1-static-quality-check-passed",
+    "m1-black-screen-root-cause-identified",
+    "m1-svg-data-uri-loader-fixed",
+    "m1-browser-smoke-automation"
   ],
-  "inProgress": [],
+  "inProgress": [
+    "m1-black-screen-production-hotfix",
+    "m1-browser-production-verification"
+  ],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -46,6 +50,10 @@
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
+      "severity": "critical",
+      "description": "The currently recorded Production commit can show a black Phaser canvas because percent-encoded SVG data URIs are decoded as base64 by the Phaser loader. A base64 SVG hotfix is implemented and must pass Vercel plus browser gameplay verification before M1 is marked complete again."
+    },
+    {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     },
@@ -54,6 +62,6 @@
       "description": "M1 uses original SVG vector assets optimized for implementation consistency; visual detail and animation frames will be refined incrementally without changing the fixed 2.5D camera."
     }
   ],
-  "lastUpdated": "2026-07-22T05:59:35Z",
+  "lastUpdated": "2026-07-22T07:00:00Z",
   "developmentRulesVersion": "2.0"
 }
