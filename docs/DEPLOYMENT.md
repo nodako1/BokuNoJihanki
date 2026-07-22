@@ -84,3 +84,7 @@ Playwright ChromiumでProductionを開き、実際にボタンを押し、canvas
 ## Vercel Hobbyのビルド制限
 
 Hobbyでは短時間の大量ビルドを避けます。レート制限時は空コミットを連続作成せず、制限窓が解除された後に一度だけ再デプロイします。Production Browser SmokeとVisual Evidence確認前は`PROJECT_STATE.json`を完了へ変更しません。
+
+## M1.2デプロイ条件
+
+Production Smokeは`M1.2 PAINTERLY HUD`と`assets/images/m12`を検出する。Production Browser Smokeでは、4時間帯、住宅街、公園内部、主人公移動、チャンク読み込み、ブラウザー例外0件を確認する。Vercel Readyだけでは完了としない。

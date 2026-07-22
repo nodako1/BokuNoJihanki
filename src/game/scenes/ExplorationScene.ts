@@ -21,7 +21,18 @@ import {
   getTimePhase,
 } from '../systems/timeOfDay';
 import { AtmosphereLayer } from '../world/AtmosphereLayer';
-import { M11_VISUAL_ASSETS } from '../world/m11VisualAssets';
+import {
+  M12_CHUNK_IDS,
+  M12_PHASES,
+  M12_TRANSPARENT_KEY,
+  M12_TRANSPARENT_PATH,
+  m12BackgroundKey,
+  m12BackgroundPath,
+  m12ForegroundKey,
+  m12ForegroundPath,
+  m12PlayerKey,
+  m12PlayerPath,
+} from '../world/m12RasterAssets';
 import { MapStreamer, type StreamSnapshot } from '../world/MapStreamer';
 import {
   PLAYER_BODY,
@@ -34,19 +45,11 @@ import {
 type FacingDirection = 'down' | 'up' | 'left' | 'right';
 
 const PLAYER_SPEED = 220;
-const PLAYER_SCALE = 0.62;
+const PLAYER_SCALE = 0.82;
 const FOOTSTEP_DISTANCE = 40;
 const HUD_INTERVAL = 180;
 const ATMOSPHERE_INTERVAL = 120;
 
-function svgToBase64DataUrl(svg: string): string {
-  const bytes = new TextEncoder().encode(svg);
-  let binary = '';
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return `data:image/svg+xml;base64,${window.btoa(binary)}`;
-}
 
 export class ExplorationScene extends Phaser.Scene {
   private player!: Phaser.GameObjects.Image;
@@ -57,7 +60,7 @@ export class ExplorationScene extends Phaser.Scene {
   private targetMinutes = GAME_DAY_START;
   private displayedMinutes = GAME_DAY_START;
   private started = false;
-  private facing: FacingDirection = 'down';
+  private facing: FacingDirection = 'up';
   private walkFrame = 0;
   private walkFrameElapsed = 0;
   private footstepDistance = 0;
@@ -98,15 +101,19 @@ export class ExplorationScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
-      console.error(`M1.1 visual asset failed to load: ${file.key}`);
-    });
-
-    for (const [key, svg] of Object.entries(M11_VISUAL_ASSETS)) {
-      this.load.svg(key, svgToBase64DataUrl(svg));
+    for (const chunkId of M12_CHUNK_IDS) {
+      for (const phase of M12_PHASES) {
+        this.load.image(m12BackgroundKey(chunkId, phase), m12BackgroundPath(chunkId, phase));
+        this.load.image(m12ForegroundKey(chunkId, phase), m12ForegroundPath(chunkId, phase));
+      }
     }
+    for (const direction of ['down', 'up', 'left', 'right'] as const) {
+      for (const step of [0, 1] as const) {
+        this.load.image(m12PlayerKey(direction, step), m12PlayerPath(direction, step));
+      }
+    }
+    this.load.image(M12_TRANSPARENT_KEY, M12_TRANSPARENT_PATH);
   }
-
   create(): void {
     this.cameras.main.setBackgroundColor('#75966b');
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
@@ -122,7 +129,7 @@ export class ExplorationScene extends Phaser.Scene {
       .ellipse(PLAYER_START.x + 4, PLAYER_START.y + 3, 58, 18, 0x173643, 0.24)
       .setDepth(depthForFootY(PLAYER_START.y, -1));
     this.player = this.add
-      .image(PLAYER_START.x, PLAYER_START.y, 'player-down-0')
+      .image(PLAYER_START.x, PLAYER_START.y, m12PlayerKey('up', 0))
       .setOrigin(0.5, 1)
       .setScale(PLAYER_SCALE)
       .setDepth(depthForFootY(PLAYER_START.y, 1));
@@ -184,7 +191,7 @@ export class ExplorationScene extends Phaser.Scene {
       this.walkFrameElapsed = 0;
     }
 
-    this.player.setTexture(`player-${this.facing}-${this.walkFrame}`);
+    this.player.setTexture(m12PlayerKey(this.facing, this.walkFrame as 0 | 1));
     this.player.setDepth(depthForFootY(this.player.y, 1));
     this.playerShadow
       .setPosition(this.player.x + 4, this.player.y + 3)
@@ -231,7 +238,7 @@ export class ExplorationScene extends Phaser.Scene {
   private applyAtmosphere(delta: number): void {
     const atmosphere = getAtmosphere(this.displayedMinutes);
     this.atmosphereLayer.update(atmosphere, this.displayedMinutes, delta);
-    this.mapStreamer.applyAtmosphere(atmosphere);
+    this.mapStreamer.applyAtmosphere(atmosphere, this.displayedMinutes);
     this.player.setTint(
       atmosphere.phase === 'night'
         ? 0x91a4cc

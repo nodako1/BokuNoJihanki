@@ -118,25 +118,25 @@ export class AtmosphereLayer {
     graphics.clear();
 
     if (atmosphere.phase === 'morning') {
-      graphics.fillStyle(0xffc66e, 0.025 + atmosphere.warmthAlpha * 0.06);
+      graphics.fillStyle(0xffc66e, 0.008 + atmosphere.warmthAlpha * 0.018);
       graphics.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
     }
 
     if (atmosphere.phase === 'evening') {
-      graphics.fillStyle(0xff8752, 0.06 + atmosphere.warmthAlpha * 0.14);
+      graphics.fillStyle(0xff8752, 0.014 + atmosphere.warmthAlpha * 0.025);
       graphics.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-      graphics.fillStyle(0x553f62, 0.035);
+      graphics.fillStyle(0x553f62, 0.012);
       graphics.fillRect(0, 420, VIEW_WIDTH, 300);
     }
 
     if (atmosphere.phase === 'night') {
-      graphics.fillStyle(0x07152c, 0.16 + atmosphere.starAlpha * 0.1);
+      graphics.fillStyle(0x07152c, 0.025 + atmosphere.starAlpha * 0.025);
       graphics.fillRect(0, 0, VIEW_WIDTH, VIEW_HEIGHT);
-      graphics.fillStyle(0x172846, 0.08);
+      graphics.fillStyle(0x172846, 0.02);
       graphics.fillRect(0, 390, VIEW_WIDTH, 330);
     }
 
-    const vignetteAlpha = atmosphere.phase === 'night' ? 0.14 : 0.055;
+    const vignetteAlpha = atmosphere.phase === 'night' ? 0.055 : 0.025;
     graphics.fillStyle(0x07131d, vignetteAlpha);
     graphics.fillRect(0, 0, VIEW_WIDTH, 22);
     graphics.fillRect(0, VIEW_HEIGHT - 28, VIEW_WIDTH, 28);
@@ -149,7 +149,7 @@ export class AtmosphereLayer {
     graphics.clear();
     const sunX = VIEW_WIDTH * atmosphere.sunX;
     const sunY = VIEW_HEIGHT * atmosphere.sunY;
-    const lightAlpha = atmosphere.phase === 'night' ? 0.015 : 0.035 + atmosphere.sunAlpha * 0.025;
+    const lightAlpha = atmosphere.phase === 'night' ? 0.006 : 0.012 + atmosphere.sunAlpha * 0.012;
 
     for (let ring = 2; ring >= 1; ring -= 1) {
       graphics.fillStyle(atmosphere.sunColor, lightAlpha / ring);
@@ -157,7 +157,7 @@ export class AtmosphereLayer {
     }
 
     if (atmosphere.phase === 'morning' || atmosphere.phase === 'evening') {
-      graphics.fillStyle(atmosphere.sunColor, 0.025 + atmosphere.warmthAlpha * 0.05);
+      graphics.fillStyle(atmosphere.sunColor, 0.008 + atmosphere.warmthAlpha * 0.018);
       graphics.fillTriangle(-80, 0, 340, 0, 910, VIEW_HEIGHT);
       graphics.fillTriangle(240, 0, 480, 0, 1090, VIEW_HEIGHT);
     }

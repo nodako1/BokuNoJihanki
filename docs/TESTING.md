@@ -105,3 +105,13 @@ Headless ChromiumのFPSは性能の絶対値ではありません。正式公開
 従来の`Production Smoke`は公開JavaScript内の文字列だけを検査していたため、Phaser初期化時の実行時例外を検出できませんでした。生成SVGのpercent-encoded data URLがbase64として処理され、`atob`で`InvalidCharacterError`が発生していました。
 
 以後、文字列検査は軽量な配備確認として残しますが、ゲームが動作したことの完了判定には`Browser Smoke`を必須とします。
+
+## M1.2追加確認
+
+- `public/assets/images/m12`の40ファイル以上をmanifestで検証
+- 4時間帯の背景と透過前景をPR本番ビルドで撮影
+- M1.2 PAINTERLY HUD、初期座標、ロード済みチャンクを確認
+- 住宅街から公園内部`x>=3150`まで実移動
+- player up/down/left/rightのテクスチャ切替
+- pageerror、failed request 0件
+- 基準画像と実画面を、画材・構図・密度・パース・光で比較
