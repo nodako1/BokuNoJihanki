@@ -4,18 +4,22 @@
 
 React＋Phaser＋Vite、横画面、PWAマニフェスト、タイトル、時間帯補間、Web Audio、ビルド表示、CI、Vercel。
 
-## M1 町を歩く基盤 — Runtime修正のProduction確認待ち
+## M1 町を歩く基盤 — 完了・Production実ブラウザー確認済み
 
 4方向移動、仮想スティック、キーボード、カメラ、住宅街・公園、4チャンクストリーミング、衝突、Yソート、時間帯、環境音、HUD、オリジナルSVG。
 
-2026-07-22、旧ProductionでSVGローダーの実行時例外により黒画面になることが判明しました。修正コードはmainへマージ済みで、ローカル本番ビルドに対するPlaywright Browser Smokeでは描画と移動に成功しています。Vercel Hobbyのビルドレート制限解除後にProductionへ反映し、Production Browser Smoke成功をもってM1を再確定します。
+2026-07-22、旧ProductionでSVGローダーの実行時例外により黒画面になることが判明しました。SVGをUTF-8対応base64 Data URIへ修正し、Vercelへ再反映した後、Playwright ChromiumでProductionを実際に起動・操作して正常動作を確認しました。
 
 - 黒画面修正マージ: `28b7ab6454d523d8ba4c4572e5c940356d8a5513`
-- 旧Production: `a169757a823e4ad19205072ab3ea1fc8651547aa`
-- ローカルBrowser Smoke: success
-- Production Browser Smoke: pending
+- Production確認済みコミット: `6b20507c35e49af4e058d7a6f6ffa57c4e5f991f`
+- Vercel status: success
+- Production Smoke: success
+- Production Browser Smoke: success
+- 初期座標: 540,604
+- ArrowRight後座標: 606,604
+- pageerror / failed request: 0
 
-## M2 自販機探索と経済 — M1再確認後
+## M2 自販機探索と経済 — 次回
 
 自販機接近、状況対応ボタン、下／返却口、接写画面、固定乱数、空振りから1000円、所持金、15分経過、当日一回、18時制限、一時セーブ。
 
