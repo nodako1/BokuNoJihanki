@@ -1,5 +1,5 @@
 name: Report M1.2 Workflow Status
-# refresh: final-apply-failure
+# refresh: retry-after-excluding-diagnostics
 
 on:
   push:
@@ -21,17 +21,22 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Query failure details
+      - name: Query final apply runs
         shell: bash
         run: |
-          gh run view 29964397348 --repo nodako1/BokuNoJihanki --log-failed > /tmp/failed.log || true
-          tail -n 100 /tmp/failed.log > /tmp/tail.log
-          {
-            echo '## M1.2 final apply failure details'
-            echo
-            echo '```text'
-            cat /tmp/tail.log
-            echo '```'
-          } > /tmp/comment.md
+          gh run list --repo nodako1/BokuNoJihanki \
+            --branch ci/m12-apply-final \
+            --limit 5 \
+            --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url \
+            > /tmp/runs.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          runs = json.loads(Path('/tmp/runs.json').read_text())
+          lines = ['## M1.2 final apply workflow', '', '| Run | Workflow | Status | Conclusion | Head | Updated |', '|---:|---|---|---|---|---|']
+          for run in runs:
+              lines.append(f"| [{run['databaseId']}]({run['url']}) | {run['name']} | {run['status']} | {run.get('conclusion') or '—'} | `{run['headSha'][:7]}` | {run['updatedAt']} |")
+          Path('/tmp/comment.md').write_text('\n'.join(lines) + '\n')
+          PY
           gh api --method PATCH repos/nodako1/BokuNoJihanki/issues/comments/5052404384 \
             -f body="$(cat /tmp/comment.md)"
