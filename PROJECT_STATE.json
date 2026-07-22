@@ -3,10 +3,10 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1",
-  "status": "runtime-fix-merged-awaiting-production-verification",
+  "status": "completed-production-verified",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "a169757a823e4ad19205072ab3ea1fc8651547aa",
+  "lastProductionCommit": "6b20507c35e49af4e058d7a6f6ffa57c4e5f991f",
   "completed": [
     "m0-development-foundation",
     "player-four-direction-movement",
@@ -31,12 +31,12 @@
     "m1-quality-automation",
     "m1-runtime-root-cause-identified",
     "m1-svg-loader-fix-merged",
-    "m1-browser-smoke-local-passed"
+    "m1-browser-smoke-local-passed",
+    "m1-vercel-rate-limit-recovered",
+    "m1-production-smoke-passed",
+    "m1-browser-smoke-production-passed"
   ],
-  "inProgress": [
-    "m1-vercel-rate-limit-recovery",
-    "m1-browser-smoke-production-verification"
-  ],
+  "inProgress": [],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -48,18 +48,18 @@
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
-      "severity": "blocking",
-      "description": "The corrected M1 runtime is merged to main, but Vercel Production is still serving the previous black-screen build until the Hobby build-rate window allows a new deployment."
-    },
-    {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     },
     {
       "severity": "light",
       "description": "M1 uses original SVG vector assets optimized for implementation consistency; visual detail and animation frames will be refined incrementally without changing the fixed 2.5D camera."
+    },
+    {
+      "severity": "light",
+      "description": "Headless Chromium uses software WebGL and reported lower FPS than a normal desktop browser; device performance still needs user-side confirmation on representative smartphones."
     }
   ],
-  "lastUpdated": "2026-07-22T07:00:00Z",
+  "lastUpdated": "2026-07-22T08:33:15Z",
   "developmentRulesVersion": "2.1"
 }
