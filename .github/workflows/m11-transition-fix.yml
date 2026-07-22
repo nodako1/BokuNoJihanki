@@ -1,0 +1,68 @@
+name: M1.1 Transition Fix
+
+on:
+  push:
+    branches:
+      - feat/m1-1-visual-complete
+    paths:
+      - '.github/workflows/m11-transition-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/m1-1-visual-complete
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Blend the chunk boundary and capture the park interior
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          background = Path('src/game/world/m11BackgroundAssets.ts')
+          text = background.read_text(encoding='utf-8')
+          text = text.replace(
+              '    <pattern id="grass-lines" width="34" height="34" patternUnits="userSpaceOnUse">\n      <path d="M8 29 Q10 20 13 27 M23 31 Q21 22 18 27 M29 17 Q27 10 24 15" fill="none" stroke="#e2edbd" stroke-width="1.2" opacity=".22"/>\n    </pattern>',
+              '    <pattern id="grass-lines" width="34" height="34" patternUnits="userSpaceOnUse">\n      <path d="M8 29 Q10 20 13 27 M23 31 Q21 22 18 27 M29 17 Q27 10 24 15" fill="none" stroke="#e2edbd" stroke-width="1.2" opacity=".22"/>\n    </pattern>\n    <linearGradient id="transition-fade" x1="0" y1="0" x2="1" y2="0">\n      <stop stop-color="#5d8551" stop-opacity=".96"/>\n      <stop offset=".72" stop-color="#5d8551" stop-opacity=".38"/>\n      <stop offset="1" stop-color="#5d8551" stop-opacity="0"/>\n    </linearGradient>',
+          )
+          text = text.replace(
+              "  const secondary = east\n    ? 'M540 760 C610 560 740 465 895 350 C1015 262 1115 195 1280 148'\n    : 'M760 735 C724 575 705 456 690 255 C680 170 670 110 650 40';",
+              "  const secondary = east\n    ? 'M540 760 C610 560 740 465 895 350 C1015 262 1115 195 1280 148'\n    : 'M760 735 C724 575 705 456 690 255 C680 170 670 110 650 40';\n  const residentialTransition = east ? '' : `<g>\n    <rect x=\"0\" y=\"0\" width=\"430\" height=\"430\" fill=\"url(#transition-fade)\"/>\n    <path d=\"M0 428 H244 C301 442 345 469 394 515 L306 545 C254 510 202 495 0 495Z\" fill=\"url(#sidewalk)\"/>\n    <path d=\"M0 428 H244 C301 442 345 469 394 515\" fill=\"none\" stroke=\"#eee4ce\" stroke-width=\"7\" opacity=\".68\"/>\n    <path d=\"M0 495 H252 C326 514 390 582 486 720 H0Z\" fill=\"url(#road)\"/>\n    <path d=\"M0 495 H252 C326 514 390 582 486 720 H0Z\" fill=\"url(#asphalt-speck)\"/>\n    <path d=\"M0 495 H252\" stroke=\"#82796c\" stroke-width=\"5\" opacity=\".52\"/>\n    ${repeat(6, (index) => `<path d=\"M${72 + index * 33} 497 L${92 + index * 33} 556\" stroke=\"#f3ede2\" stroke-width=\"16\" opacity=\".72\"/>`)}\n    <path d=\"M242 505 C318 544 363 606 434 720\" fill=\"none\" stroke=\"#d8c498\" stroke-width=\"7\" opacity=\".48\"/>\n  </g>`;",
+          )
+          text = text.replace(
+              '    <g fill="#f0dbac" opacity=".36">',
+              '    ${residentialTransition}\n    <g fill="#f0dbac" opacity=".36">',
+              1,
+          )
+          background.write_text(text, encoding='utf-8')
+
+          smoke = Path('scripts/browser-smoke.mjs')
+          text = smoke.read_text(encoding='utf-8')
+          text = text.replace('  for (let attempt = 0; attempt < 45; attempt += 1) {', '  for (let attempt = 0; attempt < 70; attempt += 1) {')
+          text = text.replace(
+              "    if (current.area.includes('なつかぜ公園') || current.playerX >= 2560) {\n      reachedPark = true;\n      break;\n    }",
+              "    if (current.area.includes('なつかぜ公園') && current.playerX >= 3150) {\n      reachedPark = true;\n      break;\n    }",
+          )
+          smoke.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify complete quality gate
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+      - name: Commit and remove one-time workflow
+        run: |
+          rm .github/workflows/m11-transition-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/game/world/m11BackgroundAssets.ts scripts/browser-smoke.mjs .github/workflows/m11-transition-fix.yml
+          git commit -m 'fix: blend residential and park visual transition'
+          git push origin HEAD:feat/m1-1-visual-complete
