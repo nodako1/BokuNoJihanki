@@ -7,6 +7,9 @@ on:
     paths:
       - .github/workflows/source-snapshot.yml
       - .m1-source-trigger
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
