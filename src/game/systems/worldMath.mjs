@@ -81,6 +81,8 @@ export function areaForX(x) {
 }
 
 export function surfaceForPosition(x, y) {
-  if (x >= 2560) return y >= 552 ? 'dirt' : 'grass';
-  return 'asphalt';
+  if (x < 2560) {
+    return y >= 492 ? 'asphalt' : y >= 426 ? 'dirt' : 'grass';
+  }
+  return y >= 505 ? 'dirt' : 'grass';
 }
