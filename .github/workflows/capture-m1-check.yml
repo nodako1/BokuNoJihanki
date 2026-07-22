@@ -1,0 +1,62 @@
+name: Capture M1 Check
+
+on:
+  push:
+    branches:
+      - codex/m1-real-complete
+    paths:
+      - .github/workflows/capture-m1-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: capture-m1-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Run and capture M1 quality check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout source branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/m1-real-complete
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run complete check
+        id: verify
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run check 2>&1 | tee /tmp/m1-latest-check.log
+
+      - name: Save diagnostics
+        shell: bash
+        run: |
+          mkdir -p diagnostics
+          cp /tmp/m1-latest-check.log diagnostics/m1-latest-check.log
+          printf 'outcome=%s\ncommit=%s\n' "${{ steps.verify.outcome }}" "${GITHUB_SHA}" > diagnostics/m1-latest-check-status.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostics/m1-latest-check.log diagnostics/m1-latest-check-status.txt
+          git commit -m "chore: capture latest M1 quality diagnostics" || true
+          git push origin HEAD:codex/m1-real-complete
+
+      - name: Fail when verification failed
+        if: steps.verify.outcome == 'failure'
+        run: exit 1
