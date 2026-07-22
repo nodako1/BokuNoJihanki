@@ -41,7 +41,7 @@ jobs:
           PRODUCTION_URL: https://boku-no-jihanki.vercel.app
         run: |
           mkdir -p diagnostics/browser
-          cat > /tmp/diagnose.mjs <<'SCRIPT'
+          cat > diagnostics/browser/diagnose.mjs <<'SCRIPT'
           import { chromium } from 'playwright';
           import fs from 'node:fs';
 
@@ -127,7 +127,7 @@ jobs:
           }
           process.exitCode = exitCode;
           SCRIPT
-          node /tmp/diagnose.mjs
+          node diagnostics/browser/diagnose.mjs
 
       - name: Upload browser diagnostics
         if: always()
