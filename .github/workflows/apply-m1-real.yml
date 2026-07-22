@@ -63,8 +63,12 @@ jobs:
       - name: Replace branch contents with verified M1 source
         shell: bash
         run: |
+          cp -a .github/workflows /tmp/current-workflows
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           tar -xzf /tmp/m1-real.tar.gz -C .
+          rm -rf .github/workflows
+          mkdir -p .github
+          cp -a /tmp/current-workflows .github/workflows
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
