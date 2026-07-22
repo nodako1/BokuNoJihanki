@@ -40,17 +40,18 @@
     "m1.1-residential-park-transition-blend",
     "m1.1-pr-quality-passed",
     "m1.1-pr-browser-smoke-passed",
-    "m1.1-four-time-period-screenshots-captured",
-    "m1.1-park-interior-screenshot-captured",
-    "m1.1-main-merge",
-    "m1.1-vercel-production-deployment",
+    "m1.1-main-merged",
+    "m1.1-vercel-production-deployed",
     "m1.1-production-smoke-passed",
     "m1.1-production-browser-smoke-passed",
     "m1.1-production-visual-evidence-captured",
-    "m1.1-final-documentation"
+    "m1.1-four-time-period-screenshots-captured",
+    "m1.1-park-interior-screenshot-captured",
+    "m1.1-documentation-finalized"
   ],
   "inProgress": [],
   "notStarted": [
+    "m1.2-painterly-raster-art-pipeline",
     "vending-machine-search",
     "money-system",
     "action-time-consumption",
@@ -59,20 +60,32 @@
   ],
   "nextMilestone": "M2",
   "nextTask": "vending-machine-search-and-money-system",
+  "optionalRecommendedBeforePublicRelease": "M1.2 painterly high-fidelity art pipeline",
   "knownIssues": [
     {
-      "severity": "light",
-      "description": "The M1.1 world uses original textured SVG illustration. It matches the approved reference in density, warmth and composition, but does not reproduce its painterly raster micro-texture exactly."
+      "severity": "medium",
+      "description": "M1.1 is a high-density textured SVG implementation. It does not yet match the approved concept image's painterly raster micro-detail, air perspective, material texture, and lighting fidelity. A layered raster or pre-rendered 3D asset pipeline is required for that target."
     },
     {
       "severity": "light",
-      "description": "Headless Chromium with software WebGL reported 8-10 FPS while tracing and taking screenshots; representative iPhone and Android performance still requires user-side confirmation."
+      "description": "Headless Chromium with software WebGL reported lower FPS while tracing and taking screenshots; representative iPhone and Android performance still requires user-side confirmation."
     },
     {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-22T11:36:00Z",
-  "developmentRulesVersion": "2.2"
+  "lastUpdated": "2026-07-22T11:35:35Z",
+  "developmentRulesVersion": "2.2",
+  "evidence": {
+    "m11ImplementationPullRequest": 12,
+    "m11ImplementationMergeCommit": "8b9e4c2b77cb65750ae4b74ba14695636241269f",
+    "m11ProductionVerificationPullRequest": 13,
+    "productionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
+    "productionBrowserEvidenceRun": 29915997279,
+    "initialPosition": "650,590",
+    "parkInteriorPosition": "3180,590",
+    "pageErrors": 0,
+    "failedRequests": 0
+  }
 }
