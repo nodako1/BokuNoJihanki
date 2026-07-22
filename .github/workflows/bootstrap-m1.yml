@@ -1,0 +1,62 @@
+name: Bootstrap M1
+
+on:
+  push:
+    branches:
+      - feat/m1-streaming-map
+    paths:
+      - bootstrap/m1/READY
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bootstrap-m1-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    name: Apply, generate, verify and commit M1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout M1 branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/m1-streaming-map
+          fetch-depth: 0
+
+      - name: Apply M1 text payload
+        shell: bash
+        run: |
+          test -f bootstrap/m1/READY
+          cat bootstrap/m1/part-* | base64 --decode > /tmp/m1-text.tar.gz
+          echo "8fc6f00e4e40f0832bd5d09c2e77e1e623b5cd3cb3ae3b420416d1f9397a5a8a  /tmp/m1-text.tar.gz" | sha256sum --check
+          tar -xzf /tmp/m1-text.tar.gz -C .
+          rm -rf bootstrap
+          rm -f .m1-source-trigger
+          rm -f .github/workflows/source-snapshot.yml
+          rm -f .github/workflows/bootstrap-m1.yml
+
+      - name: Generate M1 image assets
+        run: python scripts/generate_m1_assets.py
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Verify M1
+        run: npm run check
+
+      - name: Commit verified M1
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: implement M1 streaming exploration map"
+          git push origin HEAD:feat/m1-streaming-map
