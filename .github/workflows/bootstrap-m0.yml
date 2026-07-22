@@ -6,12 +6,18 @@ on:
       - feat/m0-foundation
     paths:
       - bootstrap/READY
+  pull_request:
+    branches:
+      - main
+    paths:
+      - bootstrap/READY
+      - bootstrap/part-*
 
 permissions:
   contents: write
 
 concurrency:
-  group: bootstrap-m0-${{ github.ref }}
+  group: bootstrap-m0-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -27,7 +33,18 @@ jobs:
           ref: feat/m0-foundation
           fetch-depth: 0
 
+      - name: Determine bootstrap state
+        id: state
+        shell: bash
+        run: |
+          if [[ -f package.json ]]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Extract project files
+        if: steps.state.outputs.needed == 'true'
         run: |
           cat bootstrap/part-* | base64 --decode > /tmp/m0-project.tar.gz
           echo "1dce8c8b207d69ee6649445f2c5b1fa112686fb6cbc81908508b20eaab527ab1  /tmp/m0-project.tar.gz" | sha256sum --check
@@ -36,17 +53,21 @@ jobs:
           rm -f .github/workflows/bootstrap-m0.yml
 
       - name: Setup Node.js
+        if: steps.state.outputs.needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install dependencies and create lockfile
+        if: steps.state.outputs.needed == 'true'
         run: npm install --no-audit --no-fund
 
       - name: Verify M0
+        if: steps.state.outputs.needed == 'true'
         run: npm run check
 
       - name: Commit verified project
+        if: steps.state.outputs.needed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
