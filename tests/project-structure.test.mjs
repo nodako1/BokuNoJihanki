@@ -13,12 +13,12 @@ test('PWA is configured for a landscape standalone experience', async () => {
   assert.equal(manifest.lang, 'ja');
 });
 
-test('M1 state points to vending-machine interaction as M2', async () => {
+test('M1.1 state points to vending-machine interaction as M2', async () => {
   const state = await readJson('PROJECT_STATE.json');
-  assert.equal(state.currentMilestone, 'M1');
+  assert.equal(state.currentMilestone, 'M1.1');
   assert.equal(state.nextMilestone, 'M2');
   assert.equal(state.nextTask, 'vending-machine-search-and-money-system');
-  assert.equal(state.developmentRulesVersion, '2.1');
+  assert.equal(state.developmentRulesVersion, '2.2');
 });
 
 test('Vercel only deploys main to the normal production flow', async () => {
@@ -41,11 +41,23 @@ test('Vercel only deploys main to the normal production flow', async () => {
   }
 });
 
-test('M1 asset manifest records an original reusable vector set', async () => {
+test('M1.1 asset manifest records the expanded original visual set', async () => {
   const assets = await readJson('public/assets/images/m1/asset-manifest.json');
   assert.equal(assets.version, '0.1.0');
   assert.match(assets.license, /Project-original/);
-  assert.ok(assets.files.length >= 20);
-  assert.ok(assets.files.includes('player-down-0'));
-  assert.ok(assets.files.includes('vending'));
+  assert.ok(assets.files.length >= 30);
+  for (const asset of [
+    'm11-bg-residential-west',
+    'm11-bg-park-west',
+    'player-down-0',
+    'player-left-0',
+    'player-right-0',
+    'house-d',
+    'vending',
+    'playground-slide',
+    'playground-swing',
+    'trash-can',
+  ]) {
+    assert.ok(assets.files.includes(asset), `${asset} should be listed in the asset manifest`);
+  }
 });

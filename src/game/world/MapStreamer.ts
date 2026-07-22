@@ -13,20 +13,29 @@ import {
   WORLD_CHUNKS,
   WORLD_CHUNK_COUNT,
   type ChunkDefinition,
+  type LightKind,
   type PropDefinition,
   type PropKind,
 } from './worldConfig';
+
+interface PropLightInstance {
+  kind: LightKind;
+  alphaScale: number;
+  shape: Phaser.GameObjects.Rectangle;
+}
 
 interface PropInstance {
   definition: PropDefinition;
   image: Phaser.GameObjects.Image;
   shadow: Phaser.GameObjects.Ellipse;
   glow: Phaser.GameObjects.Ellipse | null;
+  lights: PropLightInstance[];
 }
 
 interface ChunkInstance {
   definition: ChunkDefinition;
-  ground: Phaser.GameObjects.Graphics;
+  background: Phaser.GameObjects.Image;
+  groundOverlay: Phaser.GameObjects.Graphics;
   props: PropInstance[];
   collisions: Rect[];
 }
@@ -43,15 +52,31 @@ function tintForProp(kind: PropKind, atmosphere: Atmosphere): number {
   switch (kind) {
     case 'tree':
     case 'hedge':
+    case 'shrub':
     case 'flowerbed':
-      return mixColor(0xffffff, atmosphere.ground, 0.24 + atmosphere.starAlpha * 0.25);
+      return mixColor(0xffffff, atmosphere.ground, 0.16 + atmosphere.starAlpha * 0.34);
     case 'house':
       return atmosphere.buildingTint;
     case 'vending':
-      return mixColor(0xffffff, atmosphere.shadow, atmosphere.starAlpha * 0.32);
-    default:
+      return mixColor(0xffffff, 0x8fa4c4, atmosphere.starAlpha * 0.28);
+    case 'playground':
       return mixColor(0xffffff, atmosphere.shadow, atmosphere.starAlpha * 0.22);
+    default:
+      return mixColor(0xffffff, atmosphere.shadow, atmosphere.starAlpha * 0.25);
   }
+}
+
+function backgroundTint(atmosphere: Atmosphere): number {
+  if (atmosphere.phase === 'night') {
+    return mixColor(0xffffff, 0x63789b, 0.54);
+  }
+  if (atmosphere.phase === 'evening') {
+    return mixColor(0xffffff, 0xffc28e, 0.2);
+  }
+  if (atmosphere.phase === 'morning') {
+    return mixColor(0xffffff, 0xffe7b4, 0.08);
+  }
+  return 0xffffff;
 }
 
 export class MapStreamer {
@@ -108,17 +133,33 @@ export class MapStreamer {
 
   applyAtmosphere(atmosphere: Atmosphere): void {
     this.atmosphere = atmosphere;
+    const sunDirection = (atmosphere.sunX - 0.5) * -1;
+
     for (const chunk of this.chunks.values()) {
-      this.drawGround(chunk, atmosphere);
+      chunk.background.setTint(backgroundTint(atmosphere));
+      this.drawGroundOverlay(chunk, atmosphere);
+
       for (const prop of chunk.props) {
         prop.image.setTint(tintForProp(prop.definition.kind, atmosphere));
-        prop.shadow.setFillStyle(atmosphere.shadow, 0.14 + atmosphere.starAlpha * 0.2);
-        const sunDirection = (atmosphere.sunX - 0.5) * -1;
-        prop.shadow.setScale(1.05 + Math.abs(sunDirection) * 0.65, 0.72);
-        prop.shadow.setRotation(sunDirection * 0.16);
+        prop.shadow.setFillStyle(
+          atmosphere.shadow,
+          (prop.definition.shadow?.alpha ?? 0.2) + atmosphere.starAlpha * 0.12,
+        );
+        prop.shadow.setScale(1.02 + Math.abs(sunDirection) * 0.62, 0.76);
+        prop.shadow.setRotation(sunDirection * 0.18);
+
         if (prop.glow) {
-          prop.glow.setFillStyle(0xffe2a0, 0.05 + atmosphere.lampAlpha * 0.14);
-          prop.glow.setVisible(atmosphere.lampAlpha > 0.04);
+          prop.glow.setFillStyle(0xffe0a0, 0.035 + atmosphere.lampAlpha * 0.13);
+          prop.glow.setVisible(atmosphere.lampAlpha > 0.025);
+        }
+
+        for (const light of prop.lights) {
+          const sourceAlpha = light.kind === 'window'
+            ? atmosphere.windowLightAlpha
+            : atmosphere.lampAlpha;
+          const alpha = sourceAlpha * light.alphaScale;
+          light.shape.setAlpha(alpha);
+          light.shape.setVisible(alpha > 0.025);
         }
       }
     }
@@ -142,7 +183,11 @@ export class MapStreamer {
       return;
     }
 
-    const ground = this.scene.add.graphics().setDepth(-1_000);
+    const background = this.scene.add
+      .image(definition.x, 0, definition.backgroundTexture)
+      .setOrigin(0, 0)
+      .setDepth(-3_000);
+    const groundOverlay = this.scene.add.graphics().setDepth(-2_900);
     const props = definition.props.map((prop) => this.createProp(prop));
     const collisions = definition.props.flatMap((prop) => {
       if (!prop.collision) {
@@ -159,10 +204,15 @@ export class MapStreamer {
       ];
     });
 
-    const instance: ChunkInstance = { definition, ground, props, collisions };
+    const instance: ChunkInstance = {
+      definition,
+      background,
+      groundOverlay,
+      props,
+      collisions,
+    };
     this.chunks.set(index, instance);
     if (this.atmosphere) {
-      this.drawGround(instance, this.atmosphere);
       this.applyAtmosphere(this.atmosphere);
     }
   }
@@ -174,42 +224,61 @@ export class MapStreamer {
     }
 
     this.lastUnloadedChunk = chunk.definition.id;
-    chunk.ground.destroy();
+    chunk.background.destroy();
+    chunk.groundOverlay.destroy();
     for (const prop of chunk.props) {
       prop.image.destroy();
       prop.shadow.destroy();
       prop.glow?.destroy();
+      for (const light of prop.lights) {
+        light.shape.destroy();
+      }
     }
     this.chunks.delete(index);
   }
 
   private createProp(definition: PropDefinition): PropInstance {
+    const visualScale = definition.scale ?? 1;
+    const baseDepth = depthForFootY(definition.y, definition.depthOffset ?? 0);
     const image = this.scene.add
       .image(definition.x, definition.y, definition.texture)
       .setOrigin(0.5, 1)
-      .setScale(definition.scale ?? 1)
+      .setScale(visualScale)
       .setFlipX(definition.flipX ?? false)
-      .setDepth(depthForFootY(definition.y, definition.depthOffset ?? 0));
+      .setDepth(baseDepth);
 
     const shadowScaleByKind: Partial<Record<PropKind, [number, number]>> = {
-      house: [118, 18],
-      tree: [45, 13],
-      hedge: [90, 12],
-      pole: [19, 7],
-      lamp: [20, 7],
-      bench: [65, 10],
-      vending: [37, 10],
-      fence: [110, 9],
-      playground: [94, 13],
-      sign: [35, 8],
-      flowerbed: [82, 11],
+      house: [248, 27],
+      tree: [112, 24],
+      hedge: [150, 18],
+      shrub: [84, 17],
+      pole: [34, 10],
+      lamp: [35, 10],
+      bench: [132, 18],
+      vending: [68, 17],
+      fence: [214, 15],
+      playground: [190, 24],
+      sign: [74, 13],
+      flowerbed: [155, 18],
+      mirror: [31, 10],
+      mailbox: [43, 11],
+      bicycle: [120, 14],
+      gate: [236, 17],
+      sandbox: [190, 18],
+      trash: [45, 12],
     };
-    const [baseShadowWidth, baseShadowHeight] = shadowScaleByKind[definition.kind] ?? [45, 11];
-    const visualScale = definition.scale ?? 1;
-    const shadowWidth = baseShadowWidth * visualScale;
-    const shadowHeight = baseShadowHeight * visualScale;
+    const [fallbackWidth, fallbackHeight] = shadowScaleByKind[definition.kind] ?? [80, 16];
+    const shadowWidth = (definition.shadow?.width ?? fallbackWidth) * visualScale;
+    const shadowHeight = (definition.shadow?.height ?? fallbackHeight) * visualScale;
     const shadow = this.scene.add
-      .ellipse(definition.x + 5, definition.y + 2, shadowWidth * 2, shadowHeight * 2, 0x1c3440, 0.2)
+      .ellipse(
+        definition.x + (definition.shadow?.xOffset ?? 5) * visualScale,
+        definition.y + (definition.shadow?.yOffset ?? 3) * visualScale,
+        shadowWidth,
+        shadowHeight,
+        0x1c3440,
+        definition.shadow?.alpha ?? 0.2,
+      )
       .setDepth(depthForFootY(definition.y, -2));
 
     const needsGlow = definition.kind === 'lamp' || definition.kind === 'vending';
@@ -217,9 +286,9 @@ export class MapStreamer {
       ? this.scene.add
           .ellipse(
             definition.x,
-            definition.y - (definition.kind === 'lamp' ? 150 : 75),
-            definition.kind === 'lamp' ? 160 : 120,
-            definition.kind === 'lamp' ? 210 : 145,
+            definition.y - (definition.kind === 'lamp' ? 155 : 82) * visualScale,
+            (definition.kind === 'lamp' ? 175 : 126) * visualScale,
+            (definition.kind === 'lamp' ? 240 : 155) * visualScale,
             0xffe3a3,
             0,
           )
@@ -227,54 +296,54 @@ export class MapStreamer {
           .setDepth(depthForFootY(definition.y, -3))
       : null;
 
-    image.setDepth(depthForFootY(definition.y, definition.depthOffset ?? 0));
-    return { definition, image, shadow, glow };
+    const lights: PropLightInstance[] = (definition.lights ?? []).map((light) => {
+      const xOffset = definition.flipX ? -light.xOffset : light.xOffset;
+      const shape = this.scene.add
+        .rectangle(
+          definition.x + xOffset * visualScale,
+          definition.y + light.yOffset * visualScale,
+          light.width * visualScale,
+          light.height * visualScale,
+          light.color ?? 0xffd789,
+          0,
+        )
+        .setBlendMode(Phaser.BlendModes.ADD)
+        .setDepth(baseDepth + 1)
+        .setVisible(false);
+      return {
+        kind: light.kind,
+        alphaScale: light.alphaScale ?? 1,
+        shape,
+      };
+    });
+
+    return { definition, image, shadow, glow, lights };
   }
 
-  private drawGround(chunk: ChunkInstance, atmosphere: Atmosphere): void {
-    const graphics = chunk.ground;
+  private drawGroundOverlay(chunk: ChunkInstance, atmosphere: Atmosphere): void {
+    const graphics = chunk.groundOverlay;
     const x = chunk.definition.x;
+    const width = chunk.definition.width;
     graphics.clear();
 
-    const groundColor = mixColor(
-      chunk.definition.area === 'park' ? 0x76a862 : 0x6f9c61,
-      atmosphere.ground,
-      0.52,
-    );
-    const sidewalkColor = mixColor(0xd4c6ad, atmosphere.shadow, atmosphere.starAlpha * 0.42);
-    const roadColor = mixColor(0x66737a, atmosphere.shadow, 0.25 + atmosphere.starAlpha * 0.45);
-
-    graphics.fillStyle(groundColor, 1);
-    graphics.fillRect(x, 302, chunk.definition.width, 418);
-
-    if (chunk.definition.area === 'residential') {
-      graphics.fillStyle(sidewalkColor, 1);
-      graphics.fillRect(x, 493, chunk.definition.width, 66);
-      graphics.fillStyle(roadColor, 1);
-      graphics.fillRect(x, 559, chunk.definition.width, 135);
-      graphics.lineStyle(4, 0xf5e9bd, 0.62);
-      for (let lineX = x + 40; lineX < x + chunk.definition.width; lineX += 150) {
-        graphics.lineBetween(lineX, 628, lineX + 72, 628);
-      }
-      graphics.lineStyle(3, 0xb4aaa0, 0.52);
-      graphics.lineBetween(x, 556, x + chunk.definition.width, 556);
-    } else {
-      graphics.fillStyle(
-        mixColor(0xb9986d, atmosphere.shadow, atmosphere.starAlpha * 0.38),
-        1,
-      );
-      graphics.fillRoundedRect(x - 22, 552, chunk.definition.width + 44, 142, 56);
-      graphics.fillStyle(0xd8c59b, 0.7);
-      graphics.fillRoundedRect(x - 22, 567, chunk.definition.width + 44, 20, 10);
-      graphics.fillStyle(0x9fcf75, 0.34);
-      for (let dotX = x + 28; dotX < x + chunk.definition.width; dotX += 74) {
-        graphics.fillCircle(dotX, 465 + ((dotX / 74) % 3) * 27, 4);
-        graphics.fillCircle(dotX + 30, 518 + ((dotX / 41) % 2) * 22, 3);
-      }
+    if (atmosphere.phase === 'morning') {
+      graphics.fillStyle(0xffe2a4, 0.035 + atmosphere.warmthAlpha * 0.05);
+      graphics.fillRect(x, 0, width, 720);
     }
 
-    graphics.fillStyle(atmosphere.shadow, 0.08 + atmosphere.starAlpha * 0.12);
-    graphics.fillRect(x, 302, chunk.definition.width, 18);
+    if (atmosphere.phase === 'evening') {
+      graphics.fillStyle(0xff8b52, 0.055 + atmosphere.warmthAlpha * 0.15);
+      graphics.fillRect(x, 0, width, 720);
+      graphics.fillStyle(0x5d3851, 0.035);
+      graphics.fillRect(x, 500, width, 220);
+    }
+
+    if (atmosphere.phase === 'night') {
+      graphics.fillStyle(0x07172d, 0.18 + atmosphere.starAlpha * 0.14);
+      graphics.fillRect(x, 0, width, 720);
+      graphics.fillStyle(0x14223f, 0.12);
+      graphics.fillRect(x, 430, width, 290);
+    }
   }
 
   private redrawDebug(): void {

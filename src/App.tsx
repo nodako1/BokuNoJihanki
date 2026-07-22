@@ -22,7 +22,7 @@ export default function App(): React.JSX.Element {
   const [autoPlay, setAutoPlay] = useState(false);
   const [muted, setMuted] = useState(false);
   const [audioAvailable, setAudioAvailable] = useState(true);
-  const [developerHudVisible, setDeveloperHudVisible] = useState(true);
+  const [developerHudVisible, setDeveloperHudVisible] = useState(false);
   const [collisionDebug, setCollisionDebug] = useState(false);
 
   useEffect(() => {
