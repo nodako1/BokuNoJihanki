@@ -36,6 +36,13 @@ function parseHud(bodyText) {
   };
 }
 
+async function advanceTime(page, button, count) {
+  for (let index = 0; index < count; index += 1) {
+    await button.click();
+  }
+  await page.waitForTimeout(900);
+}
+
 let browser;
 let context;
 let failure;
@@ -98,6 +105,10 @@ try {
   }
   await startButton.click();
 
+  const developerSummary = page.locator('summary', { hasText: '開発' });
+  await developerSummary.click();
+  await page.getByRole('button', { name: 'HUDを表示' }).click();
+
   await page.waitForFunction(() => {
     const text = document.body.innerText;
     const fps = Number(text.match(/(\d+) FPS/)?.[1] ?? 0);
@@ -106,7 +117,7 @@ try {
     const playerX = Number(position?.[1] ?? 0);
     const playerY = Number(position?.[2] ?? 0);
     return fps > 0 && playerX > 0 && playerY > 0 && loaded > 0 && !text.includes('CHUNK\n準備中');
-  }, { timeout: 20_000 });
+  }, { timeout: 30_000 });
 
   const runningBody = await page.locator('body').innerText();
   const beforeMove = parseHud(runningBody);
@@ -120,24 +131,50 @@ try {
     throw new Error(`Browser page errors were reported: ${pageErrors.join(' | ')}`);
   }
 
-  await page.screenshot({ path: path.join(outputDir, '02-running.png'), fullPage: true });
-  await page.keyboard.down('ArrowRight');
-  await page.waitForTimeout(1_200);
-  await page.keyboard.up('ArrowRight');
+  await page.screenshot({ path: path.join(outputDir, '02-morning-residential.png'), fullPage: true });
 
-  await page.waitForFunction((startX) => {
-    const position = document.body.innerText.match(/POSITION\s+(-?\d+),\s*(-?\d+)/);
-    return Number(position?.[1] ?? 0) > Number(startX) + 20;
-  }, beforeMove.playerX, { timeout: 10_000 });
+  const stepButton = page.getByRole('button', { name: '＋15分' });
+  await advanceTime(page, stepButton, 24);
+  await page.screenshot({ path: path.join(outputDir, '03-noon-residential.png'), fullPage: true });
+  await advanceTime(page, stepButton, 24);
+  await page.screenshot({ path: path.join(outputDir, '04-evening-residential.png'), fullPage: true });
+  await advanceTime(page, stepButton, 12);
+  await page.screenshot({ path: path.join(outputDir, '05-night-residential.png'), fullPage: true });
+  await page.getByRole('button', { name: '朝へ戻す' }).click();
+  await page.waitForTimeout(900);
+  await developerSummary.click();
+
+  let reachedPark = false;
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(850);
+    await page.keyboard.up('ArrowRight');
+    const current = parseHud(await page.locator('body').innerText());
+    if (current.area.includes('なつかぜ公園') || current.playerX >= 2560) {
+      reachedPark = true;
+      break;
+    }
+  }
 
   const movedBody = await page.locator('body').innerText();
   const afterMove = parseHud(movedBody);
-  record('moved-hud', afterMove);
+  record('park-hud', afterMove);
   if (afterMove.playerX <= beforeMove.playerX + 20) {
     throw new Error(`Keyboard movement failed: ${beforeMove.playerX} -> ${afterMove.playerX}.`);
   }
+  if (!reachedPark || !afterMove.area.includes('なつかぜ公園')) {
+    throw new Error(`Seamless park traversal failed at x=${afterMove.playerX}, area=${afterMove.area}.`);
+  }
 
-  await page.screenshot({ path: path.join(outputDir, '03-after-move.png'), fullPage: true });
+  await page.screenshot({ path: path.join(outputDir, '06-morning-park.png'), fullPage: true });
+
+  if (pageErrors.length > 0) {
+    throw new Error(`Browser page errors were reported: ${pageErrors.join(' | ')}`);
+  }
+  if (failedRequests.length > 0) {
+    throw new Error(`Browser requests failed: ${failedRequests.join(' | ')}`);
+  }
+
   fs.writeFileSync(
     path.join(outputDir, 'state.json'),
     `${JSON.stringify({
@@ -145,6 +182,15 @@ try {
       expectedCommit,
       beforeMove,
       afterMove,
+      reachedPark,
+      screenshots: [
+        '01-title.png',
+        '02-morning-residential.png',
+        '03-noon-residential.png',
+        '04-evening-residential.png',
+        '05-night-residential.png',
+        '06-morning-park.png',
+      ],
       pageErrors,
       failedRequests,
       userAgent: await page.evaluate(() => navigator.userAgent),
