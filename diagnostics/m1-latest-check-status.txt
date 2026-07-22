@@ -1,0 +1,2 @@
+outcome=failure
+commit=7bd181675b60cab093351e92b60c12d38756bb55

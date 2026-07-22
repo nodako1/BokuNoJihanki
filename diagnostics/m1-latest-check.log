@@ -1,0 +1,20 @@
+
+> boku-no-jihanki@0.1.0 check
+> npm run validate && npm run lint && npm run typecheck && npm test && npm run build
+
+
+> boku-no-jihanki@0.1.0 validate
+> node scripts/validate-project.mjs
+
+Project validation passed (28 required files).
+
+> boku-no-jihanki@0.1.0 lint
+> eslint . --max-warnings 0
+
+
+/home/runner/work/BokuNoJihanki/BokuNoJihanki/src/ui/GameHud.tsx
+  67:45  error  Irregular whitespace not allowed  no-irregular-whitespace
+  67:60  error  Irregular whitespace not allowed  no-irregular-whitespace
+
+✖ 2 problems (2 errors, 0 warnings)
+
