@@ -2,41 +2,54 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
-  "currentMilestone": "M1",
-  "status": "completed-production-verified",
+  "currentMilestone": "M1.1",
+  "status": "implementation-and-pr-browser-verified-awaiting-production",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
   "lastProductionCommit": "6b20507c35e49af4e058d7a6f6ffa57c4e5f991f",
   "completed": [
     "m0-development-foundation",
-    "player-four-direction-movement",
-    "player-walk-animation",
-    "virtual-joystick",
-    "keyboard-input",
-    "shared-input-interface",
-    "camera-follow",
-    "residential-area",
-    "park-area",
-    "seamless-map-streaming",
-    "chunk-prefetch-and-release",
-    "collision-system",
-    "y-sort-2.5d",
-    "time-of-day-map-integration",
-    "environment-audio",
-    "procedural-footsteps",
-    "mobile-safe-area",
-    "developer-hud",
-    "m1-original-vector-assets",
-    "m1-specification",
-    "m1-quality-automation",
-    "m1-runtime-root-cause-identified",
-    "m1-svg-loader-fix-merged",
-    "m1-browser-smoke-local-passed",
-    "m1-vercel-rate-limit-recovered",
-    "m1-production-smoke-passed",
-    "m1-browser-smoke-production-passed"
+    "m1-player-four-direction-movement",
+    "m1-player-walk-animation",
+    "m1-virtual-joystick",
+    "m1-keyboard-input",
+    "m1-shared-input-interface",
+    "m1-camera-follow",
+    "m1-residential-area",
+    "m1-park-area",
+    "m1-seamless-map-streaming",
+    "m1-chunk-prefetch-and-release",
+    "m1-collision-system",
+    "m1-y-sort-2.5d",
+    "m1-time-of-day-map-integration",
+    "m1-environment-audio",
+    "m1-procedural-footsteps",
+    "m1-mobile-safe-area",
+    "m1-developer-hud",
+    "m1-svg-loader-fix",
+    "m1-production-browser-verification",
+    "m1.1-high-density-residential-backgrounds",
+    "m1.1-high-density-park-backgrounds",
+    "m1.1-detailed-houses-and-foliage",
+    "m1.1-life-props-and-park-equipment",
+    "m1.1-player-four-direction-redesign",
+    "m1.1-left-right-profile-frames",
+    "m1.1-layered-background-props-foreground",
+    "m1.1-window-lamp-vending-lights",
+    "m1.1-morning-day-evening-night-grading",
+    "m1.1-residential-park-transition-blend",
+    "m1.1-pr-quality-passed",
+    "m1.1-pr-browser-smoke-passed",
+    "m1.1-four-time-period-screenshots-captured",
+    "m1.1-park-interior-screenshot-captured"
   ],
-  "inProgress": [],
+  "inProgress": [
+    "m1.1-main-merge",
+    "m1.1-vercel-production-deployment",
+    "m1.1-production-smoke",
+    "m1.1-production-browser-smoke",
+    "m1.1-final-documentation"
+  ],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -48,18 +61,22 @@
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
+      "severity": "temporary",
+      "description": "Vercel Production still serves the verified M1 build until Pull Request #12 is merged and the M1.1 Production Browser Smoke succeeds."
+    },
+    {
+      "severity": "light",
+      "description": "The M1.1 world uses original textured SVG illustration. It matches the approved reference in density, warmth and composition, but does not reproduce its painterly raster micro-texture exactly."
+    },
+    {
+      "severity": "light",
+      "description": "Headless Chromium with software WebGL reported 8-9 FPS while tracing and taking screenshots; representative iPhone and Android performance still requires user-side confirmation."
+    },
+    {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
-    },
-    {
-      "severity": "light",
-      "description": "M1 uses original SVG vector assets optimized for implementation consistency; visual detail and animation frames will be refined incrementally without changing the fixed 2.5D camera."
-    },
-    {
-      "severity": "light",
-      "description": "Headless Chromium uses software WebGL and reported lower FPS than a normal desktop browser; device performance still needs user-side confirmation on representative smartphones."
     }
   ],
-  "lastUpdated": "2026-07-22T08:33:15Z",
-  "developmentRulesVersion": "2.1"
+  "lastUpdated": "2026-07-22T10:55:00Z",
+  "developmentRulesVersion": "2.2"
 }
