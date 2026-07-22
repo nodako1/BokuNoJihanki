@@ -1,5 +1,5 @@
 name: Report M1.2 Workflow Status
-# refresh: second-apply-failure
+# refresh: final-push-error-only
 
 on:
   push:
@@ -21,13 +21,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Query second failure details
+      - name: Query final push error
         shell: bash
         run: |
           gh run view 29964875165 --repo nodako1/BokuNoJihanki --log-failed > /tmp/failed.log || true
-          tail -n 120 /tmp/failed.log > /tmp/tail.log
+          tail -n 28 /tmp/failed.log > /tmp/tail.log
           {
-            echo '## M1.2 second apply failure details'
+            echo '## M1.2 final push error'
             echo
             echo '```text'
             cat /tmp/tail.log
