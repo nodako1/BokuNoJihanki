@@ -1,0 +1,68 @@
+name: M1.1 One-time Autofix
+
+on:
+  push:
+    branches:
+      - feat/m1-1-visual-complete
+    paths:
+      - '.github/workflows/m11-autofix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/m1-1-visual-complete
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply focused source fixes
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          atmosphere = Path('src/game/world/AtmosphereLayer.ts')
+          text = atmosphere.read_text(encoding='utf-8')
+          text = text.replace('  private displayedMinutes = 360;\n', '')
+          text = text.replace(
+              '  update(atmosphere: Atmosphere, minutes: number, delta: number): void {\n    this.displayedMinutes = minutes;\n',
+              '  update(atmosphere: Atmosphere, _minutes: number, delta: number): void {\n',
+          )
+          atmosphere.write_text(text, encoding='utf-8')
+
+          props = Path('src/game/world/m11PropAssets.ts')
+          text = props.read_text(encoding='utf-8')
+          text = text.replace(
+              '  const canopy = variant === 0\n',
+              '  const canopy: readonly (readonly [number, number, number])[] = variant === 0\n',
+              1,
+          )
+          props.write_text(text, encoding='utf-8')
+
+          hud = Path('src/ui/GameHud.tsx')
+          text = hud.read_text(encoding='utf-8')
+          text = text.replace(
+              '左スティック / WASD・矢印キー　右へ進むと、なつかぜ公園',
+              '左スティック / WASD・矢印キー / 右へ進むと、なつかぜ公園',
+          )
+          hud.write_text(text, encoding='utf-8')
+          PY
+      - name: Verify complete quality gate
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+      - name: Remove one-time workflow and commit fixes
+        run: |
+          rm .github/workflows/m11-autofix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/game/world/AtmosphereLayer.ts src/game/world/m11PropAssets.ts src/ui/GameHud.tsx .github/workflows/m11-autofix.yml
+          git commit -m 'fix: resolve M1.1 lint and TypeScript errors'
+          git push origin HEAD:feat/m1-1-visual-complete
