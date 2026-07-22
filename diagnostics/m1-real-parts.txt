@@ -1,0 +1,27 @@
+Generated at 2026-07-22T05:30:09Z
+
+Byte counts
+  5000 bootstrap/m1-real/part-00
+ 20000 bootstrap/m1-real/part-01
+ 20000 bootstrap/m1-real/part-02
+ 10000 bootstrap/m1-real/part-02b
+ 20000 bootstrap/m1-real/part-03
+ 10000 bootstrap/m1-real/part-04a
+ 10000 bootstrap/m1-real/part-04b
+ 10000 bootstrap/m1-real/part-05a
+  7612 bootstrap/m1-real/part-05b
+112612 total
+
+SHA-256
+47e87707768f6bc1cafb7fa6c1e2060061715db93a90549af30c666a279397bc  bootstrap/m1-real/part-00
+6fe02128ee2ccfd48b87b822df4bcfabaa489e1e09142f12d1b03b1c4be82592  bootstrap/m1-real/part-01
+7e850be8bb3e9089470b8ca5f392aae89cd5fc14b2f7598cf8795ce293bebd6d  bootstrap/m1-real/part-02
+adba43b548ce248b91a121d3aabca8735a4a84f63c7387c30f6fecf302043d6d  bootstrap/m1-real/part-02b
+47ae019d4d0b3c0adb21e8f7c4a903184529de74da534d11fcd81ed8eaec82a9  bootstrap/m1-real/part-03
+f330fbc629fc083c2184af05fa7cb2687db16d2f774255b02c4d9b16153de569  bootstrap/m1-real/part-04a
+e34b83eef2589eebabcbc2272fc292bcfa28f6fde4b0db5e3a3a82785151322a  bootstrap/m1-real/part-04b
+cc2dbe5d0363c3df36e12e145853078a3b532a8541ae1c7f82e604bfce36dbde  bootstrap/m1-real/part-05a
+259faee700f56f7fda169c112c0754fb7faf83a475d7b7d7e664dc39876672ad  bootstrap/m1-real/part-05b
+
+Combined base64 bytes: 112612
+Combined base64 SHA-256: e41375b2c34ee38c54d62af6ee78c4bb13b957fdadc443185adfcab22e8b0727
