@@ -1,3 +1,5 @@
+import { DAY_END_MINUTES, DAY_START_MINUTES } from './economyCore.mjs';
+
 export const SAVE_KEY = 'boku-no-jihanki:save:v1';
 export const SAVE_VERSION = 1;
 
@@ -8,8 +10,8 @@ function isValidClock(clock) {
     Number.isInteger(clock.day) &&
     clock.day >= 1 &&
     Number.isInteger(clock.minutes) &&
-    clock.minutes >= 0 &&
-    clock.minutes <= 1440
+    clock.minutes >= DAY_START_MINUTES &&
+    clock.minutes <= DAY_END_MINUTES
   );
 }
 
