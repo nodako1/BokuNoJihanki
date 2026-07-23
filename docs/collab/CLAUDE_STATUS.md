@@ -9,19 +9,20 @@ M2「自販機探索と経済」の仕様策定と、シーン非依存コアロ
 ## 完了
 
 - リポジトリ現状の把握（M1.2完了・M1.3進行中・開発ルールVer.2.3）
-- AI連携ボード（このフォルダ）の作成
-- M2仕様ドラフト `docs/specs/M2_VENDING_ECONOMY.md` の作成
+- AI連携ボード（このフォルダ）の作成（PR #25）
+- M2仕様ドラフト `docs/specs/M2_VENDING_ECONOMY.md` の作成（PR #25）
+- M2フェーズA: コアロジック実装（ブランチ `claude/m2-core-economy`）
+  - `src/game/economy/rng.mjs` シード式PRNG（FNV-1aハッシュ＋mulberry32）
+  - `src/game/economy/economyCore.mjs` 所持金・時刻15分消費・18時制限・当日1回制限・抽選テーブル・探索実行
+  - `src/game/economy/saveData.mjs` セーブのシリアライズ／検証／復元（localStorage互換インターフェース）
+  - 各`.d.ts`／`.d.mts`宣言（worldMathと同じ二重宣言パターン）
+  - `tests/economy-core.test.mjs`（11件）、`tests/economy-save.test.mjs`（4件）ローカルNode 22で15件全パス確認済み
 
 ## 進行中・次の予定
 
-1. M2コアロジックの実装（ブランチ: `claude/m2-core-economy` を予定）
-   - 所持金（Wallet）
-   - 15分行動消費と時刻管理の拡張
-   - 固定乱数（シード式抽選、空振り〜1,000円）
-   - 自販機ごとの当日1回制限・18時制限
-   - ローカルセーブ基盤（localStorageスキーマ＋バージョン管理）
-   - 上記のユニットテスト
-2. M1.3マージ後、チャッピーと統合ポイントを合意してからシーン統合へ
+1. M2フェーズAのPRのQuality通過とmainマージ
+2. M1.3マージ後、チャッピーと統合ポイント（自販機配置・接近判定・アクションボタン・接写画面）を合意してシーン統合（フェーズB）へ
+3. 抽選確率の最終値はKoichiさんの承認待ち（仕様書の表を参照）
 
 ## これから触るファイル（宣言）
 
