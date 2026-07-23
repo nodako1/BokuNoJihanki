@@ -3,7 +3,22 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1.4",
+  "currentMilestoneScope": "latest-production-delivery",
   "status": "completed-production-verified",
+  "statusScope": "M1.4-delivery-history-only",
+  "currentStateAuthority": "m1Completion",
+  "m1Completion": {
+    "status": "reopened",
+    "activeMilestone": "M1.5",
+    "reason": "mandatory-real-device-quality-correction",
+    "nextExecutableTask": "m1.5-real-device-quality-correction",
+    "m2StartStatus": "blocked",
+    "m2StartRequirements": [
+      "m1.5-complete",
+      "m1.5-production-verified",
+      "user-real-device-approved"
+    ]
+  },
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
   "lastProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
@@ -43,6 +58,7 @@
   "inProgress": [],
   "paused": [],
   "notStarted": [
+    "m1.5-real-device-quality-correction",
     "m2-vending-machine-scene-integration",
     "vending-machine-search",
     "money-system",
@@ -53,8 +69,34 @@
     "m3-game-shop"
   ],
   "nextMilestone": "M2",
+  "nextMilestoneStatus": "blocked-until-m1.5-complete-production-verified-and-user-approved",
   "nextTask": "m2-vending-machine-scene-integration",
+  "nextTaskStatus": "blocked-not-executable",
   "knownIssues": [
+    {
+      "severity": "blocking",
+      "description": "The protagonist appears to be an unfinished placeholder rather than final raster art."
+    },
+    {
+      "severity": "blocking",
+      "description": "Per-area ground alignment does not match the visible road, making the protagonist appear to float."
+    },
+    {
+      "severity": "blocking",
+      "description": "The life-road uphill path and upward branch trigger are substantially misaligned."
+    },
+    {
+      "severity": "blocking",
+      "description": "upper-vending-lane shows a downward transition control without a corresponding visible road, slope, stairs, or opening."
+    },
+    {
+      "severity": "blocking",
+      "description": "The transition panel overlaps and hides the protagonist."
+    },
+    {
+      "severity": "blocking",
+      "description": "The current BGM is perceived as noise and does not yet function as finished music."
+    },
     {
       "severity": "light",
       "description": "Representative iPhone and Android performance still requires device confirmation."
@@ -64,7 +106,7 @@
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-23T13:20:06Z",
+  "lastUpdated": "2026-07-23T16:39:27Z",
   "developmentRulesVersion": "2.4",
   "evidence": {
     "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
@@ -114,6 +156,14 @@
     "m13Preserved": true,
     "m2EconomyCorePreserved": true,
     "m2EconomySceneConnected": false,
+    "m1CompletionReopened": true,
+    "m15Status": "mandatory-real-device-quality-correction-not-started",
+    "m15Specification": "docs/specs/M1_5_REAL_DEVICE_POLISH.md",
+    "m15Findings": "docs/evidence/M1_5_REAL_DEVICE_FINDINGS.md",
+    "m15ImplementationCommit": "未実施",
+    "m15ProductionVerification": "未実施",
+    "m15UserRealDeviceApproval": "未実施",
+    "sourceSpawnIdIssueStatus": "resolved-in-production",
     "m14AssetGenerationCommand": "python3 tools/art/generate_m14_assets.py",
     "m14ValidationFlow": [
       "npm run check",
