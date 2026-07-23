@@ -59,6 +59,19 @@ test('missing, corrupted and foreign payloads are rejected safely', () => {
   );
 });
 
+test('clocks outside the 6:00-21:00 economy day are rejected', () => {
+  const payloadWithMinutes = (minutes) =>
+    JSON.stringify({ version: SAVE_VERSION, seed: 1, wallet: 0, clock: { day: 1, minutes }, searchedToday: [] });
+  for (const minutes of [0, 359, 1261, 1440]) {
+    assert.deepEqual(deserializeEconomyState(payloadWithMinutes(minutes)), {
+      ok: false,
+      error: 'invalid-state',
+    });
+  }
+  assert.ok(deserializeEconomyState(payloadWithMinutes(360)).ok);
+  assert.ok(deserializeEconomyState(payloadWithMinutes(1260)).ok);
+});
+
 test('deserialized state keeps working for further searches', () => {
   const day = createEconomyState(31);
   const first = performSearch(day, 'park-east-01', 'coinReturn');
