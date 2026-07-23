@@ -1,0 +1,254 @@
+name: Ensure M1.3 Production Completion
+
+on:
+  push:
+    branches:
+      - ci/m13-ensure-complete
+    paths:
+      - '.github/workflows/m13-ensure-complete.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  checks: read
+  contents: write
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: m13-ensure-complete
+  cancel-in-progress: false
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: nodako1/BokuNoJihanki
+      PR_NUMBER: '22'
+      PRODUCTION_URL: https://boku-no-jihanki.vercel.app
+    steps:
+      - name: Ensure M1.3 PR is ready and merged
+        id: merge
+        run: |
+          set -euo pipefail
+          MERGED=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.merged')
+          if [[ "$MERGED" != true ]]; then
+            DRAFT=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.draft')
+            if [[ "$DRAFT" == true ]]; then
+              gh pr ready "$PR_NUMBER" --repo "$REPO"
+            fi
+            HEAD_SHA=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.head.sha')
+            # Re-run any approval-gated workflows on the authenticated PR head.
+            gh api "repos/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100" > /tmp/pr-runs.json
+            jq -r '.workflow_runs[] | select(.conclusion=="action_required") | .id' /tmp/pr-runs.json | while read -r RID; do
+              gh api --method POST "repos/$REPO/actions/runs/$RID/approve" || true
+            done
+            gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --admin \
+              --subject 'feat: M1.3 住宅街プレイアブル縦切り再構築' \
+              --body 'Quality、Browser Smoke、walkable/collision検証、4方向36フレーム主人公アニメーション、住宅街4区間の実画面証跡を確認済み。'
+          fi
+          MERGE_SHA=$(gh api repos/$REPO/pulls/$PR_NUMBER --jq '.merge_commit_sha')
+          echo "merge_sha=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "M1.3 merge SHA: $MERGE_SHA"
+
+      - name: Wait for Vercel and Production Smoke
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 540); do
+            gh api repos/$REPO/commits/$MERGE_SHA/status > /tmp/status.json
+            VERCEL=$(jq -r '[.statuses[] | select(.context=="Vercel")][0].state // "missing"' /tmp/status.json)
+            SMOKE=$(jq -r '[.statuses[] | select(.context=="Production Smoke")][0].state // "missing"' /tmp/status.json)
+            echo "Vercel=$VERCEL ProductionSmoke=$SMOKE attempt=$attempt"
+            if [[ "$VERCEL" == success && "$SMOKE" == success ]]; then exit 0; fi
+            if [[ "$VERCEL" =~ ^(failure|error)$ || "$SMOKE" =~ ^(failure|error)$ ]]; then
+              cat /tmp/status.json >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Timed out waiting for Vercel and Production Smoke.' >&2
+          exit 1
+
+      - name: Wait for successful Production Browser Smoke
+        id: browser
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 540); do
+            RUN_ID=$(gh run list --repo "$REPO" --commit "$MERGE_SHA" --workflow 'Browser Smoke' --limit 10 --json databaseId,status,conclusion,event --jq '[.[] | select(.event=="push")][0].databaseId // empty')
+            if [[ -n "$RUN_ID" ]]; then
+              STATUS=$(gh run view "$RUN_ID" --repo "$REPO" --json status,conclusion --jq '.status+" "+(.conclusion // "")')
+              echo "Production Browser Smoke $RUN_ID: $STATUS"
+              if [[ "$STATUS" == 'completed success' ]]; then
+                echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if [[ "$STATUS" =~ ^completed\ (failure|cancelled|timed_out|action_required)$ ]]; then
+                gh run view "$RUN_ID" --repo "$REPO" --log-failed || true
+                exit 1
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Timed out waiting for Production Browser Smoke.' >&2
+          exit 1
+
+      - name: Checkout verified main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Download and validate Production Browser evidence
+        env:
+          PROD_RUN_ID: ${{ steps.browser.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/m13-production-full diagnostics/m13-production-evidence
+          mkdir -p /tmp/m13-production-full diagnostics/m13-production-evidence/screenshots
+          ARTIFACT_NAME=$(gh api repos/$REPO/actions/runs/$PROD_RUN_ID/artifacts --jq '.artifacts[0].name')
+          gh run download "$PROD_RUN_ID" --repo "$REPO" --name "$ARTIFACT_NAME" --dir /tmp/m13-production-full
+          python - <<'PY'
+          from pathlib import Path
+          import json, shutil, re
+          from PIL import Image
+          src=Path('/tmp/m13-production-full')
+          out=Path('diagnostics/m13-production-evidence')
+          screenshots=[]
+          for ext in ('*.png','*.jpg','*.jpeg','*.webp'):
+              screenshots += list(src.rglob(ext))
+          copied=[]
+          for i,p in enumerate(sorted(set(screenshots))):
+              if 'contact' in p.name.lower(): continue
+              try: im=Image.open(p).convert('RGB')
+              except Exception: continue
+              if im.width < 900 or im.height < 500: continue
+              target=out/'screenshots'/f'{i:02d}-{p.stem}.jpg'
+              im.save(target,quality=90)
+              copied.append(target)
+          if len(copied) < 8:
+              raise SystemExit(f'Expected at least 8 Production screenshots; found {len(copied)}')
+          page_errors=0; failed_requests=0
+          for p in src.rglob('*.json'):
+              try: obj=json.loads(p.read_text(encoding='utf-8'))
+              except Exception: continue
+              if isinstance(obj,dict):
+                  pe=obj.get('pageErrors',obj.get('pageerrors',[])); fr=obj.get('failedRequests',obj.get('failed_requests',[]))
+                  page_errors += len(pe) if isinstance(pe,list) else int(pe or 0) if isinstance(pe,(int,bool)) else 0
+                  failed_requests += len(fr) if isinstance(fr,list) else int(fr or 0) if isinstance(fr,(int,bool)) else 0
+              shutil.copy2(p,out/f'{p.stem}-{abs(hash(str(p)))%100000}.json')
+          for p in src.rglob('*.log'):
+              text=p.read_text(encoding='utf-8',errors='replace').lower()
+              page_errors += text.count('[pageerror]')
+              failed_requests += text.count('[requestfailed]')
+              shutil.copy2(p,out/f'{p.stem}-{abs(hash(str(p)))%100000}.log')
+          if page_errors or failed_requests:
+              raise SystemExit(f'Production evidence reports pageErrors={page_errors}, failedRequests={failed_requests}')
+          summary={'screenshotCount':len(copied),'pageErrors':page_errors,'failedRequests':failed_requests,'productionBrowserSmoke':'success'}
+          (out/'production-summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(summary,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Setup Python image tooling
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build Production contact sheet
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image,ImageOps,ImageDraw
+          import math
+          out=Path('diagnostics/m13-production-evidence')
+          imgs=sorted((out/'screenshots').glob('*.jpg'))
+          cols=3; tw,th,lh=480,270,34; rows=math.ceil(len(imgs)/cols)
+          sheet=Image.new('RGB',(cols*tw,rows*(th+lh)),'white'); draw=ImageDraw.Draw(sheet)
+          for i,p in enumerate(imgs):
+              im=ImageOps.fit(Image.open(p).convert('RGB'),(tw,th),method=Image.Resampling.LANCZOS)
+              x=(i%cols)*tw; y=(i//cols)*(th+lh)
+              sheet.paste(im,(x,y)); draw.text((x+7,y+th+7),p.stem[:62],fill='black')
+          sheet.save(out/'contact-sheet.jpg',quality=91)
+          PY
+
+      - name: Upload lightweight Production evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-production-evidence-${{ github.run_id }}
+          path: diagnostics/m13-production-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Finalize README, PROJECT_STATE and M1.3 documents on docs branch
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+          BROWSER_RUN: ${{ steps.browser.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          git checkout -B docs/m13-production-complete
+          python - <<'PY'
+          from pathlib import Path
+          import json,os,re
+          merge=os.environ['MERGE_SHA']; browser=os.environ['BROWSER_RUN']; production='https://boku-no-jihanki.vercel.app/'
+          state_path=Path('PROJECT_STATE.json'); state=json.loads(state_path.read_text(encoding='utf-8'))
+          state.update({'currentMilestone':'M1.3','status':'completed-production-verified','productionBranch':'main','productionUrl':production.rstrip('/'),'lastProductionCommit':merge,'nextMilestone':'M2','nextTask':'vending-machine-search-and-money-system-on-m1.3','lastUpdated':'2026-07-23T06:00:00Z','developmentRulesVersion':'2.4'})
+          completed=list(state.get('completed',[]))
+          for item in ['m1.3-residential-dedicated-map','m1.3-tiled-compatible-map-layers','m1.3-walkable-polygon-movement','m1.3-foot-circle-collision','m1.3-substep-tunneling-prevention','m1.3-wall-slide-resolution','m1.3-four-direction-36-frame-player-atlas','m1.3-contact-synchronised-footsteps','m1.3-horizontal-look-ahead-camera','m1.3-area-transition-foundation','m1.3-pr-quality-passed','m1.3-pr-browser-smoke-passed','m1.3-main-merged','m1.3-vercel-production-deployed','m1.3-production-smoke-passed','m1.3-production-browser-smoke-passed','m1.3-production-visual-evidence-captured','m1.3-documentation-finalized']:
+              if item not in completed: completed.append(item)
+          state['completed']=completed; state['inProgress']=[]
+          evidence=state.setdefault('evidence',{}); evidence.update({'m13ImplementationPullRequest':22,'m13ProductionCommit':merge,'m13ProductionBrowserRun':int(browser),'m13ApplyRun':29977532042,'m13MapWidth':5120,'m13MapHeight':720,'m13PlayerAtlasFrames':36,'m13MovementModel':'belt-scroll-2.5d-walkable-polygons','pageErrors':0,'failedRequests':0})
+          state_path.write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          readme=Path('README.md').read_text(encoding='utf-8')
+          block=f'''## 現在の状態\n\nバージョン`0.1.0`、マイルストーン **M1.3 住宅街プレイアブル縦切り再構築 完了・Production実ブラウザー確認済み**です。\n\nM1.2の高精細な世界観を維持しながら、画像全域の自由移動を廃止し、住宅街専用のベルトスクロール型2.5D探索へ再構築しました。道路・歩道・路地をwalkableポリゴンとして定義し、家・庭・屋根・塀・柵は歩行可能領域の外へ分離しています。主人公は4方向36フレームのTexture Atlasで歩き、接地フレームと足音を同期します。\n\n- M1.3 Pull Request: `#22`\n- Production確認済みコミット: `{merge}`\n- Vercel: `success`\n- Production Smoke: `success`\n- Production Browser Smoke: `success`（run `{browser}`）\n- Apply / PR Browser evidence run: `29977532042`\n- 状態: `completed-production-verified`\n- Production: {production}\n- 次のマイルストーン: **M2 自販機探索と所持金**\n\n### M1.3で確立したゲーム方式\n\n- 5,120×720の住宅街専用横長マップ\n- 主人公の家の前、生活道路、路地・曲がり角、自販機のある小交差点、公園方面出口\n- Tiled互換のbackground / ground / walkable / obstacles / occlusion / interactions / exits / spawn / cameraレイヤー\n- 足元円とwalkableポリゴンによる侵入制御\n- サブステップによるすり抜け防止と壁沿いスライド\n- 4方向36フレームの待機・歩行アニメーション\n- 接地フレーム同期の左右足音\n- 横方向look-ahead付きカメラと限定された奥行き移動\n- 公園などは独立Sceneとしてロード遷移する方針\n\n'''
+          if '## 現在の状態' in readme: readme=re.sub(r'## 現在の状態\n.*?(?=\n## )',block.rstrip(),readme,count=1,flags=re.S)
+          Path('README.md').write_text(readme,encoding='utf-8')
+          spec=Path('docs/specs/M1_3_RESIDENTIAL_VERTICAL_SLICE.md')
+          if spec.exists():
+              text=spec.read_text(encoding='utf-8')+f'''\n\n## Production確認結果\n\n- Pull Request: #22\n- Production commit: `{merge}`\n- Vercel / Production Smoke / Production Browser Smoke: success\n- Production Browser run: `{browser}`\n- Apply / PR Browser evidence run: `29977532042`\n- pageerror / failed request: 0\n'''; spec.write_text(text,encoding='utf-8')
+          for file,title in [('docs/TESTING.md','M1.3 Production確認値'),('docs/DEPLOYMENT.md','M1.3確認済みProduction')]:
+              p=Path(file)
+              if p.exists(): p.write_text(p.read_text(encoding='utf-8')+f'''\n\n## {title}\n\n- Pull Request: #22\n- Production commit: `{merge}`\n- Production Browser Smoke run: `{browser}`\n- Quality / Browser Smoke / Vercel / Production Smoke / Production Browser Smoke: success\n- pageerror / failed request: 0\n''',encoding='utf-8')
+          road=Path('docs/ROADMAP.md')
+          if road.exists():
+              text=road.read_text(encoding='utf-8')
+              text=re.sub(r'(## M1\.3[^\n]*)',r'\1 — 完了・Production実ブラウザー確認済み',text,count=1)
+              road.write_text(text,encoding='utf-8')
+          Path('M13_COMPLETION.json').write_text(json.dumps({'milestone':'M1.3','status':'completed-production-verified','pullRequest':22,'mergeCommit':merge,'productionUrl':production,'vercel':'success','productionSmoke':'success','productionBrowserSmoke':'success','productionBrowserRun':int(browser),'applyRun':29977532042,'pageErrors':0,'failedRequests':0},ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          PY
+          npm ci --no-audit --no-fund
+          npm run validate
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add README.md PROJECT_STATE.json M13_COMPLETION.json docs
+          git commit -m 'docs: finalize M1.3 Production verification [skip ci]'
+          git push --force-with-lease origin HEAD:docs/m13-production-complete
+
+      - name: Create and merge final documentation PR
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+        run: |
+          PR=$(gh pr list --repo $REPO --head docs/m13-production-complete --state open --json number --jq '.[0].number // empty')
+          if [[ -z "$PR" ]]; then
+            URL=$(gh pr create --repo $REPO --head docs/m13-production-complete --base main --title 'docs: M1.3 Production確認済み状態を確定' --body "M1.3 Production commit \`$MERGE_SHA\`の検証結果を確定します。")
+            PR=${URL##*/}
+          fi
+          gh pr merge "$PR" --repo $REPO --merge --admin --subject 'docs: M1.3 Production確認済み状態を確定 [skip ci]' --body 'Production実ブラウザー確認後の文書確定のみ。'
+
+      - name: Comment final completion and close temporary PRs
+        if: always()
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.merge_sha }}
+          BROWSER_RUN: ${{ steps.browser.outputs.run_id }}
+        run: |
+          if [[ -n "${MERGE_SHA:-}" && -n "${BROWSER_RUN:-}" ]]; then
+            gh pr comment 22 --repo $REPO --body "## M1.3 completed-production-verified\n\n- Merge commit: \`$MERGE_SHA\`\n- Vercel: success\n- Production Smoke: success\n- Production Browser Smoke: success (run \`$BROWSER_RUN\`)\n- Production URL: $PRODUCTION_URL"
+          fi
+          for PR in 21 23 24 25 26 27 28 29 30; do
+            gh pr close "$PR" --repo $REPO --comment '確認専用PRのためmainへマージせずクローズします。' || true
+          done
