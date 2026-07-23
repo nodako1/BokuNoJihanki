@@ -19,9 +19,9 @@ concurrency:
 
 jobs:
   smoke:
-    name: Verify Vercel Production contains M1.3
+    name: Verify Vercel Production contains M1.4
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       GH_TOKEN: ${{ github.token }}
       PRODUCTION_URL: https://boku-no-jihanki.vercel.app
@@ -33,10 +33,10 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state='pending' \
             -f context='Production Smoke' \
-            -f description='Waiting for Vercel Production and M1.3 bundle verification' \
+            -f description='Waiting for Vercel Production and M1.4 bundle verification' \
             -f target_url="${PRODUCTION_URL}"
 
-      - name: Verify Vercel Production and M1.3 bundle
+      - name: Verify Vercel Production and M1.4 bundle
         id: smoke
         continue-on-error: true
         shell: bash
@@ -60,9 +60,10 @@ jobs:
             sleep 10
           done
 
+          CACHE_BUSTER="commit=${GITHUB_SHA}&m14-smoke=$(date +%s)"
           curl --fail --silent --show-error --location \
             --retry 10 --retry-all-errors --retry-delay 5 \
-            "${PRODUCTION_URL}/?commit=${GITHUB_SHA}&smoke=$(date +%s)" -o /tmp/index.html
+            "${PRODUCTION_URL}/?${CACHE_BUSTER}" -o /tmp/index.html
 
           mapfile -t SCRIPTS < <(grep -oE 'src="/assets/[^" ]+\.js"' /tmp/index.html | sed -E 's/^src="(.*)"$/\1/' | sort -u)
           if [[ ${#SCRIPTS[@]} -eq 0 ]]; then
@@ -75,15 +76,33 @@ jobs:
           for script in "${SCRIPTS[@]}"; do
             curl --fail --silent --show-error --location \
               --retry 8 --retry-all-errors --retry-delay 3 \
-              "${PRODUCTION_URL}${script}" >> /tmp/production-bundle.js
+              "${PRODUCTION_URL}${script}?${CACHE_BUSTER}" >> /tmp/production-bundle.js
           done
 
-          grep -q 'M1.3 RESIDENTIAL HUD' /tmp/production-bundle.js
-          grep -q '/assets/images/m13' /tmp/production-bundle.js
-          grep -q 'm13-bg-' /tmp/production-bundle.js
+          grep -q 'M1.4 SIDE-SCROLL HUD' /tmp/production-bundle.js
+          grep -q '/assets/images/m14' /tmp/production-bundle.js
+          grep -q 'm14-bg-' /tmp/production-bundle.js
+          grep -q 'home-street' /tmp/production-bundle.js
+          grep -q 'life-road' /tmp/production-bundle.js
+          grep -q 'upper-vending-lane' /tmp/production-bundle.js
+          grep -q '上のエリアへ移動' /tmp/production-bundle.js
+          grep -q '下のエリアへ移動' /tmp/production-bundle.js
           grep -q 'player-atlas' /tmp/production-bundle.js
-          grep -q '公園方面は、次のエリア制作後に開通します' /tmp/production-bundle.js
-          echo "Production contains the M1.3 residential vertical-slice bundle."
+
+          for asset in \
+            asset-manifest.json \
+            bg-home-street-morning.webp \
+            bg-life-road-day.webp \
+            bg-upper-vending-lane-night.webp \
+            player-atlas.webp \
+            player-atlas.json
+          do
+            curl --fail --silent --show-error --location \
+              --retry 8 --retry-all-errors --retry-delay 3 \
+              "${PRODUCTION_URL}/assets/images/m14/${asset}?${CACHE_BUSTER}" -o /dev/null
+          done
+
+          echo "Production contains the M1.4 three-area side-scroll bundle and assets."
 
       - name: Publish production smoke status
         if: always()
@@ -91,10 +110,10 @@ jobs:
         run: |
           if [[ "${{ steps.smoke.outcome }}" == "success" ]]; then
             STATE='success'
-            DESCRIPTION='Vercel Production contains the M1.3 residential vertical slice'
+            DESCRIPTION='Vercel Production contains the M1.4 side-scroll town'
           else
             STATE='failure'
-            DESCRIPTION='Vercel Production did not pass the M1.3 bundle verification'
+            DESCRIPTION='Vercel Production did not pass the M1.4 bundle verification'
           fi
 
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \

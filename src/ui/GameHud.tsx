@@ -1,5 +1,6 @@
 import { formatGameTime, getAtmosphere } from '../game/systems/timeOfDay';
 import { DeveloperHud } from './DeveloperHud';
+import { AreaArrowButton } from './AreaArrowButton';
 import { VirtualJoystick } from './VirtualJoystick';
 
 interface GameHudProps {
@@ -69,7 +70,7 @@ export function GameHud({
           </button>
           <details className="dev-tool-drawer">
             <summary>開発</summary>
-            <section className="dev-control-panel" aria-label="M1.3開発操作">
+            <section className="dev-control-panel" aria-label="M1.4開発操作">
               <button type="button" onClick={onStepTime}>＋15分</button>
               <button type="button" onClick={onResetTime}>朝へ戻す</button>
               <button type="button" onClick={onToggleDeveloperHud}>{developerHudVisible ? 'HUDを隠す' : 'HUDを表示'}</button>
@@ -86,10 +87,8 @@ export function GameHud({
       />
 
       <VirtualJoystick />
-      <button type="button" className="future-action-button" disabled aria-label="調べる機能はM2で実装予定">
-        <span>調べる</span>
-      </button>
-      <p className="control-hint">左右中心に住宅街を探索 / 上下は道路・歩道の奥行き内で移動 / 公園方面は準備中</p>
+      <AreaArrowButton />
+      <p className="control-hint">A / D・← / →で歩く・矢印が現れた場所だけ W / S・↑ / ↓でエリア移動</p>
     </main>
   );
 }

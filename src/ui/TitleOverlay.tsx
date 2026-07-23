@@ -13,7 +13,7 @@ export function TitleOverlay({ onStart }: TitleOverlayProps): React.JSX.Element 
         </h1>
         <p className="tagline">人生で一番バカで、一番楽しい夏休み。</p>
         <p className="title-description">
-          まずは夏の住宅街から公園まで、ロードを挟まずに歩いてみよう。左スティック、またはWASD・矢印キーで移動できます。
+          夏の住宅街を横に歩き、分かれ道から上の路地へ。左右スティック、またはA・D／左右キーで歩き、矢印が現れた場所では上下入力で街を行き来できます。
         </p>
         <button className="primary-button" type="button" onClick={onStart}>
           夏休みを始める

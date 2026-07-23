@@ -1,0 +1,59 @@
+{
+  "version": "0.1.4",
+  "revision": "M1.4",
+  "style": "original painterly side-scroll Japanese summer town",
+  "license": "Project-original BokuNoJihanki assets",
+  "generator": "OpenAI built-in image generation masters + deterministic Pillow post-process",
+  "pipeline": "three distinct masters, four time phases, area foregrounds, 28-frame side-view player atlas",
+  "areas": {
+    "home-street": {
+      "worldWidth": 2400,
+      "groundY": 525,
+      "master": "tools/art/m14-source/home-street-master.png",
+      "foreground": "fg-home-street.webp"
+    },
+    "life-road": {
+      "worldWidth": 2680,
+      "groundY": 614,
+      "master": "tools/art/m14-source/life-road-master.png",
+      "foreground": "fg-life-road.webp"
+    },
+    "upper-vending-lane": {
+      "worldWidth": 2320,
+      "groundY": 535,
+      "master": "tools/art/m14-source/upper-vending-lane-master.png",
+      "foreground": "fg-upper-vending-lane.webp"
+    }
+  },
+  "player": {
+    "directions": [
+      "left",
+      "right"
+    ],
+    "idleFramesPerDirection": 4,
+    "walkFramesPerDirection": 10,
+    "contactFrames": [
+      2,
+      7
+    ]
+  },
+  "files": [
+    "bg-home-street-day.webp",
+    "bg-home-street-evening.webp",
+    "bg-home-street-morning.webp",
+    "bg-home-street-night.webp",
+    "bg-life-road-day.webp",
+    "bg-life-road-evening.webp",
+    "bg-life-road-morning.webp",
+    "bg-life-road-night.webp",
+    "bg-upper-vending-lane-day.webp",
+    "bg-upper-vending-lane-evening.webp",
+    "bg-upper-vending-lane-morning.webp",
+    "bg-upper-vending-lane-night.webp",
+    "fg-home-street.webp",
+    "fg-life-road.webp",
+    "fg-upper-vending-lane.webp",
+    "player-atlas.json",
+    "player-atlas.webp"
+  ]
+}

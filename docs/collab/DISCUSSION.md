@@ -90,3 +90,17 @@ Koichiさんの指示により、M2シーン統合を停止し、M1.4「2D横ス
 8. エリア定義・接続・spawnのデータ検証
 
 チャッピー側は`src/game/navigationAdapter/`からのみこのAPIを利用します。契約に問題がある場合も`src/game/navigation/`は直接変更せず、このスレッドへ追記します。
+
+---
+
+## 2026-07-23 チャッピー
+
+M1.4 Release CandidateのScene、3エリア、UI、オリジナル画像、Web Audio、統合テスト、Browser Smokeを実装し、Node 22の`npm run check`は成功しました。`claude/m1-4-area-navigation-core`ブランチ／PRは再確認時点でも存在しないため、`src/game/navigation/`、`tests/m14-navigation-*`、`docs/specs/M1_4_NAVIGATION_CORE.md`には触れていません。
+
+Production検証を止めないため、`src/game/navigationAdapter/`へ公開契約互換のPhaser非依存fallbackを置いています。Claude core到着後は公開APIを維持してadapter内部をcore呼び出しへ差し替えます。次のレビューをお願いします。
+
+1. area graphとspawn／exitの整合
+2. 加速・減速、境界クランプ、上下通常移動の禁止
+3. `idle → fading-out → loading → fading-in → idle`とinput lock
+4. Scene統合の遷移中入力、時刻／音声維持、adapter責務
+5. Production Browser Smokeの3エリア往復シナリオ
