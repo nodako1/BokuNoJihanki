@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   smoke:
-    name: Verify Vercel Production contains M1.2
+    name: Verify Vercel Production contains M1.3
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -33,10 +33,10 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state='pending' \
             -f context='Production Smoke' \
-            -f description='Waiting for Vercel Production and M1.2 bundle verification' \
+            -f description='Waiting for Vercel Production and M1.3 bundle verification' \
             -f target_url="${PRODUCTION_URL}"
 
-      - name: Verify Vercel Production and M1.2 bundle
+      - name: Verify Vercel Production and M1.3 bundle
         id: smoke
         continue-on-error: true
         shell: bash
@@ -78,12 +78,12 @@ jobs:
               "${PRODUCTION_URL}${script}" >> /tmp/production-bundle.js
           done
 
-          grep -q 'M1.2 PAINTERLY HUD' /tmp/production-bundle.js
-          grep -q '/assets/images/m12' /tmp/production-bundle.js
-          grep -q 'm12-bg-' /tmp/production-bundle.js
-          grep -q 'm12-player-' /tmp/production-bundle.js
-          grep -q 'なつかぜ公園' /tmp/production-bundle.js
-          echo "Production contains the M1.2 painterly raster exploration bundle."
+          grep -q 'M1.3 RESIDENTIAL HUD' /tmp/production-bundle.js
+          grep -q '/assets/images/m13' /tmp/production-bundle.js
+          grep -q 'm13-bg-' /tmp/production-bundle.js
+          grep -q 'player-atlas' /tmp/production-bundle.js
+          grep -q '公園方面は、次のエリア制作後に開通します' /tmp/production-bundle.js
+          echo "Production contains the M1.3 residential vertical-slice bundle."
 
       - name: Publish production smoke status
         if: always()
@@ -91,10 +91,10 @@ jobs:
         run: |
           if [[ "${{ steps.smoke.outcome }}" == "success" ]]; then
             STATE='success'
-            DESCRIPTION='Vercel Production contains the M1.2 painterly raster bundle'
+            DESCRIPTION='Vercel Production contains the M1.3 residential vertical slice'
           else
             STATE='failure'
-            DESCRIPTION='Vercel Production did not pass the M1.2 bundle verification'
+            DESCRIPTION='Vercel Production did not pass the M1.3 bundle verification'
           fi
 
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \

@@ -1,0 +1,206 @@
+{
+  "version": "0.1.3",
+  "revision": "M1.3",
+  "style": "authored painterly residential belt-scroll vertical slice",
+  "license": "Project-original BokuNoJihanki art derived from the approved project master",
+  "source": "tools/art/reference/parts",
+  "pipeline": "four coherent authored master crops, walkable belt data, four time phases, split occlusion crops, 36-frame player atlas",
+  "sections": {
+    "home-front": {
+      "index": 0,
+      "occlusions": [
+        {
+          "id": "home-bottom-left",
+          "assetBase": "occlusion-home-bottom-left",
+          "x": 0,
+          "y": 520,
+          "width": 330,
+          "height": 200,
+          "footY": 680
+        },
+        {
+          "id": "home-bottom-center",
+          "assetBase": "occlusion-home-bottom-center",
+          "x": 300,
+          "y": 565,
+          "width": 690,
+          "height": 155,
+          "footY": 690
+        },
+        {
+          "id": "home-bottom-right",
+          "assetBase": "occlusion-home-bottom-right",
+          "x": 1000,
+          "y": 510,
+          "width": 280,
+          "height": 210,
+          "footY": 675
+        }
+      ]
+    },
+    "life-road": {
+      "index": 1,
+      "occlusions": [
+        {
+          "id": "life-bottom-left",
+          "assetBase": "occlusion-life-bottom-left",
+          "x": 0,
+          "y": 520,
+          "width": 300,
+          "height": 200,
+          "footY": 675
+        },
+        {
+          "id": "life-bottom-center",
+          "assetBase": "occlusion-life-bottom-center",
+          "x": 260,
+          "y": 560,
+          "width": 730,
+          "height": 160,
+          "footY": 690
+        },
+        {
+          "id": "life-bottom-right",
+          "assetBase": "occlusion-life-bottom-right",
+          "x": 960,
+          "y": 510,
+          "width": 320,
+          "height": 210,
+          "footY": 675
+        }
+      ]
+    },
+    "alley-corner": {
+      "index": 2,
+      "occlusions": [
+        {
+          "id": "alley-bottom-left",
+          "assetBase": "occlusion-alley-bottom-left",
+          "x": 0,
+          "y": 510,
+          "width": 320,
+          "height": 210,
+          "footY": 670
+        },
+        {
+          "id": "alley-bottom-center",
+          "assetBase": "occlusion-alley-bottom-center",
+          "x": 300,
+          "y": 565,
+          "width": 700,
+          "height": 155,
+          "footY": 690
+        },
+        {
+          "id": "alley-bottom-right",
+          "assetBase": "occlusion-alley-bottom-right",
+          "x": 980,
+          "y": 525,
+          "width": 300,
+          "height": 195,
+          "footY": 680
+        }
+      ]
+    },
+    "vending-crossing": {
+      "index": 3,
+      "occlusions": [
+        {
+          "id": "cross-bottom-left",
+          "assetBase": "occlusion-cross-bottom-left",
+          "x": 0,
+          "y": 515,
+          "width": 320,
+          "height": 205,
+          "footY": 672
+        },
+        {
+          "id": "cross-bottom-center",
+          "assetBase": "occlusion-cross-bottom-center",
+          "x": 290,
+          "y": 560,
+          "width": 710,
+          "height": 160,
+          "footY": 690
+        },
+        {
+          "id": "cross-bottom-right",
+          "assetBase": "occlusion-cross-bottom-right",
+          "x": 990,
+          "y": 510,
+          "width": 290,
+          "height": 210,
+          "footY": 675
+        }
+      ]
+    }
+  },
+  "files": [
+    "bg-alley-corner-day.webp",
+    "bg-alley-corner-evening.webp",
+    "bg-alley-corner-morning.webp",
+    "bg-alley-corner-night.webp",
+    "bg-home-front-day.webp",
+    "bg-home-front-evening.webp",
+    "bg-home-front-morning.webp",
+    "bg-home-front-night.webp",
+    "bg-life-road-day.webp",
+    "bg-life-road-evening.webp",
+    "bg-life-road-morning.webp",
+    "bg-life-road-night.webp",
+    "bg-vending-crossing-day.webp",
+    "bg-vending-crossing-evening.webp",
+    "bg-vending-crossing-morning.webp",
+    "bg-vending-crossing-night.webp",
+    "occlusion-alley-bottom-center-day.webp",
+    "occlusion-alley-bottom-center-evening.webp",
+    "occlusion-alley-bottom-center-morning.webp",
+    "occlusion-alley-bottom-center-night.webp",
+    "occlusion-alley-bottom-left-day.webp",
+    "occlusion-alley-bottom-left-evening.webp",
+    "occlusion-alley-bottom-left-morning.webp",
+    "occlusion-alley-bottom-left-night.webp",
+    "occlusion-alley-bottom-right-day.webp",
+    "occlusion-alley-bottom-right-evening.webp",
+    "occlusion-alley-bottom-right-morning.webp",
+    "occlusion-alley-bottom-right-night.webp",
+    "occlusion-cross-bottom-center-day.webp",
+    "occlusion-cross-bottom-center-evening.webp",
+    "occlusion-cross-bottom-center-morning.webp",
+    "occlusion-cross-bottom-center-night.webp",
+    "occlusion-cross-bottom-left-day.webp",
+    "occlusion-cross-bottom-left-evening.webp",
+    "occlusion-cross-bottom-left-morning.webp",
+    "occlusion-cross-bottom-left-night.webp",
+    "occlusion-cross-bottom-right-day.webp",
+    "occlusion-cross-bottom-right-evening.webp",
+    "occlusion-cross-bottom-right-morning.webp",
+    "occlusion-cross-bottom-right-night.webp",
+    "occlusion-home-bottom-center-day.webp",
+    "occlusion-home-bottom-center-evening.webp",
+    "occlusion-home-bottom-center-morning.webp",
+    "occlusion-home-bottom-center-night.webp",
+    "occlusion-home-bottom-left-day.webp",
+    "occlusion-home-bottom-left-evening.webp",
+    "occlusion-home-bottom-left-morning.webp",
+    "occlusion-home-bottom-left-night.webp",
+    "occlusion-home-bottom-right-day.webp",
+    "occlusion-home-bottom-right-evening.webp",
+    "occlusion-home-bottom-right-morning.webp",
+    "occlusion-home-bottom-right-night.webp",
+    "occlusion-life-bottom-center-day.webp",
+    "occlusion-life-bottom-center-evening.webp",
+    "occlusion-life-bottom-center-morning.webp",
+    "occlusion-life-bottom-center-night.webp",
+    "occlusion-life-bottom-left-day.webp",
+    "occlusion-life-bottom-left-evening.webp",
+    "occlusion-life-bottom-left-morning.webp",
+    "occlusion-life-bottom-left-night.webp",
+    "occlusion-life-bottom-right-day.webp",
+    "occlusion-life-bottom-right-evening.webp",
+    "occlusion-life-bottom-right-morning.webp",
+    "occlusion-life-bottom-right-night.webp",
+    "player-atlas.json",
+    "player-atlas.webp"
+  ]
+}

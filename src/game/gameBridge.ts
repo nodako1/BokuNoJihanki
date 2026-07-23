@@ -23,6 +23,14 @@ export interface HudSnapshot {
   lastUnloadedChunk: string | null;
   inputSource: InputSource;
   collisionDebug: boolean;
+  sectionLabel?: string;
+  facing?: 'down' | 'up' | 'left' | 'right';
+  animation?: string;
+  speed?: number;
+  walkable?: boolean;
+  blocked?: boolean;
+  footstepCount?: number;
+  exitNearby?: boolean;
 }
 
 let virtualInput: VirtualInputState = { x: 0, y: 0, active: false };

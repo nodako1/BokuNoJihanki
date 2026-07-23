@@ -1,0 +1,154 @@
+name: Apply and Verify M1.3 Residential Vertical Slice
+# refresh: phaser-vector2
+
+on:
+  push:
+    branches:
+      - feat/m1-3-residential-vertical-slice
+    paths:
+      - '.github/workflows/m13-apply.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: m13-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    name: Restore, generate, test and push M1.3
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout latest feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/m1-3-residential-vertical-slice
+          fetch-depth: 0
+
+      - name: Align with latest remote branch
+        run: |
+          git fetch origin feat/m1-3-residential-vertical-slice
+          git reset --hard origin/feat/m1-3-residential-vertical-slice
+
+      - name: Restore latest M1.3 implementation payload
+        shell: bash
+        run: |
+          cat .m13-bootstrap/chunk-*.b64 | tr -d '\r\n ' | base64 --decode > /tmp/m13-payload.tar.gz
+          tar -xzf /tmp/m13-payload.tar.gz
+          rm -rf .m13-bootstrap
+
+      - name: Add strict TypeScript declarations and geometry fixes
+        shell: bash
+        run: |
+          cat > src/game/systems/walkableMovement.d.mts <<'EOF'
+          export interface Point2D { x: number; y: number }
+          export type Polygon2D = readonly Point2D[];
+          export type Facing = 'down' | 'up' | 'left' | 'right';
+          export interface MovementResolution extends Point2D {
+            movedX: number;
+            movedY: number;
+            blockedX: boolean;
+            blockedY: boolean;
+          }
+          export function clamp(value: number, minimum: number, maximum: number): number;
+          export function pointInPolygon(point: Point2D, polygon: Polygon2D): boolean;
+          export function distancePointToSegment(point: Point2D, start: Point2D, end: Point2D): number;
+          export function circleIntersectsPolygon(center: Point2D, radius: number, polygon: Polygon2D): boolean;
+          export function circleInsideWalkable(center: Point2D, radius: number, polygons: readonly Polygon2D[]): boolean;
+          export function isFootprintValid(center: Point2D, radius: number, walkablePolygons: readonly Polygon2D[], obstaclePolygons: readonly Polygon2D[]): boolean;
+          export function resolveWalkableMovement(position: Point2D, delta: Point2D, radius: number, walkablePolygons: readonly Polygon2D[], obstaclePolygons: readonly Polygon2D[], maxSubstep?: number): MovementResolution;
+          export function approach(current: number, target: number, maximumDelta: number): number;
+          export function chooseFacing(x: number, y: number, fallback?: Facing): Facing;
+          export function sectionIndexForX(x: number, sectionWidth: number, count: number): number;
+          EOF
+
+          cat > src/game/systems/areaTransitionState.d.mts <<'EOF'
+          export type AreaTransitionStateValue = 'idle' | 'fading-out' | 'loading' | 'fading-in';
+          export type AreaTransitionEvent = 'start' | 'fade-out-complete' | 'scene-ready' | 'fade-in-complete';
+          export const AREA_TRANSITION_STATES: readonly AreaTransitionStateValue[];
+          export function nextAreaTransitionState(state: AreaTransitionStateValue, event: AreaTransitionEvent): AreaTransitionStateValue;
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/game/world/ResidentialWorld.ts')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('constructor(private readonly scene: Phaser.Scene) {', 'constructor(scene: Phaser.Scene) {')
+          text = text.replace(
+              'const points = polygon.map((point) => new Phaser.Geom.Point(point.x, point.y));',
+              'const points = polygon.map((point) => new Phaser.Math.Vector2(point.x, point.y));',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate M1.3 residential art and player atlas
+        run: |
+          python -m pip install --disable-pip-version-check pillow opencv-python-headless cairosvg
+          python tools/art/generate_m13_assets.py
+          rm -f tools/art/reference/m12-approved-concept.jpg
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Run complete quality check
+        run: npm run check
+
+      - name: Install Playwright Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Start local production build
+        run: |
+          nohup npm run preview -- --host 127.0.0.1 --port 4173 > /tmp/m13-preview.log 2>&1 &
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:4173/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/m13-preview.log
+          exit 1
+
+      - name: Operate M1.3 in a real browser
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          EXPECTED_COMMIT: ${{ github.sha }}
+          BROWSER_ARTIFACT_DIR: diagnostics/m13-apply-browser
+          PRODUCTION_WAIT_MS: '30000'
+        run: node scripts/browser-smoke.mjs
+
+      - name: Upload M1.3 browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-apply-browser-${{ github.run_id }}
+          path: diagnostics/m13-apply-browser
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Commit and push verified implementation
+        shell: bash
+        run: |
+          rm -rf diagnostics
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: implement M1.3 playable residential vertical slice'
+          git push origin HEAD:feat/m1-3-residential-vertical-slice

@@ -2,32 +2,15 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
-  "currentMilestone": "M1.2",
-  "status": "completed-production-verified",
+  "currentMilestone": "M1.3",
+  "status": "implementation-in-progress",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
   "lastProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
-    "m1-player-walk-animation",
-    "m1-virtual-joystick",
-    "m1-keyboard-input",
-    "m1-shared-input-interface",
-    "m1-camera-follow",
-    "m1-residential-area",
-    "m1-park-area",
-    "m1-seamless-map-streaming",
-    "m1-chunk-prefetch-and-release",
-    "m1-collision-system",
-    "m1-y-sort-2.5d",
-    "m1-time-of-day-map-integration",
-    "m1-environment-audio",
-    "m1-procedural-footsteps",
-    "m1-mobile-safe-area",
-    "m1-developer-hud",
-    "m1-svg-loader-fix",
-    "m1-production-browser-verification",
+    "m1-camera-and-input-foundation",
     "m1.1-high-density-vector-visuals",
     "m1.1-production-verification",
     "m1.2-approved-concept-raster-master",
@@ -35,18 +18,18 @@
     "m1.2-foreground-occlusion-layers",
     "m1.2-raster-player-sprites",
     "m1.2-reproducible-art-generation",
-    "m1.2-pr-quality-passed",
-    "m1.2-pr-browser-smoke-passed",
-    "m1.2-main-merged",
-    "m1.2-vercel-production-deployed",
-    "m1.2-production-smoke-passed",
-    "m1.2-production-browser-smoke-passed",
-    "m1.2-production-visual-evidence-captured",
-    "m1.2-four-time-period-screenshots-captured",
-    "m1.2-park-interior-screenshot-captured",
-    "m1.2-documentation-finalized"
+    "m1.2-production-verification"
   ],
-  "inProgress": [],
+  "inProgress": [
+    "m1.3-authored-residential-map",
+    "m1.3-walkable-polygon-movement",
+    "m1.3-substep-collision-and-wall-slide",
+    "m1.3-four-direction-player-atlas",
+    "m1.3-frame-synchronised-footsteps",
+    "m1.3-horizontal-camera-lookahead",
+    "m1.3-area-transition-foundation",
+    "m1.3-quality-and-browser-verification"
+  ],
   "notStarted": [
     "vending-machine-search",
     "money-system",
@@ -60,39 +43,29 @@
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
-      "severity": "medium",
-      "description": "The right-, left-, and up-facing player sprites are less detailed than the painterly world and down-facing sprite. They should be upgraded during the production character-art pass."
+      "severity": "temporary",
+      "description": "M1.3 residential vertical slice is on a feature branch and has not yet passed Production Browser Smoke."
     },
     {
       "severity": "light",
-      "description": "The four M1.2 chunks reuse the approved master scene and its mirrored composition for continuity. Each future area requires an independent master painting using the same camera and art rules."
+      "description": "M1.2 park and mirrored chunk assets remain as fallback art but are no longer part of the M1.3 playable Production route."
     },
     {
       "severity": "light",
-      "description": "Headless Chromium with software WebGL reported 9-11 FPS while tracing and capturing screenshots. Representative iPhone and Android performance still requires device confirmation."
+      "description": "Representative iPhone and Android performance still requires device confirmation."
     },
     {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-23T00:10:00Z",
-  "developmentRulesVersion": "2.3",
+  "lastUpdated": "2026-07-23T01:30:00Z",
+  "developmentRulesVersion": "2.4",
   "evidence": {
-    "m12ImplementationPullRequest": 16,
-    "m12ImplementationMergeCommit": "ecc77aa9ec2801a89e1d28edfd48d981f4de2665",
-    "m12ProductionVerificationPullRequests": [17, 18],
-    "productionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
-    "productionBrowserEvidencePullRequest": 19,
-    "productionBrowserEvidenceRun": 29967805451,
-    "initialPosition": "650,550",
-    "parkInteriorPosition": "3158,550",
-    "initialChunk": "residential-west",
-    "parkChunk": "park-west",
-    "loadedChunks": "2-3",
-    "headlessFps": "9-11",
-    "pageErrors": 0,
-    "failedRequests": 0,
-    "approvedConceptSource": "tools/art/reference/parts"
+    "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+    "m13MapFormat": "Tiled-compatible JSON",
+    "m13WorldWidth": 5120,
+    "m13PlayerAtlasFrames": 36,
+    "m13PlayableArea": "residential-only"
   }
 }
