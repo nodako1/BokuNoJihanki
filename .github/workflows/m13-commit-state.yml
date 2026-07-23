@@ -1,0 +1,64 @@
+name: Commit Machine-Readable M1.3 State
+
+on:
+  push:
+    branches:
+      - ci/m13-final-monitor
+    paths:
+      - '.github/workflows/m13-commit-state.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: read
+  statuses: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: nodako1/BokuNoJihanki
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ci/m13-final-monitor
+          fetch-depth: 0
+      - name: Capture state
+        run: |
+          set -euo pipefail
+          gh api repos/$REPO/pulls/22 > /tmp/pr22.json
+          MAIN_SHA=$(gh api repos/$REPO/commits/main --jq '.sha')
+          gh api repos/$REPO/commits/$MAIN_SHA/status > /tmp/status.json
+          gh api repos/$REPO/commits/$MAIN_SHA/check-runs > /tmp/checks.json
+          gh run list --repo $REPO --branch main --limit 30 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > /tmp/main-runs.json
+          gh run list --repo $REPO --branch ci/m13-finalize --limit 20 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > /tmp/finalize-runs.json
+          gh run list --repo $REPO --branch ci/m13-docs-finalize --limit 20 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > /tmp/docs-runs.json
+          gh pr list --repo $REPO --state all --limit 50 --json number,title,state,isDraft,mergedAt,closedAt,headRefName,baseRefName,mergeCommit,url > /tmp/pr-list.json
+          gh api repos/$REPO/contents/PROJECT_STATE.json?ref=main --jq '.content' | base64 -d > /tmp/project-state.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def load(path): return json.loads(Path(path).read_text())
+          pr=load('/tmp/pr22.json'); status=load('/tmp/status.json'); checks=load('/tmp/checks.json'); state=load('/tmp/project-state.json')
+          out={
+            'pr22':{k:pr.get(k) for k in ('number','state','draft','merged','merged_at','merge_commit_sha','head','base','title')},
+            'mainSha':status.get('sha'),
+            'mainStatuses':[{'context':s.get('context'),'state':s.get('state'),'description':s.get('description'),'target_url':s.get('target_url')} for s in status.get('statuses',[])],
+            'mainChecks':[{'name':c.get('name'),'status':c.get('status'),'conclusion':c.get('conclusion'),'details_url':c.get('details_url')} for c in checks.get('check_runs',[])],
+            'projectState':state,
+            'mainRuns':load('/tmp/main-runs.json'),
+            'finalizeRuns':load('/tmp/finalize-runs.json'),
+            'docsFinalizeRuns':load('/tmp/docs-runs.json'),
+            'pullRequests':load('/tmp/pr-list.json')
+          }
+          Path('m13-current-state.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add m13-current-state.json
+          git commit -m 'ci: update M1.3 current state snapshot' || exit 0
+          git push origin HEAD:ci/m13-final-monitor
