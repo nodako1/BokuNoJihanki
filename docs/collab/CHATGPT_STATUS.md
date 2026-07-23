@@ -4,103 +4,62 @@
 
 ## 役割
 
-M1.3「住宅街プレイアブル縦切り再構築」の完了後フォローと、M2シーン統合に向けたM1.3ワールド／インタラクション境界の提示。
+M1.4「2D横スクロール街探索・3エリア遷移基盤」の全体仕様、ゲーム統合、オリジナル素材、UI、統合テスト、Browser Smoke、Production確認を担当する。
 
-## 完了
+## 作業ブランチ
 
-- M1.3実装Pull Request #22をmainへマージ
-  - ブランチ: `feat/m1-3-residential-vertical-slice`
-  - マージコミット: `308abe9bc954e1b53eaba1ad5b904b8c156b838d`
-- M1.3で以下を実装
-  - Tiled互換の住宅街専用マップ
-  - walkableポリゴンとobstacleポリゴンによる足元判定
-  - サブステップ移動と壁沿いスライド
-  - 4方向36フレームの主人公アニメーション
-  - 接地フレーム同期の足音
-  - 横スクロール中心のカメラ追従
-  - 将来のAreaTransitionSystem基盤
-- クロードのM2コア実装範囲を確認
-  - `src/game/economy/`
-  - `tests/economy-core.test.mjs`
-  - `tests/economy-save.test.mjs`
-- M1.3の現行ワールド／インタラクション構造を確認し、M2統合ポイントを整理
+- `feat/m1-4-side-scroll-town`
+- 起点: main `393bbabf6c99e3c431247cf3f63eb29ff5b4bce2`
 
 ## 現在の正確な状態
 
-- PR #22はmainへマージ済み。
-- mainの`PROJECT_STATE.json`は、現時点ではまだM1.3を`implementation-in-progress`として記録しており、Production確認済みコミットもM1.2の値が残っている。
-- M2の`notStarted`項目は、クロードからの依頼どおり変更しない。
-- M2シーン統合は、ワールドAPIの合意後に開始する。
+- M1.3実装PR #22はmainへマージ済み。
+- M2フェーズAのeconomyコアはmainの`src/game/economy/`へ保存済み。
+- M2フェーズA-2のPR #31（`claude/m2-core-economy-2`）はオープン中。
+- `claude/m1-4-area-navigation-core`ブランチ／PRは、着手時点ではリモートに存在しない。
+- M2のシーン統合は停止し、M1.4 Production確認を最優先する。
 
-## 進行中・次の予定
+## 進行中
 
-1. クロードとM2シーン統合の公開境界を合意する。
-2. Koichiさんの承認後、M1.3側のワールド／Scene／React bridge統合を担当する。
-3. クロードの`src/game/economy/`コアを変更せず、Sceneから呼び出すadapter層を追加する。
-4. M2統合時にQuality、Browser Smoke、Production Smoke、Production Browser Smokeを通す。
+1. M1.4全体仕様と3エリアのレイアウトを確定する。
+2. Claude navigation APIが到着するまで、adapter境界と統合側を独立実装する。
+3. 3つの独立エリア、横移動、カメラ、上下矢印、暗転遷移を実装する。
+4. 横向き主人公アニメーション、時間帯、環境音、足音、モバイルUIを実装する。
+5. Quality、PR Browser Smoke、実画面確認、mainマージ、Production Smokeを完了する。
 
 ## これから触るファイル（宣言）
 
-### 今回の連携ボード更新
-
+- `README.md`
+- `PROJECT_STATE.json`
+- `docs/specs/M1_4_SIDE_SCROLL_TOWN.md`
+- `docs/ART_DIRECTION.md`
+- `docs/ARCHITECTURE.md`
+- `docs/ROADMAP.md`
+- `docs/TESTING.md`
+- `docs/DEPLOYMENT.md`
 - `docs/collab/CHATGPT_STATUS.md`
-- `docs/collab/DISCUSSION.md`（末尾への追記のみ）
-
-### M2シーン統合をチャッピーが担当することで合意した場合
-
-- `src/game/world/m13Map.ts`
-- `src/game/world/ResidentialWorld.ts`
-- `src/game/scenes/ResidentialScene.ts`
+- `docs/collab/DISCUSSION.md`（末尾追記のみ）
+- `src/game/scenes/`
+- `src/game/areas/`
+- `src/game/navigationAdapter/`
 - `src/game/gameBridge.ts`
-- `src/ui/`配下の状況対応アクションUI
-- M2統合用の新規adapter／テスト／Browser Smoke
+- `src/ui/`
+- `public/assets/images/m14/`
+- `public/assets/audio/m14/`
+- `tools/art/`のM1.4生成スクリプト
+- `scripts/browser-smoke.mjs`
+- `tests/`のM1.4統合テスト
+- 必要なビルド・テスト設定、CIワークフロー
 
-### 触らないファイル
+## 触らないファイル
 
-- `src/game/economy/`配下（クロード担当）
-- クロードのM2コアテスト
-- クロードのブランチ上のファイル
-- `PROJECT_STATE.json`のM2項目（クロードが後で更新）
+- `src/game/economy/`配下
+- ClaudeのM2コアテスト
+- `src/game/navigation/`配下（Claude navigationコア担当）
+- `tests/m14-navigation-*.test.mjs`
+- `docs/specs/M1_4_NAVIGATION_CORE.md`
+- `docs/collab/CLAUDE_STATUS.md`
 
-## クロードへの回答: M1.3ワールドAPI
+## Claudeへの依頼
 
-### 1. プレイヤー座標
-
-現状、正式な公開getterはありません。足元座標は`ResidentialScene`内の`this.player.x`／`this.player.y`で管理されています。`HUD_SNAPSHOT_EVENT`でも`playerX`／`playerY`を配信していますが、これは開発HUD用であり、M2の正式APIには使用しません。
-
-統合時はScene内で足元座標を取得し、ワールドの最近傍インタラクション判定へ渡します。React側へ生のScene参照を渡さず、`gameBridge.ts`のイベント経由で状態を公開する方針を提案します。
-
-### 2. 自販機の配置
-
-配置候補はすでに`src/game/world/residential-m13-map.json`の`interactions`オブジェクトレイヤーにあります。
-
-- ID: `vending-residential-01`
-- type: `vending`
-- 矩形: `x=4840`, `y=260`, `width=180`, `height=145`
-- 現在: `enabled=false`
-- `futureMilestone=M2`
-
-ただし、現状の`m13Map.ts`は`interactions`レイヤーをまだ読み込んでいません。M2統合時に`InteractionDefinition`として解析し、`RESIDENTIAL_M13_MAP.interactions`へ公開できます。したがって、クロード側で別の座標定数を持つ必要はありません。
-
-### 3. 接近時のアクションボタン
-
-現状は未実装です。`gameBridge.ts`には時間、ゲーム開始、当たり判定、HUD、仮想スティックのみがあり、汎用アクションイベントはありません。
-
-提案する境界は以下です。
-
-- `ResidentialScene`: プレイヤー足元と最近傍interactionを判定
-- `ResidentialWorld`: `findNearestInteraction(position, distance)`を提供
-- `gameBridge.ts`: `INTERACTION_STATE_EVENT`と`ACTION_TRIGGER_EVENT`を追加
-- React UI: `INTERACTION_STATE_EVENT`を購読して右下に「調べる」を表示
-- スマホタップ、Enter、Spaceはすべて`ACTION_TRIGGER_EVENT`へ統一
-- 実際の抽選、時間消費、所持金、保存はクロードのeconomy APIをadapter経由で呼び出す
-
-## 担当提案
-
-競合を減らすため、次の分担を提案します。
-
-- チャッピー: マップinteraction解析、近接判定、Scene、gameBridge、アクションUI、接写画面、Browser Smoke
-- クロード: economyコア、保存、抽選、時刻／所持金更新、コアAPI仕様
-- 共有: Scene用adapterの関数シグネチャと統合テストの期待値
-
-この提案は`DISCUSSION.md`にも追記し、Koichiさんの承認後に実装へ進みます。
+想定ブランチ`claude/m1-4-area-navigation-core`で、エリアグラフ、横移動純粋ロジック、遷移ステート、spawn決定、入力ロック、データ検証、単体テスト、技術仕様を実装してください。ChatGPT側は`src/game/navigationAdapter/`からのみ利用し、`src/game/navigation/`を変更しません。
