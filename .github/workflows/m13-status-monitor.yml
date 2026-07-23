@@ -1,5 +1,5 @@
 name: Report M1.3 Workflow Status
-# refresh: apply-failure-details
+# refresh: current-apply
 
 on:
   push:
@@ -21,15 +21,16 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Query failed apply log
+      - name: Query feature branch runs
         run: |
-          gh run view 29975327711 --repo nodako1/BokuNoJihanki --log-failed > /tmp/failed.log || true
-          tail -n 100 /tmp/failed.log > /tmp/tail.log
-          {
-            echo '## M1.3 apply failure details'
-            echo
-            echo '```text'
-            cat /tmp/tail.log
-            echo '```'
-          } > /tmp/comment.md
+          gh run list --repo nodako1/BokuNoJihanki --branch feat/m1-3-residential-vertical-slice --limit 20 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/runs.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          runs=json.loads(Path('/tmp/runs.json').read_text())
+          lines=['## M1.3 current workflow status','','| Run | Workflow | Event | Status | Conclusion | Head | Updated |','|---:|---|---|---|---|---|---|']
+          for run in runs:
+              lines.append(f"| [{run['databaseId']}]({run['url']}) | {run['name']} | {run['event']} | {run['status']} | {run.get('conclusion') or '—'} | `{run['headSha'][:7]}` | {run['updatedAt']} |")
+          Path('/tmp/comment.md').write_text('\n'.join(lines)+'\n')
+          PY
           gh pr comment 22 --repo nodako1/BokuNoJihanki --body-file /tmp/comment.md
