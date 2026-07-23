@@ -1,0 +1,35 @@
+name: Report M1.3 Finalize Status
+
+on:
+  push:
+    branches:
+      - ci/m13-final-monitor
+    paths:
+      - '.github/workflows/m13-finalize-status.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  pull-requests: write
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Query finalize branch runs
+        run: |
+          gh run list --repo nodako1/BokuNoJihanki --branch ci/m13-finalize --limit 10 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/runs.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          runs=json.loads(Path('/tmp/runs.json').read_text())
+          lines=['## M1.3 finalize workflow status','']
+          for r in runs:
+              lines.append(f"- [{r['databaseId']}]({r['url']}) {r['name']} / {r['event']}: **{r['status']} / {r.get('conclusion') or '—'}** (`{r['headSha'][:7]}`)")
+          Path('/tmp/comment.md').write_text('\n'.join(lines)+'\n')
+          PY
+          gh pr comment 25 --repo nodako1/BokuNoJihanki --body-file /tmp/comment.md
