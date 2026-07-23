@@ -1,0 +1,60 @@
+name: Monitor M1.3 Final Checks
+
+on:
+  push:
+    branches:
+      - ci/m13-final-monitor
+    paths:
+      - '.github/workflows/m13-final-monitor.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  pull-requests: write
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Collect PR head and checks
+        run: |
+          set -euo pipefail
+          HEAD_SHA=$(gh api repos/nodako1/BokuNoJihanki/pulls/22 --jq '.head.sha')
+          HEAD_REF=$(gh api repos/nodako1/BokuNoJihanki/pulls/22 --jq '.head.ref')
+          DRAFT=$(gh api repos/nodako1/BokuNoJihanki/pulls/22 --jq '.draft')
+          STATE=$(gh api repos/nodako1/BokuNoJihanki/pulls/22 --jq '.state')
+          gh api "repos/nodako1/BokuNoJihanki/commits/${HEAD_SHA}/check-runs" > /tmp/checks.json
+          gh run list --repo nodako1/BokuNoJihanki --branch "$HEAD_REF" --limit 12 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/runs.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          checks=json.loads(Path('/tmp/checks.json').read_text()).get('check_runs',[])
+          runs=json.loads(Path('/tmp/runs.json').read_text())
+          lines=[
+            '## M1.3 final check monitor',
+            '',
+            f"- PR state: `{os.environ['STATE']}`",
+            f"- Draft: `{os.environ['DRAFT']}`",
+            f"- Head ref: `{os.environ['HEAD_REF']}`",
+            f"- Head SHA: `{os.environ['HEAD_SHA']}`",
+            '',
+            '### Check runs',
+          ]
+          for c in checks:
+              lines.append(f"- {c['name']}: **{c['status']} / {c.get('conclusion') or '—'}**")
+          lines += ['', '### Workflow runs']
+          for r in runs:
+              lines.append(f"- [{r['databaseId']}]({r['url']}) {r['name']} / {r['event']}: **{r['status']} / {r.get('conclusion') or '—'}** (`{r['headSha'][:7]}`)")
+          Path('/tmp/comment.md').write_text('\n'.join(lines)+'\n')
+          PY
+          gh pr comment 22 --repo nodako1/BokuNoJihanki --body-file /tmp/comment.md
+        env:
+          HEAD_SHA: ${{ env.HEAD_SHA }}
+          HEAD_REF: ${{ env.HEAD_REF }}
+          DRAFT: ${{ env.DRAFT }}
+          STATE: ${{ env.STATE }}
