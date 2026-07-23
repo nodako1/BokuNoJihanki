@@ -1,5 +1,3 @@
-export const test = 1;
-{ } [ ] ( ) `code`
 import { validateAreaGraph as validateAreaGraphIssues } from './navigationValidation.mjs';
 
 /**
@@ -224,4 +222,3 @@ export function createM14AreaGraph(overrides = {}) {
     ],
   };
 }
-
