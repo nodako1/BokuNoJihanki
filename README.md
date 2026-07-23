@@ -10,28 +10,31 @@
 
 ## 現在の状態
 
-バージョン`0.1.0`、マイルストーン **M1.3 住宅街プレイアブル縦切り再構築（実装中）**です。
+バージョン`0.1.0`、マイルストーン **M1.4 2D横スクロール街探索・3エリア遷移基盤（Release Candidate／Production確認前）**です。
 
-M1.2の高精細ペインタリー背景はProduction確認済みですが、背景と当たり判定が独立し、主人公が画像上を滑って見える問題がありました。M1.3では住宅街だけに範囲を絞り、背景・歩行ルート・衝突・主人公アニメーション・カメラを一体設計します。
+M1.4では街探索のメイン方式を高解像度2D横スクロールへ切り替え、左右移動と横方向カメラ、3つの独立エリア、左右端と上下分岐による遷移を統合しています。M1.3の住宅街実装とアセットは完成済みのフォールバック／設計履歴として保存し、M2の経済コアも変更せず保持します。M1.4のProduction確認が完了するまで、M2のScene統合は一時停止中です。
 
-### M1.3の方針
+### M1.4のプレイ範囲
 
-- 横スクロール中心、上下は限定奥行きのベルトスクロール型2.5D
-- Tiled互換JSONのwalkableポリゴン
-- 家、庭、屋根、塀、柵はwalkable外
-- 道路内の電柱、自販機、標識だけをobstacleポリゴン化
-- 最大4pxのサブステップと壁沿いスライド
-- 4方向×8歩行フレーム＋4方向待機のTexture Atlas
-- 足の接地フレームと足音同期
-- 住宅街4区間、全長5,120px
-- 公園内部はいったんプレイ可能範囲から外す
-- エリア間は必要に応じて暗転・ロードを使い、完成度を優先
+| エリア | `areaId` | 接続 |
+| --- | --- | --- |
+| 自宅前 | `home-street` | 右端から生活道路へ |
+| 生活道路 | `life-road` | 左端から自宅前へ、中央の上分岐から自販機路地へ |
+| 自販機路地 | `upper-vending-lane` | 下分岐から生活道路へ |
+
+- 主人公は左右に歩き、Y座標は各エリアの地面へ固定
+- 左右方向の待機／歩行アニメーション、接地同期の足音
+- 横方向だけを追従するカメラと進行方向のlook-ahead
+- 250〜350msの暗転、地名表示、フェードインを使うエリア遷移
+- 朝、昼、夕方、夜の背景と環境音を全エリアで維持
+- M1.4では自販機の探索、所持金、時間消費、セーブをまだ統合しない
 
 ## 操作
 
-- スマホ: 左下の仮想スティック
-- PC: `WASD`または矢印キー
-- 開発ツール: 時刻、HUD、walkable／obstacleデバッグ表示
+- スマホ: 左下の横方向スティックで左右移動、表示された上／下矢印をタップして分岐
+- PC: `A`／`D`または左右矢印で移動、分岐内で`W`／上矢印または`S`／下矢印
+- 上下入力は自由移動には使わず、有効な分岐でだけエリア遷移に使う
+- 開発ツール: 時刻、M1.4 HUD、エリア／座標／カメラ／遷移状態の確認
 
 ## 開発コマンド
 
@@ -47,16 +50,32 @@ npm run dev
 npm run preview
 ```
 
-M1.3画像を再生成する場合はPython 3.12、Pillow、OpenCVが必要です。
+M1.4画像をソースマスターから再生成する場合は、Python 3.12とPillowを用意して次を実行します。
+
+```bash
+python3 tools/art/generate_m14_assets.py
+```
+
+M1.3画像を再生成する場合は、従来どおり`python3 tools/art/generate_m13_assets.py`を使用します（Pillow、OpenCVが必要）。
+
+## 検証とProduction反映
+
+1. Node.js 22環境で`npm ci`と`npm run check`を完走する。
+2. ローカルpreviewに対して`node scripts/browser-smoke.mjs`を実行し、3エリア往復、分岐、カメラ、アニメーション、時間帯を確認する。
+3. PRのQuality、Browser Smoke、Visual Reviewを完了してmainへマージする。
+4. Vercel Productionがmainの対象コミットを配信したことを確認する。
+5. Production Smoke、Production Browser Smoke、1280×720実画面の目視確認を完了する。
+
+Release Candidateは手順5が完了するまで「Production確認済み」へ変更しません。
 
 ## 開発ルール Ver.2.4
 
 1. Featureブランチで実装し、Production確認前に完了としない。
 2. `npm run check`とPR Browser Smokeを通す。
-3. ビジュアル背景とwalkable／obstacleを同時設計する。
+3. 3エリアを独立した横長ワールドとして扱い、巨大な連結画像にしない。
 4. 主人公は静止画切替ではなくフレーム式アニメーションを必須とする。
 5. シームレス性よりエリア単位の完成度を優先する。
 6. mainマージ後にVercel、Production Smoke、Production Browser Smoke、実画面を確認する。
 7. モックアップを完成証跡として使わない。
 
-詳細: [M1.3仕様](docs/specs/M1_3_RESIDENTIAL_VERTICAL_SLICE.md) / [アーキテクチャ](docs/ARCHITECTURE.md) / [開発ルール](docs/DEVELOPMENT_RULES.md) / [テスト](docs/TESTING.md) / [ロードマップ](docs/ROADMAP.md)
+詳細: [M1.4仕様](docs/specs/M1_4_SIDE_SCROLL_TOWN.md) / [M1.3仕様](docs/specs/M1_3_RESIDENTIAL_VERTICAL_SLICE.md) / [アーキテクチャ](docs/ARCHITECTURE.md) / [開発ルール](docs/DEVELOPMENT_RULES.md) / [テスト](docs/TESTING.md) / [デプロイ](docs/DEPLOYMENT.md) / [ロードマップ](docs/ROADMAP.md)

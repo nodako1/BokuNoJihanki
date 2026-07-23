@@ -78,6 +78,25 @@ class AmbientAudioEngine {
     this.playTone(523.25, 0.06, 'sine', 0.032);
   }
 
+  playTransitionStart(): void {
+    this.playTone(392, 0.11, 'sine', 0.042);
+    window.setTimeout(() => this.playTone(293.66, 0.16, 'triangle', 0.032), 80);
+  }
+
+  playAreaReveal(): void {
+    this.playTone(523.25, 0.08, 'triangle', 0.036);
+    window.setTimeout(() => this.playTone(659.25, 0.12, 'triangle', 0.03), 75);
+  }
+
+  playArrowAvailable(): void {
+    this.playTone(880, 0.07, 'sine', 0.018);
+  }
+
+  playArrowConfirm(): void {
+    this.playTone(698.46, 0.08, 'triangle', 0.038);
+    window.setTimeout(() => this.playTone(987.77, 0.11, 'triangle', 0.032), 65);
+  }
+
   playFootstep(surface: SurfaceId): void {
     const context = this.context;
     const master = this.masterGain;
@@ -154,16 +173,24 @@ class AmbientAudioEngine {
       evening: 0.016,
       night: 0.018,
     };
+    const areaMix: Record<AreaId, { wind: number; traffic: number; cicada: number }> = {
+      residential: { wind: 0.8, traffic: 0.012, cicada: 1 },
+      park: { wind: 1.35, traffic: 0.004, cicada: 1.1 },
+      'home-street': { wind: 0.72, traffic: 0.006, cicada: 0.92 },
+      'life-road': { wind: 0.86, traffic: 0.014, cicada: 1 },
+      'upper-vending-lane': { wind: 1.28, traffic: 0.0035, cicada: 1.16 },
+    };
+    const profile = areaMix[this.area];
 
     this.ambienceFilter?.frequency.setTargetAtTime(frequencyByPhase[this.phase], now, 0.7);
-    this.ambienceGain?.gain.setTargetAtTime(cicadaByPhase[this.phase], now, 0.7);
+    this.ambienceGain?.gain.setTargetAtTime(cicadaByPhase[this.phase] * profile.cicada, now, 0.7);
     this.windGain?.gain.setTargetAtTime(
-      windByPhase[this.phase] * (this.area === 'park' ? 1.35 : 0.8),
+      windByPhase[this.phase] * profile.wind,
       now,
       0.8,
     );
     this.trafficGain?.gain.setTargetAtTime(
-      this.area === 'residential' ? 0.012 : 0.004,
+      profile.traffic,
       now,
       0.8,
     );
@@ -269,7 +296,13 @@ class AmbientAudioEngine {
     if (this.birdTimer !== null) return;
     this.birdTimer = window.setInterval(() => {
       if (this.phase === 'night') return;
-      const chance = this.area === 'park' ? 0.78 : 0.3;
+      const chance = this.area === 'park'
+        ? 0.78
+        : this.area === 'upper-vending-lane'
+          ? 0.64
+          : this.area === 'home-street'
+            ? 0.42
+            : 0.3;
       if (Math.random() > chance) return;
       const base = this.phase === 'morning' ? 1320 : 1120;
       this.playTone(base + Math.random() * 280, 0.075, 'sine', 0.016);

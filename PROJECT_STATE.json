@@ -2,11 +2,11 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
-  "currentMilestone": "M1.3",
-  "status": "implementation-in-progress",
+  "currentMilestone": "M1.4",
+  "status": "release-candidate",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+  "lastProductionCommit": "393bbabf6c99e3c431247cf3f63eb29ff5b4bce2",
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
@@ -18,9 +18,7 @@
     "m1.2-foreground-occlusion-layers",
     "m1.2-raster-player-sprites",
     "m1.2-reproducible-art-generation",
-    "m1.2-production-verification"
-  ],
-  "inProgress": [
+    "m1.2-production-verification",
     "m1.3-authored-residential-map",
     "m1.3-walkable-polygon-movement",
     "m1.3-substep-collision-and-wall-slide",
@@ -28,7 +26,22 @@
     "m1.3-frame-synchronised-footsteps",
     "m1.3-horizontal-camera-lookahead",
     "m1.3-area-transition-foundation",
-    "m1.3-quality-and-browser-verification"
+    "m1.3-quality-browser-and-production-verification",
+    "m1.3-code-and-assets-preserved"
+  ],
+  "inProgress": [
+    "m1.4-home-street",
+    "m1.4-life-road",
+    "m1.4-upper-vending-lane",
+    "m1.4-horizontal-movement-and-camera",
+    "m1.4-left-right-and-branch-transitions",
+    "m1.4-two-direction-player-atlas",
+    "m1.4-time-of-day-and-area-audio",
+    "m1.4-quality-and-browser-verification",
+    "m1.4-production-verification"
+  ],
+  "paused": [
+    "m2-scene-integration-until-m1.4-production-verification"
   ],
   "notStarted": [
     "vending-machine-search",
@@ -40,15 +53,23 @@
     "m3-game-shop"
   ],
   "nextMilestone": "M2",
-  "nextTask": "vending-machine-search-and-money-system",
+  "nextTask": "m1.4-production-browser-smoke-and-visual-verification",
   "knownIssues": [
     {
       "severity": "temporary",
-      "description": "M1.3 residential vertical slice is on a feature branch and has not yet passed Production Browser Smoke."
+      "description": "The requested claude/m1-4-area-navigation-core branch and PR do not exist yet. The release candidate uses a contract-compatible pure fallback behind src/game/navigationAdapter/; formal Claude core integration and Claude-authored review remain pending."
+    },
+    {
+      "severity": "temporary",
+      "description": "M1.4 is a release candidate and is not complete until the merged main commit passes Vercel Production, Production Smoke, Production Browser Smoke, and visual verification."
     },
     {
       "severity": "light",
-      "description": "M1.2 park and mirrored chunk assets remain as fallback art but are no longer part of the M1.3 playable Production route."
+      "description": "M1.3 code and assets remain intentionally preserved as the completed fallback and design history; they are not the M1.4 primary playable route."
+    },
+    {
+      "severity": "temporary",
+      "description": "M2 economy core is preserved, but its Scene integration is paused until M1.4 Production verification is complete."
     },
     {
       "severity": "light",
@@ -59,13 +80,32 @@
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-23T01:30:00Z",
+  "lastUpdated": "2026-07-23T08:54:40Z",
   "developmentRulesVersion": "2.4",
   "evidence": {
     "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+    "m13ProductionCommit": "393bbabf6c99e3c431247cf3f63eb29ff5b4bce2",
     "m13MapFormat": "Tiled-compatible JSON",
     "m13WorldWidth": 5120,
     "m13PlayerAtlasFrames": 36,
-    "m13PlayableArea": "residential-only"
+    "m13PlayableArea": "residential-only",
+    "m14AreaIds": [
+      "home-street",
+      "life-road",
+      "upper-vending-lane"
+    ],
+    "m14AreaCount": 3,
+    "m14Movement": "horizontal-only-with-branch-input",
+    "m14Camera": "horizontal-follow-with-look-ahead",
+    "m14AssetGenerationCommand": "python3 tools/art/generate_m14_assets.py",
+    "m14ValidationFlow": [
+      "npm run check",
+      "local-browser-smoke",
+      "pull-request-quality-and-browser-smoke",
+      "vercel-production-deploy",
+      "production-smoke",
+      "production-browser-smoke",
+      "production-visual-verification"
+    ]
   }
 }

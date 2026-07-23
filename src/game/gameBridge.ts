@@ -2,9 +2,13 @@ export const TIME_PREVIEW_EVENT = 'boku-no-jihanki:time-preview';
 export const GAME_STARTED_EVENT = 'boku-no-jihanki:game-started';
 export const COLLISION_DEBUG_EVENT = 'boku-no-jihanki:collision-debug';
 export const HUD_SNAPSHOT_EVENT = 'boku-no-jihanki:hud-snapshot';
+export const AREA_PROMPT_EVENT = 'boku-no-jihanki:area-prompt';
+export const AREA_TRAVERSAL_REQUEST_EVENT = 'boku-no-jihanki:area-traversal-request';
 
 export type InputSource = 'keyboard' | 'touch' | 'none';
-export type AreaId = 'residential' | 'park';
+export type M14AreaId = 'home-street' | 'life-road' | 'upper-vending-lane';
+export type AreaId = M14AreaId | 'residential' | 'park';
+export type TraversalDirection = 'up' | 'down';
 
 export interface VirtualInputState {
   x: number;
@@ -31,14 +35,47 @@ export interface HudSnapshot {
   blocked?: boolean;
   footstepCount?: number;
   exitNearby?: boolean;
+  areaLabel?: string;
+  cameraScrollX?: number;
+  cameraMaxX?: number;
+  transitionState?: 'idle' | 'fading-out' | 'loading' | 'fading-in';
+  inputLocked?: boolean;
+  branchDirection?: TraversalDirection | null;
+  branchVisible?: boolean;
+  spawnId?: string;
+  lastTransitionId?: string | null;
+  timeMinutes?: number;
+  audioMuted?: boolean;
+  worldWidth?: number;
+}
+
+export interface AreaPromptState {
+  visible: boolean;
+  direction: TraversalDirection | null;
+  label: string;
+  areaId: M14AreaId | null;
 }
 
 let virtualInput: VirtualInputState = { x: 0, y: 0, active: false };
 let gameStarted = false;
 let collisionDebug = false;
+let previewMinutes = 360;
+let audioMuted = false;
+let traversalRequest: TraversalDirection | null = null;
+let areaPrompt: AreaPromptState = {
+  visible: false,
+  direction: null,
+  label: '',
+  areaId: null,
+};
 
 export function publishPreviewTime(minutes: number): void {
+  previewMinutes = minutes;
   window.dispatchEvent(new CustomEvent<number>(TIME_PREVIEW_EVENT, { detail: minutes }));
+}
+
+export function readPreviewTime(): number {
+  return previewMinutes;
 }
 
 export function publishGameStarted(): void {
@@ -73,4 +110,46 @@ export function isCollisionDebugEnabled(): boolean {
 
 export function publishHudSnapshot(snapshot: HudSnapshot): void {
   window.dispatchEvent(new CustomEvent<HudSnapshot>(HUD_SNAPSHOT_EVENT, { detail: snapshot }));
+}
+
+export function publishAudioMuted(muted: boolean): void {
+  audioMuted = muted;
+}
+
+export function isAudioMuted(): boolean {
+  return audioMuted;
+}
+
+export function publishAreaPrompt(next: AreaPromptState): void {
+  if (
+    areaPrompt.visible === next.visible
+    && areaPrompt.direction === next.direction
+    && areaPrompt.label === next.label
+    && areaPrompt.areaId === next.areaId
+  ) {
+    return;
+  }
+  areaPrompt = next;
+  window.dispatchEvent(new CustomEvent<AreaPromptState>(AREA_PROMPT_EVENT, { detail: next }));
+}
+
+export function readAreaPrompt(): AreaPromptState {
+  return areaPrompt;
+}
+
+export function requestAreaTraversal(direction: TraversalDirection): void {
+  traversalRequest = direction;
+  window.dispatchEvent(
+    new CustomEvent<TraversalDirection>(AREA_TRAVERSAL_REQUEST_EVENT, { detail: direction }),
+  );
+}
+
+export function consumeAreaTraversalRequest(): TraversalDirection | null {
+  const request = traversalRequest;
+  traversalRequest = null;
+  return request;
+}
+
+export function clearAreaTraversalRequest(): void {
+  traversalRequest = null;
 }

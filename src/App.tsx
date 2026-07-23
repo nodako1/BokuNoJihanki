@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { PhaserGame } from './game/PhaserGame';
 import {
   publishCollisionDebug,
+  publishAudioMuted,
   publishGameStarted,
   publishPreviewTime,
 } from './game/gameBridge';
@@ -29,6 +30,10 @@ export default function App(): React.JSX.Element {
     publishPreviewTime(previewMinutes);
     audioEngine.setPhase(getTimePhase(previewMinutes));
   }, [previewMinutes]);
+
+  useEffect(() => {
+    publishAudioMuted(muted);
+  }, [muted]);
 
   useEffect(() => {
     if (!started || !autoPlay) return undefined;
