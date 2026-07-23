@@ -1,4 +1,5 @@
 name: Apply and Verify M1.3 Residential Vertical Slice
+# refresh: production-smoke-m13
 
 on:
   push:
