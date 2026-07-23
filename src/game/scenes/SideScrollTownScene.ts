@@ -100,10 +100,20 @@ export class SideScrollTownScene extends Phaser.Scene {
 
   create(): void {
     this.cleanedUp = false;
+    this.areaId = 'home-street';
+    this.facing = 'right';
+    this.velocityX = 0;
+    this.previousBranchDirection = null;
+    this.blocked = false;
     const initialArea = getM14AreaDefinition(this.areaId);
     const spawn = getM14SpawnPoint(this.areaId, 'start');
     this.targetMinutes = readPreviewTime();
     this.displayedMinutes = this.targetMinutes;
+    this.transitionState = createM14TransitionState(this.areaId, spawn.id, {
+      timeMinutes: this.targetMinutes,
+      timePhase: getTimePhase(this.targetMinutes),
+      audioEnabled: !isAudioMuted(),
+    });
 
     this.cameras.main.setBackgroundColor('#88b9cf');
     this.cameras.main.setBounds(0, 0, initialArea.worldWidth, 720);
@@ -352,6 +362,18 @@ export class SideScrollTownScene extends Phaser.Scene {
       this.transitionState = reduceM14Transition(this.transitionState, { type: 'fade-out-complete' });
 
       await this.wait(90);
+      const readyState = reduceM14Transition(
+        this.transitionState,
+        { type: 'scene-ready' },
+      );
+      if (
+        readyState.phase !== 'fading-in'
+        || readyState.currentAreaId !== transition.targetAreaId
+        || readyState.currentSpawnId !== transition.targetSpawnId
+      ) {
+        throw new Error('Navigation core could not resolve the requested M1.4 spawn.');
+      }
+      this.transitionState = readyState;
       this.areaId = transition.targetAreaId;
       const targetArea = getM14AreaDefinition(this.areaId);
       this.world.setArea(this.areaId);
@@ -365,7 +387,6 @@ export class SideScrollTownScene extends Phaser.Scene {
       this.updateCamera(true);
       this.applyAtmosphere(0);
       this.areaTitle.setText(targetArea.displayName).setAlpha(1);
-      this.transitionState = reduceM14Transition(this.transitionState, { type: 'scene-ready' });
       audioEngine.playAreaReveal();
 
       await Promise.all([

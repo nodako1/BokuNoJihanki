@@ -1,4 +1,28 @@
 import {
+  findDirectionalExit,
+  findHorizontalExit,
+  getArea as getCoreArea,
+  getSpawnPoint as getCoreSpawnPoint,
+  isDirectionalPromptVisible,
+  validateAreaGraph as validateCoreAreaGraph,
+} from '../navigation/areaGraph.mjs';
+import { resolveHorizontalMovement } from '../navigation/horizontalMovement.mjs';
+import {
+  isReadyForNavigationTransition,
+  nextNavigationTransitionState,
+} from '../navigation/areaTransitionState.mjs';
+import {
+  beginAreaTransition,
+  cancelAreaTransition,
+  completeAreaTransition,
+  createNavigationState,
+  isInputLocked as isCoreInputLocked,
+  markAreaLoading,
+  markFadingIn,
+  resolveAreaSpawn,
+  startFadeOut,
+} from '../navigation/navigationState.mjs';
+import {
   M14_AREA_DEFINITIONS,
   M14_AREA_IDS,
   M14_INITIAL_LOCATION,
@@ -20,6 +44,13 @@ const OPPOSITE_DIRECTION = Object.freeze({
   down: 'up',
 });
 
+const CORE_PHASE_BY_PUBLIC_PHASE = Object.freeze({
+  idle: 'idle',
+  'fading-out': 'fading-out',
+  loading: 'loading',
+  'fading-in': 'fading-in',
+});
+
 export const HORIZONTAL_MOTION_CONFIG = Object.freeze({
   maxSpeed: 175,
   acceleration: 850,
@@ -34,18 +65,26 @@ export const M14_TRANSITION_PHASES = Object.freeze([
   'fading-in',
 ]);
 
+const coreStateByAdapterState = new WeakMap();
+
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function approach(current, target, maxDelta) {
-  if (current < target) return Math.min(target, current + maxDelta);
-  if (current > target) return Math.max(target, current - maxDelta);
-  return target;
-}
-
 function finiteOr(value, fallback) {
   return Number.isFinite(value) ? value : fallback;
+}
+
+function stableMovementNumber(value) {
+  return Math.round(value * 1_000_000_000) / 1_000_000_000;
+}
+
+function isObject(value) {
+  return value !== null && typeof value === 'object';
+}
+
+function isFinitePositive(value) {
+  return Number.isFinite(value) && value > 0;
 }
 
 function getMotionConfig(config) {
@@ -68,18 +107,63 @@ function getMotionConfig(config) {
   return { maxSpeed, acceleration, deceleration, stopEpsilon };
 }
 
-function isInsideRange(x, activationRange) {
-  return Boolean(
-    activationRange
-      && x >= activationRange.minX
-      && x <= activationRange.maxX,
-  );
-}
-
 function exitForDirection(area, direction) {
   const property = EXIT_PROPERTY_BY_DIRECTION[direction];
-  return property ? area[property] : null;
+  return property ? area?.[property] : null;
 }
+
+function toCoreExit(exit) {
+  return {
+    id: exit?.id,
+    direction: exit?.direction,
+    trigger: {
+      kind: 'range',
+      minX: exit?.activationRange?.minX,
+      maxX: exit?.activationRange?.maxX,
+    },
+    targetAreaId: exit?.targetAreaId,
+    targetSpawnId: exit?.targetSpawnId,
+    transitionType: 'fade',
+    enabled: exit?.enabled !== false,
+    prompt: exit?.hint,
+  };
+}
+
+function toCoreAreaGraph(areas) {
+  const areaKeys = Object.keys(areas ?? {});
+  const orderedKeys = [
+    ...M14_AREA_IDS.filter((areaId) => areaKeys.includes(areaId)),
+    ...areaKeys.filter((areaId) => !M14_AREA_IDS.includes(areaId)),
+  ];
+  return {
+    areas: orderedKeys.flatMap((areaKey) => {
+      const area = areas?.[areaKey];
+      if (!isObject(area)) return [];
+      const spawnEntries = isObject(area.spawnPoints)
+        ? Object.entries(area.spawnPoints)
+        : [];
+      const exits = ['left', 'right', 'up', 'down']
+        .map((direction) => exitForDirection(area, direction))
+        .filter((exit) => exit?.kind === 'connected')
+        .map(toCoreExit);
+      return [{
+        id: area.areaId ?? areaKey,
+        label: area.displayName ?? area.label ?? areaKey,
+        worldWidth: area.worldWidth,
+        groundY: area.groundY,
+        spawnPoints: spawnEntries.map(([spawnKey, spawnPoint]) => ({
+          id: spawnPoint?.id ?? spawnKey,
+          x: spawnPoint?.x,
+          facing: spawnPoint?.facing,
+        })),
+        exits,
+        metadata: area.metadata ?? {},
+      }];
+    }),
+  };
+}
+
+const M14_CORE_AREA_GRAPH = toCoreAreaGraph(M14_AREA_DEFINITIONS);
 
 function verticalDirectionFromInput(input) {
   if (!input || typeof input !== 'object') return null;
@@ -88,6 +172,77 @@ function verticalDirectionFromInput(input) {
   const down = Boolean(input.down) || y > 0.5;
   if (up === down) return null;
   return up ? 'up' : 'down';
+}
+
+function locatorForCoreExit(exit, x) {
+  if (Number.isFinite(x)) return { x };
+  if (exit?.trigger?.kind === 'range') {
+    return { x: (exit.trigger.minX + exit.trigger.maxX) / 2 };
+  }
+  return { x: 0, markerId: exit?.trigger?.markerId };
+}
+
+function findCoreExit(areaId, direction, x) {
+  const area = getCoreArea(M14_CORE_AREA_GRAPH, areaId);
+  const candidate = area?.exits.find(
+    (exit) => exit.enabled && exit.direction === direction,
+  );
+  if (!candidate) return undefined;
+  const locator = locatorForCoreExit(candidate, x);
+  if (direction === 'left' || direction === 'right') {
+    return findHorizontalExit(M14_CORE_AREA_GRAPH, areaId, direction, locator);
+  }
+  if (direction === 'up' || direction === 'down') {
+    return findDirectionalExit(M14_CORE_AREA_GRAPH, areaId, direction, locator);
+  }
+  return undefined;
+}
+
+function findCoreExitForTransition(transition) {
+  if (!transition) return undefined;
+  const area = getCoreArea(M14_CORE_AREA_GRAPH, transition.sourceAreaId);
+  const exit = area?.exits.find((candidate) => candidate.id === transition.exitId);
+  if (
+    !exit
+    || exit.direction !== transition.direction
+    || exit.targetAreaId !== transition.targetAreaId
+    || exit.targetSpawnId !== transition.targetSpawnId
+  ) {
+    return undefined;
+  }
+  return exit;
+}
+
+function resolvedTransitionFromCore(areaId, exit) {
+  if (!exit) return null;
+  const targetArea = getCoreArea(M14_CORE_AREA_GRAPH, exit.targetAreaId);
+  const targetSpawn = getCoreSpawnPoint(
+    M14_CORE_AREA_GRAPH,
+    exit.targetAreaId,
+    exit.targetSpawnId,
+  );
+  if (
+    !targetArea
+    || !targetSpawn
+    || !M14_AREA_IDS.includes(areaId)
+    || !M14_AREA_IDS.includes(exit.targetAreaId)
+    || !['left', 'right'].includes(targetSpawn.facing)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    exitId: exit.id,
+    direction: exit.direction,
+    sourceAreaId: areaId,
+    targetAreaId: exit.targetAreaId,
+    targetSpawnId: targetSpawn.id,
+    spawnId: targetSpawn.id,
+    targetX: targetSpawn.x,
+    x: targetSpawn.x,
+    targetGroundY: targetArea.groundY,
+    targetFacing: targetSpawn.facing,
+    facing: targetSpawn.facing,
+  });
 }
 
 export function horizontalAxisFromInput(input) {
@@ -102,6 +257,42 @@ export function horizontalAxisFromInput(input) {
   return Number(Boolean(input.right)) - Number(Boolean(input.left));
 }
 
+function resolveMovementWithCore(
+  state,
+  axis,
+  deltaSeconds,
+  motion,
+  bounds,
+  locked = false,
+) {
+  const normalizedAxis = clamp(finiteOr(axis, 0), -1, 1);
+  const analogMaxSpeed = normalizedAxis === 0
+    ? motion.maxSpeed
+    : Math.max(motion.stopEpsilon, Math.abs(normalizedAxis) * motion.maxSpeed);
+  const result = resolveHorizontalMovement(
+    state,
+    {
+      left: normalizedAxis < 0,
+      right: normalizedAxis > 0,
+      deltaSeconds,
+      locked,
+    },
+    {
+      maxSpeed: analogMaxSpeed,
+      acceleration: motion.acceleration,
+      deceleration: motion.deceleration,
+      maxSubstep: 4,
+    },
+    bounds,
+  );
+  return {
+    ...result,
+    velocityX: Math.abs(result.velocityX) <= motion.stopEpsilon
+      ? 0
+      : result.velocityX,
+  };
+}
+
 export function stepHorizontalVelocity(
   velocityX,
   input,
@@ -109,17 +300,21 @@ export function stepHorizontalVelocity(
   config = HORIZONTAL_MOTION_CONFIG,
 ) {
   const motion = getMotionConfig(config);
-  const current = clamp(
-    finiteOr(velocityX, 0),
-    -motion.maxSpeed,
-    motion.maxSpeed,
+  const result = resolveMovementWithCore(
+    {
+      x: 0,
+      velocityX: clamp(finiteOr(velocityX, 0), -motion.maxSpeed, motion.maxSpeed),
+      facing: finiteOr(velocityX, 0) < 0 ? 'left' : 'right',
+    },
+    horizontalAxisFromInput(input),
+    Math.max(0, finiteOr(deltaSeconds, 0)),
+    motion,
+    {
+      minX: -Number.MAX_SAFE_INTEGER,
+      maxX: Number.MAX_SAFE_INTEGER,
+    },
   );
-  const axis = horizontalAxisFromInput(input);
-  const seconds = Math.max(0, finiteOr(deltaSeconds, 0));
-  const target = axis * motion.maxSpeed;
-  const rate = axis === 0 ? motion.deceleration : motion.acceleration;
-  const next = approach(current, target, rate * seconds);
-  return Math.abs(next) <= motion.stopEpsilon ? 0 : next;
+  return result.velocityX;
 }
 
 export function clampPlayerX(areaId, x, playerHalfWidth = 0) {
@@ -157,64 +352,72 @@ export function stepHorizontalMovement(
     if (worldWidth <= 0) {
       throw new RangeError('M1.4 horizontal movement requires a positive worldWidth.');
     }
+    const motion = getMotionConfig(state.config ?? HORIZONTAL_MOTION_CONFIG);
     const currentX = clamp(finiteOr(state.x, 0), 0, worldWidth);
-    if (state.locked) {
-      return {
-        x: currentX,
-        velocity: 0,
-        moved: 0,
-        blocked: false,
-      };
-    }
-    const seconds = Math.max(0, finiteOr(state.deltaMs, 0)) / 1000;
-    let nextVelocity = stepHorizontalVelocity(
-      state.velocity,
-      state.input,
-      seconds,
-      state.config ?? HORIZONTAL_MOTION_CONFIG,
+    const currentVelocity = clamp(
+      finiteOr(state.velocity, 0),
+      -motion.maxSpeed,
+      motion.maxSpeed,
     );
-    const requestedX = currentX + nextVelocity * seconds;
-    const nextX = clamp(requestedX, 0, worldWidth);
-    const hitBoundary = Math.abs(requestedX - nextX) > 0.000001;
-    if (hitBoundary) nextVelocity = 0;
+    const axis = horizontalAxisFromInput(state.input);
+    const result = resolveMovementWithCore(
+      {
+        x: currentX,
+        velocityX: currentVelocity,
+        facing: axis < 0 ? 'left' : 'right',
+      },
+      axis,
+      Math.max(0, finiteOr(state.deltaMs, 0)) / 1000,
+      motion,
+      { minX: 0, maxX: worldWidth },
+      Boolean(state.locked),
+    );
     return {
-      x: nextX,
-      velocity: nextVelocity,
-      moved: nextX - currentX,
-      blocked: hitBoundary,
+      x: stableMovementNumber(result.x),
+      velocity: stableMovementNumber(result.velocityX),
+      moved: stableMovementNumber(result.x - currentX),
+      blocked: result.blocked,
     };
   }
 
+  const motion = getMotionConfig(config);
   const axis = horizontalAxisFromInput(input);
   const seconds = Math.max(0, finiteOr(deltaSeconds, 0));
-  const currentX = clampPlayerX(areaId, finiteOr(state?.x, 0), playerHalfWidth);
-  let velocityX = stepHorizontalVelocity(
-    state?.velocityX,
+  const area = getM14AreaDefinition(areaId);
+  const safeHalfWidth = clamp(
+    Math.max(0, finiteOr(playerHalfWidth, 0)),
+    0,
+    area.worldWidth / 2,
+  );
+  const currentX = clampPlayerX(areaId, finiteOr(state?.x, 0), safeHalfWidth);
+  const result = resolveMovementWithCore(
+    {
+      x: currentX,
+      velocityX: clamp(
+        finiteOr(state?.velocityX, 0),
+        -motion.maxSpeed,
+        motion.maxSpeed,
+      ),
+      facing: state?.facing === 'left' ? 'left' : 'right',
+    },
     axis,
     seconds,
-    config,
+    motion,
+    {
+      minX: safeHalfWidth,
+      maxX: area.worldWidth - safeHalfWidth,
+    },
   );
-  const requestedX = currentX + velocityX * seconds;
-  const x = clampPlayerX(areaId, requestedX, playerHalfWidth);
-  const blocked = Math.abs(requestedX - x) > 0.000001;
-  if (blocked) velocityX = 0;
-  const movedX = x - currentX;
-  const facing = axis < 0
-    ? 'left'
-    : axis > 0
-      ? 'right'
-      : state?.facing === 'left'
-        ? 'left'
-        : 'right';
-
+  const x = stableMovementNumber(result.x);
+  const movedX = stableMovementNumber(x - currentX);
   return {
     x,
-    y: getM14AreaDefinition(areaId).groundY,
-    velocityX,
+    y: area.groundY,
+    velocityX: stableMovementNumber(result.velocityX),
     movedX,
-    moving: Math.abs(movedX) > 0.0001,
-    blocked,
-    facing,
+    moving: result.moving && Math.abs(movedX) > 0.0001,
+    blocked: result.blocked,
+    facing: result.facing === 'left' ? 'left' : 'right',
   };
 }
 
@@ -248,46 +451,31 @@ export function getM14CameraScrollX(
 }
 
 export function getAvailableBranchDirections(areaId, x) {
-  const area = getM14AreaDefinition(areaId);
-  const safeX = finiteOr(x, 0);
-  return ['up', 'down'].filter((direction) => {
-    const exit = exitForDirection(area, direction);
-    return exit?.kind === 'connected'
-      && exit.trigger === 'branch'
-      && isInsideRange(safeX, exit.activationRange);
-  });
+  const locator = { x: finiteOr(x, 0) };
+  return ['up', 'down'].filter((direction) => (
+    isDirectionalPromptVisible(
+      M14_CORE_AREA_GRAPH,
+      areaId,
+      direction,
+      locator,
+    )
+  ));
 }
 
 export function isBranchAvailable(areaId, direction, x) {
-  return getAvailableBranchDirections(areaId, x).includes(direction);
+  if (direction !== 'up' && direction !== 'down') return false;
+  return isDirectionalPromptVisible(
+    M14_CORE_AREA_GRAPH,
+    areaId,
+    direction,
+    { x: finiteOr(x, 0) },
+  );
 }
 
 export function resolveAreaExit(areaId, direction, x, transitionState = 'idle') {
   if (isM14InputLocked(transitionState)) return null;
-  const area = getM14AreaDefinition(areaId);
-  const exit = exitForDirection(area, direction);
-  if (
-    !exit
-    || exit.kind !== 'connected'
-    || (Number.isFinite(x) && !isInsideRange(x, exit.activationRange))
-  ) {
-    return null;
-  }
-
-  const targetSpawn = getM14SpawnPoint(exit.targetAreaId, exit.targetSpawnId);
-  return Object.freeze({
-    exitId: exit.id,
-    direction,
-    sourceAreaId: areaId,
-    targetAreaId: exit.targetAreaId,
-    targetSpawnId: exit.targetSpawnId,
-    spawnId: exit.targetSpawnId,
-    targetX: targetSpawn.x,
-    x: targetSpawn.x,
-    targetGroundY: getM14AreaDefinition(exit.targetAreaId).groundY,
-    targetFacing: targetSpawn.facing,
-    facing: targetSpawn.facing,
-  });
+  const exit = findCoreExit(areaId, direction, x);
+  return resolvedTransitionFromCore(areaId, exit);
 }
 
 export function interpretM14Input(
@@ -329,24 +517,117 @@ export function interpretM14Input(
   };
 }
 
+function publicPhaseFromCore(corePhase) {
+  if (corePhase === 'requested' || corePhase === 'fading-out') return 'fading-out';
+  if (corePhase === 'loading') return 'loading';
+  if (corePhase === 'spawning' || corePhase === 'fading-in') return 'fading-in';
+  return 'idle';
+}
+
 export function nextM14TransitionPhase(phase, event) {
-  if (event === 'reset') return 'idle';
-  if (phase === 'idle' && event === 'start') return 'fading-out';
-  if (phase === 'fading-out' && event === 'fade-out-complete') return 'loading';
-  if (phase === 'loading' && event === 'scene-ready') return 'fading-in';
-  if (phase === 'fading-in' && event === 'fade-in-complete') return 'idle';
-  return phase;
+  let corePhase = CORE_PHASE_BY_PUBLIC_PHASE[phase] ?? 'idle';
+  if (event === 'reset') {
+    corePhase = nextNavigationTransitionState(corePhase, 'cancel');
+  } else if (event === 'start') {
+    corePhase = nextNavigationTransitionState(corePhase, 'request');
+    corePhase = nextNavigationTransitionState(corePhase, 'start-fade-out');
+  } else if (event === 'fade-out-complete') {
+    corePhase = nextNavigationTransitionState(corePhase, 'complete-fade-out');
+  } else if (event === 'scene-ready') {
+    corePhase = nextNavigationTransitionState(corePhase, 'area-ready');
+    corePhase = nextNavigationTransitionState(corePhase, 'begin-fade-in');
+  } else if (event === 'fade-in-complete') {
+    corePhase = nextNavigationTransitionState(corePhase, 'complete');
+  }
+  return publicPhaseFromCore(corePhase);
+}
+
+function freezeTransitionState(state, coreState) {
+  const frozenState = Object.freeze({
+    ...state,
+    context: Object.isFrozen(state.context)
+      ? state.context
+      : Object.freeze({ ...state.context }),
+  });
+  if (coreState) coreStateByAdapterState.set(frozenState, coreState);
+  return frozenState;
+}
+
+function createCoreState(areaId, spawnId, context) {
+  const area = getCoreArea(M14_CORE_AREA_GRAPH, areaId);
+  const spawn = getCoreSpawnPoint(M14_CORE_AREA_GRAPH, areaId, spawnId);
+  if (!area || !spawn || !['left', 'right'].includes(spawn.facing)) {
+    throw new RangeError(`Unknown M1.4 spawn: ${areaId}/${String(spawnId)}`);
+  }
+  return createNavigationState(area.id, spawn.id, spawn.facing, context);
+}
+
+function reconstructCoreState(state) {
+  const existing = coreStateByAdapterState.get(state);
+  if (existing) return existing;
+
+  const pending = state?.pendingTransition;
+  if (state?.phase !== 'idle' && pending) {
+    const sourceArea = getCoreArea(
+      M14_CORE_AREA_GRAPH,
+      pending.sourceAreaId,
+    );
+    const sourceSpawn = state.currentAreaId === pending.sourceAreaId
+      ? getCoreSpawnPoint(
+        M14_CORE_AREA_GRAPH,
+        pending.sourceAreaId,
+        state.currentSpawnId,
+      )
+      : sourceArea?.spawnPoints[0];
+    if (sourceArea && sourceSpawn) {
+      let reconstructed = createNavigationState(
+        sourceArea.id,
+        sourceSpawn.id,
+        sourceSpawn.facing,
+        state.context,
+      );
+      const exit = findCoreExitForTransition(pending);
+      if (exit) {
+        reconstructed = beginAreaTransition(reconstructed, exit);
+        reconstructed = startFadeOut(reconstructed);
+        if (state.phase === 'loading' || state.phase === 'fading-in') {
+          reconstructed = markAreaLoading(reconstructed);
+        }
+        if (state.phase === 'fading-in') {
+          reconstructed = resolveAreaSpawn(
+            reconstructed,
+            M14_CORE_AREA_GRAPH,
+          );
+          reconstructed = markFadingIn(reconstructed);
+        }
+        coreStateByAdapterState.set(state, reconstructed);
+        return reconstructed;
+      }
+    }
+  }
+
+  const reconstructed = createCoreState(
+    state.currentAreaId,
+    state.currentSpawnId,
+    state.context,
+  );
+  coreStateByAdapterState.set(state, reconstructed);
+  return reconstructed;
 }
 
 export function isM14InputLocked(transitionState) {
-  const phase = typeof transitionState === 'string'
-    ? transitionState
-    : transitionState?.phase;
-  return phase !== 'idle';
-}
-
-function freezeTransitionState(state) {
-  return Object.freeze(state);
+  if (typeof transitionState === 'string') {
+    const corePhase = CORE_PHASE_BY_PUBLIC_PHASE[transitionState];
+    return !isReadyForNavigationTransition(corePhase);
+  }
+  if (!transitionState || transitionState.phase !== 'idle') {
+    return true;
+  }
+  try {
+    return isCoreInputLocked(reconstructCoreState(transitionState));
+  } catch {
+    return true;
+  }
 }
 
 export function createM14TransitionState(
@@ -355,6 +636,7 @@ export function createM14TransitionState(
   context = {},
 ) {
   getM14SpawnPoint(areaId, spawnId);
+  const coreState = createCoreState(areaId, spawnId, context);
   return freezeTransitionState({
     phase: 'idle',
     currentAreaId: areaId,
@@ -362,7 +644,7 @@ export function createM14TransitionState(
     pendingTransition: null,
     lastTransition: null,
     context: Object.freeze({ ...context }),
-  });
+  }, coreState);
 }
 
 export function reduceM14Transition(state, action) {
@@ -375,81 +657,99 @@ export function reduceM14Transition(state, action) {
   if (typeof normalizedAction !== 'object') return state;
 
   if (normalizedAction.type === 'reset') {
-    if (
-      state.phase === 'idle'
-      && state.pendingTransition === null
-    ) {
-      return state;
-    }
+    if (state.phase === 'idle' && state.pendingTransition === null) return state;
+    const coreState = cancelAreaTransition(reconstructCoreState(state));
     return freezeTransitionState({
       ...state,
       phase: 'idle',
+      currentAreaId: coreState.currentAreaId,
+      currentSpawnId: coreState.currentSpawnId,
       pendingTransition: null,
-    });
+    }, coreState);
   }
 
   if (normalizedAction.type === 'start') {
     const transition = normalizedAction.transition ?? state.pendingTransition;
     if (
       state.phase !== 'idle'
-      || (
-        transition
-        && state.currentAreaId
-        && transition.sourceAreaId !== state.currentAreaId
-      )
+      || !transition
+      || transition.sourceAreaId !== state.currentAreaId
     ) {
       return state;
     }
+    const exit = findCoreExitForTransition(transition);
+    if (!exit) return state;
+    const currentCoreState = reconstructCoreState(state);
+    if (!isReadyForNavigationTransition(currentCoreState.phase)) return state;
+    const requested = beginAreaTransition(currentCoreState, exit, {
+      metadataPatch: state.context,
+    });
+    const coreState = startFadeOut(requested);
+    if (coreState.phase !== 'fading-out') return state;
     return freezeTransitionState({
       ...state,
       phase: 'fading-out',
       pendingTransition: transition,
-    });
+    }, coreState);
   }
 
   if (
     normalizedAction.type === 'fade-out-complete'
     && state.phase === 'fading-out'
   ) {
-    return freezeTransitionState({ ...state, phase: 'loading' });
+    const coreState = markAreaLoading(reconstructCoreState(state));
+    if (coreState.phase !== 'loading') return state;
+    return freezeTransitionState({
+      ...state,
+      phase: 'loading',
+    }, coreState);
   }
 
   if (
     normalizedAction.type === 'scene-ready'
     && state.phase === 'loading'
+    && state.pendingTransition
   ) {
-    if (!state.pendingTransition) {
-      return freezeTransitionState({ ...state, phase: 'fading-in' });
+    let coreState = resolveAreaSpawn(
+      reconstructCoreState(state),
+      M14_CORE_AREA_GRAPH,
+    );
+    coreState = markFadingIn(coreState);
+    if (coreState.phase !== 'fading-in' || !coreState.resolvedSpawn) {
+      return freezeTransitionState({
+        ...state,
+        phase: 'idle',
+        currentAreaId: coreState.currentAreaId,
+        currentSpawnId: coreState.currentSpawnId,
+        pendingTransition: null,
+      }, coreState);
     }
     return freezeTransitionState({
       ...state,
       phase: 'fading-in',
-      currentAreaId: state.pendingTransition.targetAreaId,
-      currentSpawnId: state.pendingTransition.targetSpawnId,
+      currentAreaId: coreState.currentAreaId,
+      currentSpawnId: coreState.currentSpawnId,
       lastTransition: state.pendingTransition,
-    });
+    }, coreState);
   }
 
   if (
     normalizedAction.type === 'fade-in-complete'
     && state.phase === 'fading-in'
   ) {
+    const coreState = completeAreaTransition(reconstructCoreState(state));
+    if (!isReadyForNavigationTransition(coreState.phase)) return state;
     return freezeTransitionState({
       ...state,
       phase: 'idle',
+      currentAreaId: coreState.currentAreaId,
+      currentSpawnId: coreState.currentSpawnId,
       pendingTransition: null,
-    });
+      lastTransition: state.lastTransition ?? state.pendingTransition,
+    }, coreState);
   }
 
   return state;
-}
-
-function isObject(value) {
-  return value !== null && typeof value === 'object';
-}
-
-function isFinitePositive(value) {
-  return Number.isFinite(value) && value > 0;
 }
 
 function validateRange(errors, prefix, activationRange, worldWidth, required) {
@@ -471,6 +771,11 @@ function validateRange(errors, prefix, activationRange, worldWidth, required) {
 export function validateM14AreaGraph(areas = M14_AREA_DEFINITIONS) {
   const errors = [];
   if (!isObject(areas)) return ['Area graph must be an object.'];
+
+  for (const issue of validateCoreAreaGraph(toCoreAreaGraph(areas))) {
+    errors.push(`Navigation core: ${issue.message}`);
+  }
+
   const entries = Object.entries(areas);
   const directions = ['left', 'right', 'up', 'down'];
 
@@ -544,7 +849,7 @@ export function validateM14AreaGraph(areas = M14_AREA_DEFINITIONS) {
 
       if (exit.kind === 'connected') {
         const targetArea = areas[exit.targetAreaId];
-        if (!targetArea) {
+        if (!isObject(targetArea)) {
           errors.push(`${exitPrefix} targets missing area ${String(exit.targetAreaId)}.`);
           continue;
         }
@@ -620,7 +925,7 @@ export function validateM14AreaGraph(areas = M14_AREA_DEFINITIONS) {
     errors.push('Area graph must include home-street.');
   }
 
-  return errors;
+  return [...new Set(errors)];
 }
 
 export function assertValidM14AreaGraph(areas = M14_AREA_DEFINITIONS) {

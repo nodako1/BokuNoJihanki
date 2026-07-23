@@ -100,6 +100,38 @@ test('horizontal motion accelerates to 175 and decelerates naturally at 1150', (
   assert.equal(velocity, 0);
 });
 
+test('analog horizontal input preserves half-speed movement through the adapter', () => {
+  const halfRight = stepHorizontalMovement({
+    x: 100,
+    velocity: 0,
+    input: { horizontalAxis: 0.5 },
+    deltaMs: 1000,
+    worldWidth: 2400,
+    locked: false,
+  });
+  assert.deepEqual(halfRight, {
+    x: 187.5,
+    velocity: 87.5,
+    moved: 87.5,
+    blocked: false,
+  });
+
+  const halfLeft = stepHorizontalMovement({
+    x: 200,
+    velocity: 0,
+    input: -0.5,
+    deltaMs: 1000,
+    worldWidth: 2400,
+    locked: false,
+  });
+  assert.deepEqual(halfLeft, {
+    x: 112.5,
+    velocity: -87.5,
+    moved: -87.5,
+    blocked: false,
+  });
+});
+
 test('left and right input move only on X while vertical input does not move', () => {
   const right = stepHorizontalMovement({
     x: 100,
@@ -325,6 +357,42 @@ test('transition reducer locks input through fade, load and fade-in', () => {
   assert.deepEqual(state.context, context);
 });
 
+test('cloned transition state reconstructs safely and rejects a duplicate start', () => {
+  const transition = resolveAreaExit('home-street', 'right', 2380);
+  assert.ok(transition);
+
+  const initial = createM14TransitionState('home-street', 'start', {
+    timeMinutes: 480,
+  });
+  const started = reduceM14Transition(initial, { type: 'start', transition });
+  const clonedStarted = structuredClone(started);
+  const duplicate = reduceM14Transition(clonedStarted, {
+    type: 'start',
+    transition,
+  });
+  assert.deepEqual(duplicate, clonedStarted);
+  assert.equal(duplicate.phase, 'fading-out');
+  assert.equal(duplicate.currentAreaId, 'home-street');
+  assert.equal(duplicate.pendingTransition?.exitId, transition.exitId);
+
+  let restored = reduceM14Transition(
+    structuredClone(duplicate),
+    'fade-out-complete',
+  );
+  assert.equal(restored.phase, 'loading');
+  restored = reduceM14Transition(structuredClone(restored), 'scene-ready');
+  assert.equal(restored.phase, 'fading-in');
+  assert.equal(restored.currentAreaId, 'life-road');
+  assert.equal(restored.currentSpawnId, 'from-home');
+  restored = reduceM14Transition(
+    structuredClone(restored),
+    'fade-in-complete',
+  );
+  assert.equal(restored.phase, 'idle');
+  assert.equal(restored.pendingTransition, null);
+  assert.equal(restored.lastTransition?.exitId, transition.exitId);
+});
+
 test('horizontal camera look-ahead follows movement without exposing background', () => {
   const centered = getM14CameraScrollX('life-road', 1400, 0, 1280);
   const lookingRight = getM14CameraScrollX('life-road', 1400, 175, 1280);
@@ -353,5 +421,22 @@ test('area graph validation accepts production data and reports broken targets',
   assert.throws(
     () => assertValidM14AreaGraph(broken),
     /Invalid M1\.4 area graph/,
+  );
+});
+
+test('area graph validation combines core and M1.4-specific defenses', () => {
+  const broken = structuredClone(M14_AREA_DEFINITIONS);
+  broken['life-road'].upExit.id = broken['life-road'].leftExit.id;
+  broken['home-street'].cameraBounds.width =
+    broken['home-street'].worldWidth + 1;
+
+  const errors = validateM14AreaGraph(broken);
+  assert.ok(
+    errors.some((message) => /duplicate exit id/i.test(message)),
+    errors.join('\n'),
+  );
+  assert.ok(
+    errors.some((message) => /invalid cameraBounds/i.test(message)),
+    errors.join('\n'),
   );
 });

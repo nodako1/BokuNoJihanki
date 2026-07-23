@@ -105,6 +105,52 @@ test('M1.4 production scene is wired through the adapter and accessible arrow UI
   assert.match(hud, /M1\.4 SIDE-SCROLL HUD/);
 });
 
+test('M1.4 adapter delegates navigation behavior to the shared core', async () => {
+  const adapter = await readFile(
+    'src/game/navigationAdapter/m14NavigationAdapter.mjs',
+    'utf-8',
+  );
+  for (const modulePath of [
+    '../navigation/areaGraph.mjs',
+    '../navigation/horizontalMovement.mjs',
+    '../navigation/navigationState.mjs',
+  ]) {
+    assert.ok(
+      adapter.includes(`from '${modulePath}'`)
+        || adapter.includes(`from "${modulePath}"`),
+      `missing core import: ${modulePath}`,
+    );
+  }
+
+  for (const marker of [
+    'findHorizontalExit',
+    'findDirectionalExit',
+    'isDirectionalPromptVisible',
+    'resolveHorizontalMovement',
+    'createNavigationState',
+    'beginAreaTransition',
+    'resolveAreaSpawn',
+    'completeAreaTransition',
+  ]) {
+    const occurrences = adapter.match(new RegExp(`\\b${marker}\\b`, 'g')) ?? [];
+    assert.ok(
+      occurrences.length >= 2,
+      `${marker} must be imported and called by the adapter`,
+    );
+  }
+  const inputLockOccurrences =
+    adapter.match(/\b(?:isInputLocked|isCoreInputLocked)\b/g) ?? [];
+  assert.ok(
+    inputLockOccurrences.length >= 2,
+    'isInputLocked must be imported and called by the adapter',
+  );
+  assert.match(
+    adapter,
+    /\bvalidate(?:Core)?AreaGraph\s*\(/,
+    'the adapter must call the core graph validator',
+  );
+});
+
 test('M1.3 residential scene, art, atlas and authored map remain preserved', async () => {
   const [assets, atlas, map, createGame] = await Promise.all([
     readJson('public/assets/images/m13/asset-manifest.json'),
