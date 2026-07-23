@@ -3,10 +3,10 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1.2",
-  "status": "implementation-in-progress",
+  "status": "completed-production-verified",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
+  "lastProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
@@ -28,66 +28,71 @@
     "m1-developer-hud",
     "m1-svg-loader-fix",
     "m1-production-browser-verification",
-    "m1.1-high-density-residential-backgrounds",
-    "m1.1-high-density-park-backgrounds",
-    "m1.1-detailed-houses-and-foliage",
-    "m1.1-life-props-and-park-equipment",
-    "m1.1-player-four-direction-redesign",
-    "m1.1-left-right-profile-frames",
-    "m1.1-layered-background-props-foreground",
-    "m1.1-window-lamp-vending-lights",
-    "m1.1-morning-day-evening-night-grading",
-    "m1.1-residential-park-transition-blend",
-    "m1.1-pr-quality-passed",
-    "m1.1-pr-browser-smoke-passed",
-    "m1.1-main-merged",
-    "m1.1-vercel-production-deployed",
-    "m1.1-production-smoke-passed",
-    "m1.1-production-browser-smoke-passed",
-    "m1.1-production-visual-evidence-captured",
-    "m1.1-four-time-period-screenshots-captured",
-    "m1.1-park-interior-screenshot-captured",
-    "m1.1-documentation-finalized"
-  ],
-  "inProgress": [
+    "m1.1-high-density-vector-visuals",
+    "m1.1-production-verification",
     "m1.2-approved-concept-raster-master",
     "m1.2-four-chunk-time-of-day-backgrounds",
     "m1.2-foreground-occlusion-layers",
     "m1.2-raster-player-sprites",
-    "m1.2-quality-and-browser-verification"
+    "m1.2-reproducible-art-generation",
+    "m1.2-pr-quality-passed",
+    "m1.2-pr-browser-smoke-passed",
+    "m1.2-main-merged",
+    "m1.2-vercel-production-deployed",
+    "m1.2-production-smoke-passed",
+    "m1.2-production-browser-smoke-passed",
+    "m1.2-production-visual-evidence-captured",
+    "m1.2-four-time-period-screenshots-captured",
+    "m1.2-park-interior-screenshot-captured",
+    "m1.2-documentation-finalized"
   ],
+  "inProgress": [],
   "notStarted": [
     "vending-machine-search",
     "money-system",
     "action-time-consumption",
     "daily-search-state",
-    "m2-local-save"
+    "m2-local-save",
+    "m3-day-transition",
+    "m3-game-shop"
   ],
   "nextMilestone": "M2",
   "nextTask": "vending-machine-search-and-money-system",
   "knownIssues": [
     {
-      "severity": "temporary",
-      "description": "M1.2 painterly raster implementation is on feature branch and has not yet been verified on Vercel Production."
+      "severity": "medium",
+      "description": "The right-, left-, and up-facing player sprites are less detailed than the painterly world and down-facing sprite. They should be upgraded during the production character-art pass."
     },
     {
       "severity": "light",
-      "description": "The M1.2 master world reuses mirrored approved-scene compositions across four chunks to guarantee visual continuity; future areas need additional master paintings."
+      "description": "The four M1.2 chunks reuse the approved master scene and its mirrored composition for continuity. Each future area requires an independent master painting using the same camera and art rules."
     },
     {
       "severity": "light",
-      "description": "Representative iPhone and Android performance still requires device confirmation."
+      "description": "Headless Chromium with software WebGL reported 9-11 FPS while tracing and capturing screenshots. Representative iPhone and Android performance still requires device confirmation."
     },
     {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-22T13:35:00Z",
+  "lastUpdated": "2026-07-23T00:10:00Z",
   "developmentRulesVersion": "2.3",
   "evidence": {
-    "m11ProductionCommit": "f06f5ef138d8871d7768103591ecf88dcd846626",
     "m12ImplementationPullRequest": 16,
+    "m12ImplementationMergeCommit": "ecc77aa9ec2801a89e1d28edfd48d981f4de2665",
+    "m12ProductionVerificationPullRequests": [17, 18],
+    "productionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+    "productionBrowserEvidencePullRequest": 19,
+    "productionBrowserEvidenceRun": 29967805451,
+    "initialPosition": "650,550",
+    "parkInteriorPosition": "3158,550",
+    "initialChunk": "residential-west",
+    "parkChunk": "park-west",
+    "loadedChunks": "2-3",
+    "headlessFps": "9-11",
+    "pageErrors": 0,
+    "failedRequests": 0,
     "approvedConceptSource": "tools/art/reference/parts"
   }
 }
