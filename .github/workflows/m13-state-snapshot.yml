@@ -1,0 +1,86 @@
+name: Capture M1.3 Final State Snapshot
+
+on:
+  push:
+    branches:
+      - ci/m13-state-snapshot
+    paths:
+      - '.github/workflows/m13-state-snapshot.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/m13-state-snapshot.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+  statuses: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: nodako1/BokuNoJihanki
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Capture repository, PR, deployment and workflow state
+        run: |
+          set -euo pipefail
+          mkdir -p snapshot
+          MAIN_SHA=$(git rev-parse HEAD)
+          echo "$MAIN_SHA" > snapshot/main-sha.txt
+          cp README.md snapshot/README.md
+          cp PROJECT_STATE.json snapshot/PROJECT_STATE.json
+          gh api repos/$REPO/pulls/22 > snapshot/pr22.json || true
+          for PR in 21 23 24 25 26 27 28 29 30; do
+            gh api repos/$REPO/pulls/$PR > snapshot/pr-$PR.json 2>/dev/null || true
+          done
+          gh api repos/$REPO/commits/$MAIN_SHA/status > snapshot/main-status.json || true
+          gh api repos/$REPO/commits/$MAIN_SHA/check-runs > snapshot/main-check-runs.json || true
+          gh run list --repo $REPO --branch main --limit 30 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > snapshot/main-runs.json || true
+          gh run list --repo $REPO --branch feat/m1-3-residential-vertical-slice --limit 30 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > snapshot/feature-runs.json || true
+          gh run list --repo $REPO --branch ci/m13-finalize --limit 20 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > snapshot/finalize-runs.json || true
+          gh run list --repo $REPO --branch ci/m13-docs-finalize --limit 20 --json databaseId,name,event,status,conclusion,headSha,createdAt,updatedAt,url > snapshot/docs-finalize-runs.json || true
+          gh pr list --repo $REPO --state all --limit 30 --json number,title,state,isDraft,mergedAt,closedAt,headRefName,baseRefName,mergeCommit,url > snapshot/pr-list.json
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          s=Path('snapshot')
+          out={}
+          def load(name,default=None):
+              p=s/name
+              if not p.exists(): return default
+              try: return json.loads(p.read_text())
+              except Exception: return p.read_text(errors='replace')
+          out['mainSha']=(s/'main-sha.txt').read_text().strip()
+          state=load('PROJECT_STATE.json',{})
+          out['projectState']={k:state.get(k) for k in ['currentMilestone','status','lastProductionCommit','nextMilestone','nextTask','lastUpdated','developmentRulesVersion']}
+          pr=load('pr22.json',{}) or {}
+          out['pr22']={k:pr.get(k) for k in ['number','state','draft','merged','merged_at','merge_commit_sha','head','base','title']}
+          status=load('main-status.json',{}) or {}
+          out['mainStatuses']=[{'context':x.get('context'),'state':x.get('state'),'description':x.get('description'),'target_url':x.get('target_url')} for x in status.get('statuses',[])]
+          checks=load('main-check-runs.json',{}) or {}
+          out['mainChecks']=[{'name':x.get('name'),'status':x.get('status'),'conclusion':x.get('conclusion'),'details_url':x.get('details_url')} for x in checks.get('check_runs',[])]
+          for key,file in [('mainRuns','main-runs.json'),('featureRuns','feature-runs.json'),('finalizeRuns','finalize-runs.json'),('docsFinalizeRuns','docs-finalize-runs.json'),('pullRequests','pr-list.json')]:
+              out[key]=load(file,[])
+          (s/'summary.json').write_text(json.dumps(out,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(out,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Upload snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-final-state-snapshot-${{ github.run_id }}
+          path: snapshot
+          retention-days: 3
