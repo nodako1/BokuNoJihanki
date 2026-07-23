@@ -1,0 +1,74 @@
+name: Report Current M1.3 Completion State
+
+on:
+  push:
+    branches:
+      - ci/m13-final-monitor
+    paths:
+      - '.github/workflows/m13-current-state-report.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: write
+  statuses: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: nodako1/BokuNoJihanki
+    steps:
+      - name: Build completion report
+        run: |
+          set -euo pipefail
+          gh api repos/$REPO/pulls/22 > /tmp/pr22.json
+          MAIN_SHA=$(gh api repos/$REPO/commits/main --jq '.sha')
+          gh api repos/$REPO/commits/$MAIN_SHA/status > /tmp/status.json
+          gh api repos/$REPO/commits/$MAIN_SHA/check-runs > /tmp/checks.json
+          gh run list --repo $REPO --branch main --limit 20 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/main-runs.json
+          gh run list --repo $REPO --branch ci/m13-finalize --limit 10 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/finalize-runs.json
+          gh run list --repo $REPO --branch ci/m13-docs-finalize --limit 10 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/docs-runs.json
+          gh api repos/$REPO/contents/PROJECT_STATE.json?ref=main --jq '.content' | base64 -d > /tmp/project-state.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pr=json.loads(Path('/tmp/pr22.json').read_text())
+          statuses=json.loads(Path('/tmp/status.json').read_text()).get('statuses',[])
+          checks=json.loads(Path('/tmp/checks.json').read_text()).get('check_runs',[])
+          main_runs=json.loads(Path('/tmp/main-runs.json').read_text())
+          fin_runs=json.loads(Path('/tmp/finalize-runs.json').read_text())
+          docs_runs=json.loads(Path('/tmp/docs-runs.json').read_text())
+          state=json.loads(Path('/tmp/project-state.json').read_text())
+          main_sha=json.loads(Path('/tmp/status.json').read_text()).get('sha')
+          lines=['## M1.3 current completion state','',
+            f"- PR #22 state: **{pr.get('state')}**",
+            f"- PR #22 draft: **{pr.get('draft')}**",
+            f"- PR #22 merged: **{pr.get('merged')}**",
+            f"- PR #22 merge SHA: `{pr.get('merge_commit_sha')}`",
+            f"- main SHA: `{main_sha}`",
+            f"- PROJECT_STATE milestone: `{state.get('currentMilestone')}`",
+            f"- PROJECT_STATE status: `{state.get('status')}`",
+            f"- lastProductionCommit: `{state.get('lastProductionCommit')}`",
+            '', '### Main commit statuses']
+          if statuses:
+            for s in statuses:
+              lines.append(f"- {s.get('context')}: **{s.get('state')}** — {s.get('description')}")
+          else: lines.append('- none')
+          lines += ['', '### Main check runs']
+          if checks:
+            for c in checks:
+              lines.append(f"- {c.get('name')}: **{c.get('status')} / {c.get('conclusion') or '—'}**")
+          else: lines.append('- none')
+          for heading,runs in [('Main workflow runs',main_runs),('Finalize workflow runs',fin_runs),('Docs finalize workflow runs',docs_runs)]:
+            lines += ['',f'### {heading}']
+            if not runs: lines.append('- none')
+            for r in runs:
+              lines.append(f"- [{r['databaseId']}]({r['url']}) {r['name']} / {r['event']}: **{r['status']} / {r.get('conclusion') or '—'}** (`{r['headSha'][:7]}`)")
+          Path('/tmp/report.md').write_text('\n'.join(lines)+'\n')
+          PY
+          gh pr comment 22 --repo $REPO --body-file /tmp/report.md
