@@ -1,0 +1,34 @@
+name: Export M1.3 Feature Source
+
+on:
+  pull_request:
+    branches:
+      - feat/m1-3-residential-vertical-slice
+    paths:
+      - '.github/workflows/m13-export-feature.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout M1.3 feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/m1-3-residential-vertical-slice
+          fetch-depth: 1
+      - name: Create source archive
+        run: |
+          mkdir -p export
+          zip -rq export/BokuNoJihanki-m13-feature.zip . \
+            -x '.git/*' 'export/*' 'node_modules/*' 'diagnostics/*'
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-feature-source
+          path: export/BokuNoJihanki-m13-feature.zip
+          retention-days: 2
