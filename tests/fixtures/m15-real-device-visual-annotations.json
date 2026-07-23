@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "coordinateSpace": {
+    "name": "authored background world pixels",
+    "widthVariesByArea": true,
+    "height": 720,
+    "notes": "These annotations were made from the day background images, independently of m14AreaData groundY, spawn, and trigger values."
+  },
+  "tolerances": {
+    "groundLineCssPx": 6,
+    "branchCenterCssPx": 32,
+    "playerPanelClearanceCssPx": 12
+  },
+  "alphaThreshold": 0,
+  "playerReview": {
+    "asset": "public/assets/images/m14/player-atlas.webp",
+    "sha256": "b9d1769202ebd3d87a930b6ddbe5d3fbfcb44128a6379b1c0673f96a7b85bb49",
+    "productOwnerApprovalReference": null,
+    "humanAssessment": "BLOCKED",
+    "notes": "The atlas reads as a simple provisional flat figure against painterly backgrounds. Product Owner approval is required before final-quality PASS."
+  },
+  "viewports": [
+    {
+      "id": "desktop-1280x720",
+      "width": 1280,
+      "height": 720,
+      "deviceScaleFactor": 1,
+      "hasTouch": false,
+      "emulationOnly": false
+    },
+    {
+      "id": "phone-landscape-844x390",
+      "width": 844,
+      "height": 390,
+      "deviceScaleFactor": 1,
+      "hasTouch": true,
+      "emulationOnly": true
+    },
+    {
+      "id": "iphone-equivalent-932x430",
+      "width": 932,
+      "height": 430,
+      "deviceScaleFactor": 3,
+      "hasTouch": true,
+      "emulationOnly": true
+    }
+  ],
+  "areas": {
+    "home-street": {
+      "background": "public/assets/images/m14/bg-home-street-day.webp",
+      "sha256": "b2a03e97629aa3bf474c093b286b061ce73085c15a8853a0d3de17d6c43ccae2",
+      "worldWidth": 2400,
+      "walkablePolygons": [
+        [
+          { "x": 0, "y": 562 },
+          { "x": 2400, "y": 562 },
+          { "x": 2400, "y": 622 },
+          { "x": 0, "y": 622 }
+        ]
+      ],
+      "groundLine": [
+        { "x": 0, "y": 590 },
+        { "x": 2400, "y": 590 }
+      ],
+      "annotationNotes": "Horizontal street surface between the house-side edge and foreground curb; contact line placed near the visual center of that surface.",
+      "branches": {}
+    },
+    "life-road": {
+      "background": "public/assets/images/m14/bg-life-road-day.webp",
+      "sha256": "79343f8ce844abf35c663caeba80eee1835a6803a5a9263123f3931da06a9116",
+      "worldWidth": 2680,
+      "walkablePolygons": [
+        [
+          { "x": 0, "y": 600 },
+          { "x": 2680, "y": 600 },
+          { "x": 2680, "y": 660 },
+          { "x": 0, "y": 660 }
+        ]
+      ],
+      "groundLine": [
+        { "x": 0, "y": 634 },
+        { "x": 2680, "y": 634 }
+      ],
+      "annotationNotes": "Horizontal foreground road. The narrow uphill road is independently visible around X=990..1310 and is not used as the horizontal contact line.",
+      "branches": {
+        "up": {
+          "visualPathPresent": true,
+          "entranceCenterX": 1150,
+          "entranceRange": { "minX": 990, "maxX": 1310 },
+          "directionEvidence": "A paved narrow road visibly continues upward between the walls."
+        }
+      }
+    },
+    "upper-vending-lane": {
+      "background": "public/assets/images/m14/bg-upper-vending-lane-day.webp",
+      "sha256": "4907e65f988ecdb27b88a67745fa8782fdf048d6e199b2ab155fb20c5a3185b1",
+      "worldWidth": 2320,
+      "walkablePolygons": [
+        [
+          { "x": 0, "y": 530 },
+          { "x": 2320, "y": 530 },
+          { "x": 2320, "y": 626 },
+          { "x": 0, "y": 626 }
+        ]
+      ],
+      "groundLine": [
+        { "x": 0, "y": 575 },
+        { "x": 2320, "y": 575 }
+      ],
+      "annotationNotes": "Horizontal upper lane between the rear edge and the uninterrupted foreground retaining wall.",
+      "branches": {
+        "down": {
+          "visualPathPresent": false,
+          "entranceCenterX": null,
+          "entranceRange": null,
+          "directionEvidence": "No gap, stairs, slope, road, or other downward exit appears in the background; the foreground retaining wall is continuous."
+        }
+      }
+    }
+  }
+}

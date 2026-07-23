@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "baselineCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+  "subject": {
+    "kind": "procedural Web Audio graph",
+    "staticAudioAssetPresent": false,
+    "runtimeCodec": null,
+    "runtimeCodecReason": "Audio is synthesized in AudioContext; no encoded BGM asset exists.",
+    "sourcePath": "src/game/systems/audioEngine.ts",
+    "sourceSha256": "fc0a1bc837d38badac860d8b84e712d247b7368e83a0779bfb18198804f3a0a7"
+  },
+  "referenceRender": {
+    "purpose": "Deterministic QA proxy for repeatable objective analysis; not a browser output capture.",
+    "area": "home-street",
+    "phase": "morning",
+    "codec": "pcm_f32le",
+    "codecLongName": "PCM 32-bit floating point little-endian",
+    "container": "wav",
+    "sampleRateHz": 48000,
+    "channels": 1,
+    "durationSeconds": 20,
+    "byteLength": 3840044,
+    "sha256": "842e17ac71d5b98e645e41d1896b95b04792586a8aea53cd097b607081eeb741",
+    "decodedPcmSha256": "8a5718b6c3c26e4558a6de447126101bcec186aa15264e282a7286822938c0da",
+    "decodeErrorCount": 0,
+    "samplePeakDbfs": -40.03197232051592,
+    "truePeakDbtp": -39.91743018383154,
+    "truePeakMethod": "ffmpeg aresample to 4x float32; maximum absolute inter-sample value",
+    "truePeakOversampleRateHz": 192000,
+    "clippingSampleCount": 0,
+    "dcOffset": 0.00004253188948572523,
+    "silenceThresholdDbfs": -60,
+    "longSilenceMinimumSeconds": 1,
+    "longSilenceIntervals": [],
+    "loopBoundaryLimitDbfs": -40,
+    "worstLoopBoundary": {
+      "loopSeconds": 2,
+      "boundarySeconds": 16,
+      "adjacentDiscontinuityLinear": 0.00015705334953963757,
+      "adjacentDiscontinuityDbfs": -76.07905593588971
+    },
+    "measuredLoopBoundaryCount": 19
+  },
+  "objectiveThresholds": {
+    "decodeErrorCount": 0,
+    "clippingSampleCount": 0,
+    "truePeakMaximumDbtp": -1,
+    "maximumAbsoluteDcOffset": 0.01,
+    "longSilenceIntervalCount": 0,
+    "loopBoundaryMaximumDbfs": -40
+  },
+  "verdict": {
+    "deterministicReferenceObjective": "PASS",
+    "browserRuntimeObjective": "PASS",
+    "humanListening": "NOT_VERIFIED",
+    "release": "BLOCKED",
+    "blockingReasons": [
+      "Objective values cannot establish that the result sounds like music.",
+      "The Product Owner report that the BGM sounds like noise remains unresolved.",
+      "Product Owner listening confirmation is required."
+    ]
+  },
+  "evidenceArtifacts": {
+    "waveform": {
+      "path": "docs/evidence/M1_5_BASELINE_AUDIO_WAVEFORM.png",
+      "sha256": "5c73c6e9e4a661a87391acf56cb39d233ea9ec50d20d534e1ab0343284d3d6d0",
+      "source": "Chromium QA master-output capture"
+    },
+    "spectrogram": {
+      "path": "docs/evidence/M1_5_BASELINE_AUDIO_SPECTROGRAM.png",
+      "sha256": "1866fae7063cefc3ad9f1fd6c89373bc434c8c07c924786f6f06886c57521ee0",
+      "source": "Chromium QA master-output capture"
+    }
+  },
+  "browserCapture": {
+    "captureKind": "QA-only browser master-output tap",
+    "captureMethod": "AudioNode.connect was observed before application start and the master output was additionally connected to a MediaStreamAudioDestination; MediaRecorder encoded the QA branch only.",
+    "applicationSourceChanged": false,
+    "expectedCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+    "area": "home-street",
+    "phase": "morning",
+    "browser": "Playwright Chromium 141.0.7390.37",
+    "pageErrors": 0,
+    "failedRequests": 0,
+    "observedBuildCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+    "codec": "opus",
+    "container": "matroska,webm",
+    "sampleRateHz": 48000,
+    "channels": 2,
+    "durationSeconds": 11.94,
+    "durationMethod": "decoded float32 PCM bytes / (4 bytes × channels × sample rate)",
+    "encodedByteLength": 192571,
+    "encodedSha256": "03d060286ac9ef013a2cc1384e435486fc62418b8a6715b3dafae615b8cf53fa",
+    "decodedPcmByteLength": 4584960,
+    "decodedPcmSha256": "45015626bf36cb1780aac450f22415e1de9c39d17772935525e8b5d0925775fa",
+    "decodeErrorCount": 0,
+    "samplePeakDbfs": -39.80773225636982,
+    "clippingSampleCount": 0,
+    "dcOffsetByChannel": [
+      6.926514583182328e-7,
+      6.919688867318322e-7
+    ],
+    "longSilenceIntervals": [],
+    "maxAdjacentJump": {
+      "linear": 0.004119675140827894,
+      "dbfs": -47.70274058277587,
+      "atSeconds": 0.007229166666666667
+    },
+    "truePeakDbtp": -39.80576153371831,
+    "truePeakMethod": "ffmpeg decode, 4x resample to 192 kHz float32, maximum absolute inter-sample value",
+    "truePeakOversampleRateHz": 192000,
+    "silenceThresholdDbfs": -60,
+    "longSilenceMinimumSeconds": 1,
+    "integratedLoudnessLufs": -49.6,
+    "loudnessRangeLu": 0.1,
+    "captureArtifactCommitted": false,
+    "captureArtifactPolicy": "The encoded recording is temporary; only its measurements, SHA-256 and derived waveform/spectrogram are committed."
+  },
+  "regenerationContract": {
+    "version": 1,
+    "generatorPath": "tests/helpers/m15-browser-audio-capture.mjs",
+    "generatorSha256": "6e6fcfdbf2d845b3e52321a710b1fdc289188081b36db7294ed3298c2db19457",
+    "expectedCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+    "sourceVerifiedAgainstExpectedCommit": true,
+    "proxyNamespace": "M1_5_PROXY_AUDIO_*",
+    "canonicalNamespace": "M1_5_BASELINE_AUDIO_*",
+    "rawCaptureCommitted": false,
+    "publication": "staging validation first; browser images published before digest-binding JSON"
+  }
+}
