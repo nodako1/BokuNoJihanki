@@ -89,6 +89,7 @@ export interface M14TransitionState {
   readonly phase: M14TransitionPhase;
   readonly currentAreaId: M14AreaId;
   readonly currentSpawnId: string;
+  readonly sourceSpawnId: string | null;
   readonly pendingTransition: M14ResolvedTransition | null;
   readonly lastTransition: M14ResolvedTransition | null;
   readonly context: Readonly<M14TransitionContext>;

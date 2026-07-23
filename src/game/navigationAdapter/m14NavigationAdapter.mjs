@@ -570,13 +570,18 @@ function reconstructCoreState(state) {
       M14_CORE_AREA_GRAPH,
       pending.sourceAreaId,
     );
-    const sourceSpawn = state.currentAreaId === pending.sourceAreaId
+    const sourceSpawnId = state.sourceSpawnId ?? (
+      state.currentAreaId === pending.sourceAreaId
+        ? state.currentSpawnId
+        : sourceArea?.spawnPoints[0]?.id
+    );
+    const sourceSpawn = sourceSpawnId
       ? getCoreSpawnPoint(
         M14_CORE_AREA_GRAPH,
         pending.sourceAreaId,
-        state.currentSpawnId,
+        sourceSpawnId,
       )
-      : sourceArea?.spawnPoints[0];
+      : undefined;
     if (sourceArea && sourceSpawn) {
       let reconstructed = createNavigationState(
         sourceArea.id,
@@ -639,6 +644,7 @@ export function createM14TransitionState(
     phase: 'idle',
     currentAreaId: areaId,
     currentSpawnId: spawnId,
+    sourceSpawnId: null,
     pendingTransition: null,
     lastTransition: null,
     context: Object.freeze({ ...context }),
@@ -662,6 +668,7 @@ export function reduceM14Transition(state, action) {
       phase: 'idle',
       currentAreaId: coreState.currentAreaId,
       currentSpawnId: coreState.currentSpawnId,
+      sourceSpawnId: null,
       pendingTransition: null,
     }, coreState);
   }
@@ -687,6 +694,7 @@ export function reduceM14Transition(state, action) {
     return freezeTransitionState({
       ...state,
       phase: 'fading-out',
+      sourceSpawnId: state.currentSpawnId,
       pendingTransition: transition,
     }, coreState);
   }
@@ -719,6 +727,7 @@ export function reduceM14Transition(state, action) {
         phase: 'idle',
         currentAreaId: coreState.currentAreaId,
         currentSpawnId: coreState.currentSpawnId,
+        sourceSpawnId: null,
         pendingTransition: null,
       }, coreState);
     }
@@ -742,6 +751,7 @@ export function reduceM14Transition(state, action) {
       phase: 'idle',
       currentAreaId: coreState.currentAreaId,
       currentSpawnId: coreState.currentSpawnId,
+      sourceSpawnId: null,
       pendingTransition: null,
       lastTransition: state.lastTransition ?? state.pendingTransition,
     }, coreState);

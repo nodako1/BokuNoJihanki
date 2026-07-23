@@ -393,6 +393,33 @@ test('cloned transition state reconstructs safely and rejects a duplicate start'
   assert.equal(restored.lastTransition?.exitId, transition.exitId);
 });
 
+test('cloned fade-in reset restores the exact non-initial source spawn', () => {
+  const transition = resolveAreaExit('life-road', 'up', 1300);
+  assert.ok(transition);
+
+  let state = createM14TransitionState('life-road', 'from-upper', {
+    timeMinutes: 995,
+    timePhase: 'evening',
+    audioEnabled: false,
+  });
+  state = reduceM14Transition(state, { type: 'start', transition });
+  assert.equal(state.sourceSpawnId, 'from-upper');
+  state = reduceM14Transition(state, 'fade-out-complete');
+  state = reduceM14Transition(state, 'scene-ready');
+  assert.equal(state.phase, 'fading-in');
+  assert.equal(state.currentAreaId, 'upper-vending-lane');
+  assert.equal(state.currentSpawnId, 'from-life');
+  assert.equal(state.sourceSpawnId, 'from-upper');
+
+  const reset = reduceM14Transition(structuredClone(state), 'reset');
+  assert.equal(reset.phase, 'idle');
+  assert.equal(reset.currentAreaId, 'life-road');
+  assert.equal(reset.currentSpawnId, 'from-upper');
+  assert.equal(reset.sourceSpawnId, null);
+  assert.equal(reset.pendingTransition, null);
+  assert.deepEqual(reset.context, state.context);
+});
+
 test('horizontal camera look-ahead follows movement without exposing background', () => {
   const centered = getM14CameraScrollX('life-road', 1400, 0, 1280);
   const lookingRight = getM14CameraScrollX('life-road', 1400, 175, 1280);
