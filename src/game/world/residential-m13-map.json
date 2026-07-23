@@ -1,0 +1,1275 @@
+{
+  "compressionlevel": -1,
+  "height": 30,
+  "infinite": false,
+  "layers": [
+    {
+      "id": 1,
+      "name": "background-far",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [],
+      "properties": [
+        {
+          "name": "parallaxX",
+          "type": "float",
+          "value": 0.98
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "background-main",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 32,
+          "name": "home-front",
+          "type": "background-section",
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "home-front"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "bg-home-front"
+            }
+          ]
+        },
+        {
+          "id": 33,
+          "name": "life-road",
+          "type": "background-section",
+          "x": 1280,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "life-road"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "bg-life-road"
+            }
+          ]
+        },
+        {
+          "id": 34,
+          "name": "alley-corner",
+          "type": "background-section",
+          "x": 2560,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "alley-corner"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "bg-alley-corner"
+            }
+          ]
+        },
+        {
+          "id": 35,
+          "name": "vending-crossing",
+          "type": "background-section",
+          "x": 3840,
+          "y": 0,
+          "width": 1280,
+          "height": 720,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "vending-crossing"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "bg-vending-crossing"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ground",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 2,
+          "name": "asphalt-home-front",
+          "type": "surface",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 0,
+              "y": 382
+            },
+            {
+              "x": 1280,
+              "y": 358
+            },
+            {
+              "x": 1280,
+              "y": 652
+            },
+            {
+              "x": 0,
+              "y": 675
+            }
+          ],
+          "properties": [
+            {
+              "name": "surface",
+              "type": "string",
+              "value": "asphalt"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "name": "asphalt-life-road",
+          "type": "surface",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 1280,
+              "y": 365
+            },
+            {
+              "x": 2560,
+              "y": 345
+            },
+            {
+              "x": 2560,
+              "y": 646
+            },
+            {
+              "x": 1280,
+              "y": 655
+            }
+          ],
+          "properties": [
+            {
+              "name": "surface",
+              "type": "string",
+              "value": "asphalt"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "name": "asphalt-alley-corner",
+          "type": "surface",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 2560,
+              "y": 382
+            },
+            {
+              "x": 3840,
+              "y": 398
+            },
+            {
+              "x": 3840,
+              "y": 655
+            },
+            {
+              "x": 2560,
+              "y": 646
+            }
+          ],
+          "properties": [
+            {
+              "name": "surface",
+              "type": "string",
+              "value": "asphalt"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "name": "asphalt-vending-crossing",
+          "type": "surface",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 3840,
+              "y": 340
+            },
+            {
+              "x": 5120,
+              "y": 350
+            },
+            {
+              "x": 5120,
+              "y": 645
+            },
+            {
+              "x": 3840,
+              "y": 625
+            }
+          ],
+          "properties": [
+            {
+              "name": "surface",
+              "type": "string",
+              "value": "asphalt"
+            }
+          ]
+        },
+        {
+          "id": 10,
+          "name": "surface-life-alley",
+          "type": "surface",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 1960,
+              "y": 350
+            },
+            {
+              "x": 2075,
+              "y": 348
+            },
+            {
+              "x": 2140,
+              "y": 120
+            },
+            {
+              "x": 1975,
+              "y": 120
+            }
+          ],
+          "properties": [
+            {
+              "name": "surface",
+              "type": "string",
+              "value": "dirt"
+            }
+          ]
+        },
+        {
+          "id": 12,
+          "name": "surface-corner-lane",
+          "type": "surface",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 3120,
+              "y": 400
+            },
+            {
+              "x": 3280,
+              "y": 405
+            },
+            {
+              "x": 3430,
+              "y": 40
+            },
+            {
+              "x": 3210,
+              "y": 40
+            }
+          ],
+          "properties": [
+            {
+              "name": "surface",
+              "type": "string",
+              "value": "dirt"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "walkable",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 1,
+          "name": "walkable-home-front",
+          "type": "walkable",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 0,
+              "y": 382
+            },
+            {
+              "x": 1280,
+              "y": 358
+            },
+            {
+              "x": 1280,
+              "y": 652
+            },
+            {
+              "x": 0,
+              "y": 675
+            }
+          ],
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "home-front"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "name": "walkable-life-road",
+          "type": "walkable",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 1280,
+              "y": 365
+            },
+            {
+              "x": 2560,
+              "y": 345
+            },
+            {
+              "x": 2560,
+              "y": 646
+            },
+            {
+              "x": 1280,
+              "y": 655
+            }
+          ],
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "life-road"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "name": "walkable-alley-corner",
+          "type": "walkable",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 2560,
+              "y": 382
+            },
+            {
+              "x": 3840,
+              "y": 398
+            },
+            {
+              "x": 3840,
+              "y": 655
+            },
+            {
+              "x": 2560,
+              "y": 646
+            }
+          ],
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "alley-corner"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "name": "walkable-vending-crossing",
+          "type": "walkable",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 3840,
+              "y": 340
+            },
+            {
+              "x": 5120,
+              "y": 350
+            },
+            {
+              "x": 5120,
+              "y": 645
+            },
+            {
+              "x": 3840,
+              "y": 625
+            }
+          ],
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "vending-crossing"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "name": "life-alley",
+          "type": "walkable",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 1960,
+              "y": 350
+            },
+            {
+              "x": 2075,
+              "y": 348
+            },
+            {
+              "x": 2140,
+              "y": 120
+            },
+            {
+              "x": 1975,
+              "y": 120
+            }
+          ],
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "life-alley"
+            }
+          ]
+        },
+        {
+          "id": 11,
+          "name": "corner-lane",
+          "type": "walkable",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 3120,
+              "y": 400
+            },
+            {
+              "x": 3280,
+              "y": 405
+            },
+            {
+              "x": 3430,
+              "y": 40
+            },
+            {
+              "x": 3210,
+              "y": 40
+            }
+          ],
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "corner-lane"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "obstacles",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 100,
+          "name": "pole-home",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 510,
+              "y": 410
+            },
+            {
+              "x": 544,
+              "y": 410
+            },
+            {
+              "x": 544,
+              "y": 444
+            },
+            {
+              "x": 510,
+              "y": 444
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "pole"
+            }
+          ]
+        },
+        {
+          "id": 101,
+          "name": "pole-life",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 1410,
+              "y": 612
+            },
+            {
+              "x": 1446,
+              "y": 612
+            },
+            {
+              "x": 1446,
+              "y": 650
+            },
+            {
+              "x": 1410,
+              "y": 650
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "pole"
+            }
+          ]
+        },
+        {
+          "id": 102,
+          "name": "pole-alley",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 2735,
+              "y": 612
+            },
+            {
+              "x": 2771,
+              "y": 612
+            },
+            {
+              "x": 2771,
+              "y": 650
+            },
+            {
+              "x": 2735,
+              "y": 650
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "pole"
+            }
+          ]
+        },
+        {
+          "id": 103,
+          "name": "pole-cross",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 4015,
+              "y": 612
+            },
+            {
+              "x": 4051,
+              "y": 612
+            },
+            {
+              "x": 4051,
+              "y": 650
+            },
+            {
+              "x": 4015,
+              "y": 650
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "pole"
+            }
+          ]
+        },
+        {
+          "id": 104,
+          "name": "vending-cross",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 4860,
+              "y": 330
+            },
+            {
+              "x": 4955,
+              "y": 330
+            },
+            {
+              "x": 4955,
+              "y": 375
+            },
+            {
+              "x": 4860,
+              "y": 375
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "vending"
+            }
+          ]
+        },
+        {
+          "id": 105,
+          "name": "park-sign",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 5000,
+              "y": 500
+            },
+            {
+              "x": 5042,
+              "y": 500
+            },
+            {
+              "x": 5042,
+              "y": 540
+            },
+            {
+              "x": 5000,
+              "y": 540
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "sign"
+            }
+          ]
+        },
+        {
+          "id": 106,
+          "name": "park-barrier",
+          "type": "obstacle",
+          "x": 0,
+          "y": 0,
+          "polygon": [
+            {
+              "x": 4930,
+              "y": 558
+            },
+            {
+              "x": 5110,
+              "y": 558
+            },
+            {
+              "x": 5110,
+              "y": 596
+            },
+            {
+              "x": 4930,
+              "y": 596
+            }
+          ],
+          "properties": [
+            {
+              "name": "kind",
+              "type": "string",
+              "value": "barrier"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "occlusion",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 20,
+          "name": "home-bottom-left",
+          "type": "occlusion",
+          "x": 0,
+          "y": 520,
+          "width": 330,
+          "height": 200,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "home-front"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-home-bottom-left"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 680
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "name": "home-bottom-center",
+          "type": "occlusion",
+          "x": 300,
+          "y": 565,
+          "width": 690,
+          "height": 155,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "home-front"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-home-bottom-center"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 690
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "name": "home-bottom-right",
+          "type": "occlusion",
+          "x": 1000,
+          "y": 510,
+          "width": 280,
+          "height": 210,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "home-front"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-home-bottom-right"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 675
+            }
+          ]
+        },
+        {
+          "id": 23,
+          "name": "life-bottom-left",
+          "type": "occlusion",
+          "x": 1280,
+          "y": 520,
+          "width": 300,
+          "height": 200,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "life-road"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-life-bottom-left"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 675
+            }
+          ]
+        },
+        {
+          "id": 24,
+          "name": "life-bottom-center",
+          "type": "occlusion",
+          "x": 1540,
+          "y": 560,
+          "width": 730,
+          "height": 160,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "life-road"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-life-bottom-center"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 690
+            }
+          ]
+        },
+        {
+          "id": 25,
+          "name": "life-bottom-right",
+          "type": "occlusion",
+          "x": 2240,
+          "y": 510,
+          "width": 320,
+          "height": 210,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "life-road"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-life-bottom-right"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 675
+            }
+          ]
+        },
+        {
+          "id": 26,
+          "name": "alley-bottom-left",
+          "type": "occlusion",
+          "x": 2560,
+          "y": 510,
+          "width": 320,
+          "height": 210,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "alley-corner"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-alley-bottom-left"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 670
+            }
+          ]
+        },
+        {
+          "id": 27,
+          "name": "alley-bottom-center",
+          "type": "occlusion",
+          "x": 2860,
+          "y": 565,
+          "width": 700,
+          "height": 155,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "alley-corner"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-alley-bottom-center"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 690
+            }
+          ]
+        },
+        {
+          "id": 28,
+          "name": "alley-bottom-right",
+          "type": "occlusion",
+          "x": 3540,
+          "y": 525,
+          "width": 300,
+          "height": 195,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "alley-corner"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-alley-bottom-right"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 680
+            }
+          ]
+        },
+        {
+          "id": 29,
+          "name": "cross-bottom-left",
+          "type": "occlusion",
+          "x": 3840,
+          "y": 515,
+          "width": 320,
+          "height": 205,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "vending-crossing"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-cross-bottom-left"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 672
+            }
+          ]
+        },
+        {
+          "id": 30,
+          "name": "cross-bottom-center",
+          "type": "occlusion",
+          "x": 4130,
+          "y": 560,
+          "width": 710,
+          "height": 160,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "vending-crossing"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-cross-bottom-center"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 690
+            }
+          ]
+        },
+        {
+          "id": 31,
+          "name": "cross-bottom-right",
+          "type": "occlusion",
+          "x": 4830,
+          "y": 510,
+          "width": 290,
+          "height": 210,
+          "properties": [
+            {
+              "name": "section",
+              "type": "string",
+              "value": "vending-crossing"
+            },
+            {
+              "name": "assetBase",
+              "type": "string",
+              "value": "occlusion-cross-bottom-right"
+            },
+            {
+              "name": "footY",
+              "type": "float",
+              "value": 675
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "interactions",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 36,
+          "name": "vending-residential-01",
+          "type": "vending",
+          "x": 4840,
+          "y": 260,
+          "width": 180,
+          "height": 145,
+          "properties": [
+            {
+              "name": "enabled",
+              "type": "bool",
+              "value": false
+            },
+            {
+              "name": "futureMilestone",
+              "type": "string",
+              "value": "M2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "exits",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 37,
+          "name": "park-exit",
+          "type": "exit",
+          "x": 5010,
+          "y": 360,
+          "width": 110,
+          "height": 285,
+          "properties": [
+            {
+              "name": "targetScene",
+              "type": "string",
+              "value": "ParkScene"
+            },
+            {
+              "name": "enabled",
+              "type": "bool",
+              "value": false
+            },
+            {
+              "name": "label",
+              "type": "string",
+              "value": "公園方面"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "spawn-points",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 38,
+          "name": "home-front",
+          "type": "spawn",
+          "x": 345,
+          "y": 535,
+          "point": true,
+          "properties": [
+            {
+              "name": "facing",
+              "type": "string",
+              "value": "right"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "camera-bounds",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 39,
+          "name": "residential-camera",
+          "type": "camera-bounds",
+          "x": 0,
+          "y": 0,
+          "width": 5120,
+          "height": 720
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "debug-labels",
+      "type": "objectgroup",
+      "visible": true,
+      "opacity": 1,
+      "objects": [
+        {
+          "id": 40,
+          "name": "home-front",
+          "type": "debug-label",
+          "x": 60,
+          "y": 330,
+          "point": true,
+          "properties": [
+            {
+              "name": "label",
+              "type": "string",
+              "value": "主人公の家の前"
+            }
+          ]
+        },
+        {
+          "id": 41,
+          "name": "life-road",
+          "type": "debug-label",
+          "x": 1340,
+          "y": 330,
+          "point": true,
+          "properties": [
+            {
+              "name": "label",
+              "type": "string",
+              "value": "住宅が並ぶ生活道路"
+            }
+          ]
+        },
+        {
+          "id": 42,
+          "name": "alley-corner",
+          "type": "debug-label",
+          "x": 2620,
+          "y": 330,
+          "point": true,
+          "properties": [
+            {
+              "name": "label",
+              "type": "string",
+              "value": "細い路地と曲がり角"
+            }
+          ]
+        },
+        {
+          "id": 43,
+          "name": "vending-crossing",
+          "type": "debug-label",
+          "x": 3900,
+          "y": 330,
+          "point": true,
+          "properties": [
+            {
+              "name": "label",
+              "type": "string",
+              "value": "自販機のある小交差点"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nextlayerid": 12,
+  "nextobjectid": 44,
+  "orientation": "orthogonal",
+  "renderorder": "right-down",
+  "tiledversion": "1.11.0",
+  "tileheight": 24,
+  "tilesets": [],
+  "tilewidth": 32,
+  "type": "map",
+  "version": "1.10",
+  "width": 160,
+  "properties": [
+    {
+      "name": "worldWidth",
+      "type": "int",
+      "value": 5120
+    },
+    {
+      "name": "worldHeight",
+      "type": "int",
+      "value": 720
+    },
+    {
+      "name": "milestone",
+      "type": "string",
+      "value": "M1.3"
+    }
+  ]
+}

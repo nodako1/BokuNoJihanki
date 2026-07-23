@@ -1,33 +1,32 @@
 # アーキテクチャ
 
-## 境界
+## 構成
 
-- React: タイトル、時刻表示、開発HUD、仮想スティック、横画面案内
-- Phaser: マップ、主人公、カメラ、描画、ストリーミング
-- Web Audio API: BGM、セミ、風、鳥、車、足音
-- `gameBridge.ts`: ReactとPhaser間のイベントおよび仮想入力状態
+Reactはタイトル、HUD、仮想スティック、画面方向ガードを担当し、Phaserは住宅街Scene、主人公、カメラ、背景、walkable、衝突、時間帯を担当する。`gameBridge.ts`で疎結合に接続する。
 
-Reactの再描画を毎フレーム発生させず、PhaserからHUDスナップショットを約180msごとに通知します。
+## M1.3住宅街Scene
 
-## マップ
+```text
+ResidentialScene
+  ├─ InputSystem
+  ├─ walkableMovement.mjs
+  ├─ ResidentialWorld
+  │    ├─ 4区間×4時間帯背景
+  │    ├─ 分割前景オクルージョン
+  │    └─ デバッグ描画
+  ├─ Texture Atlas Player
+  ├─ AtmosphereLayer
+  └─ AreaTransitionSystem
+```
 
-論理解像度1280×720、ワールド5120×720。横方向4チャンクで構成します。
+### マップ
 
-1. `residential-west`
-2. `residential-east`
-3. `park-west`
-4. `park-east`
+`residential-m13-map.json`はTiled互換JSON。描画アセットとゲームデータを分離し、walkable、obstacles、occlusion、interactions、exits、spawn、camera-boundsを編集可能にする。
 
-現在、隣接、進行方向2つ先を必要に応じて読み込み、不要なチャンクのGameObject、影、光、衝突矩形を破棄します。テクスチャはM1開始時に共通ロードし、チャンク切替時に通信待ちを発生させません。
+### 移動
 
-## 衝突
+足元円がwalkable内かつobstacle外にあることを毎サブステップ検査する。X/Y軸の部分移動を試して壁沿いスライドを実現する。家や私有地を個別矩形で塞ぐのではなく、最初からwalkable外にする。
 
-Phaser物理エンジンへ依存せず、足元のAABBをX軸、Y軸の順で解決します。見た目全体ではなく、建物の基礎、木の幹、設備の接地点だけを障害物にします。純粋関数は`worldMath.mjs`へ分離しNodeテストから直接利用します。
+### Scene分割
 
-## 2.5D
-
-すべての立体オブジェクトは画像の中心ではなく接地点`footY`を持ち、`footY * 10 + offset`をdepthとします。主人公のdepthは現在Yから毎フレーム更新します。
-
-## 時間帯
-
-`timeOfDay.ts`のキーフレームを補間し、`AtmosphereLayer`と`MapStreamer`へ同じAtmosphere値を渡します。背景とマップを別々に切り替えず、同一時計で空、地面、建物、影、光、音を同期します。
+今後の公園、駅前、商店街、山、海は専用Sceneと専用背景を持つ。AreaTransitionSystemがフェードアウト、読み込み、地名表示、フェードインを担当する。無理なシームレス接続は行わない。

@@ -1,23 +1,14 @@
-# 開発ルール Ver.2.3
+# 開発ルール Ver.2.4
 
-## 標準フロー
-
-仕様確認 → Featureブランチ → 実装・素材生成 → `npm ci` → `npm run check` → PR Browser Smoke → 実画面と基準画像の比較 → mainへマージ → Vercel Production → Production Smoke → Production Browser Smoke → 文書確定。
-
-Previewは通常確認に使わない。ユーザーの手動マージを前提にしない。
-
-## ビジュアル変更
-
-- 説明資料やコンセプト画像を実装済み画面として報告しない
-- ProductionまたはPR本番ビルドのスクリーンショットを証跡にする
-- 朝・昼・夕方・夜、主要エリア、主人公移動後を撮影する
-- 基準画像との差を画材、パース、密度、光、空気感、操作可能性で評価する
-- UI付き一枚絵を貼って完了にしない。背景、前景、実プレイヤー、衝突を分離する
-
-## mainへ入れてはいけない状態
-
-起動不能、操作不能、主要導線不能、無限ロード、画面外落下、重大なブラウザー例外、型・Lint・テスト・Build失敗、実ブラウザーでFPS・座標・チャンクが初期化されない状態。
-
-## 記録
-
-各マイルストーンでREADME、PROJECT_STATE、仕様、ロードマップ、アート来歴、テスト証跡を更新する。Production Browser Smoke前に`completed-production-verified`を記録しない。
+1. README、PROJECT_STATE、仕様、main、PR、Actions、Productionを照合する。
+2. Featureブランチで実装し、Vercel Previewは通常確認に使わない。
+3. `npm ci`と`npm run check`を必須とする。
+4. マップ背景とwalkable／obstacle／occlusionを同時に設計する。
+5. 家、庭、屋根、塀、柵はwalkable外に置き、大雑把な矩形衝突だけに依存しない。
+6. キャラクター移動はTexture Atlasのフレーム式アニメーションを必須とする。
+7. 入力中でも実移動していなければ歩行アニメーションと足音を停止する。
+8. シームレス移動より各エリアの完成度を優先し、必要ならフェード・ロードを使用する。
+9. PR Browser Smokeで方向別歩行、衝突、全区間、時間帯を実操作する。
+10. mainマージ後、Vercel、Production Smoke、Production Browser Smoke、Visual Evidenceを確認する。
+11. モックアップを完成証跡として使わない。
+12. 機能・ルール変更時はREADME、PROJECT_STATE、仕様、ロードマップを同時更新する。

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ExplorationScene } from './scenes/ExplorationScene';
+import { ResidentialScene } from './scenes/ResidentialScene';
 
 export function createGame(parent: HTMLElement): Phaser.Game {
   const config: Phaser.Types.Core.GameConfig = {
@@ -28,7 +28,7 @@ export function createGame(parent: HTMLElement): Phaser.Game {
     input: {
       activePointers: 4,
     },
-    scene: [ExplorationScene],
+    scene: [ResidentialScene],
   };
 
   return new Phaser.Game(config);
