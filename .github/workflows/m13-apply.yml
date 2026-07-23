@@ -1,5 +1,5 @@
 name: Apply and Verify M1.3 Residential Vertical Slice
-# refresh: typescript-declarations
+# refresh: phaser-vector2
 
 on:
   push:
@@ -81,7 +81,7 @@ jobs:
           text = text.replace('constructor(private readonly scene: Phaser.Scene) {', 'constructor(scene: Phaser.Scene) {')
           text = text.replace(
               'const points = polygon.map((point) => new Phaser.Geom.Point(point.x, point.y));',
-              'const points = polygon.map((point) => ({ x: point.x, y: point.y }));',
+              'const points = polygon.map((point) => new Phaser.Math.Vector2(point.x, point.y));',
           )
           path.write_text(text, encoding='utf-8')
           PY
