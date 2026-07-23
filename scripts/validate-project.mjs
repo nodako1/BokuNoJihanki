@@ -21,7 +21,85 @@ const M14_SCREENSHOTS = [
   '15-night.png',
 ];
 
-const requiredFiles = [
+const M14_NAVIGATION_CORE_FILES = [
+  'src/game/navigation/areaGraph.mjs',
+  'src/game/navigation/areaGraph.d.mts',
+  'src/game/navigation/areaGraph.d.ts',
+  'src/game/navigation/areaTransitionState.mjs',
+  'src/game/navigation/areaTransitionState.d.mts',
+  'src/game/navigation/areaTransitionState.d.ts',
+  'src/game/navigation/horizontalMovement.mjs',
+  'src/game/navigation/horizontalMovement.d.mts',
+  'src/game/navigation/horizontalMovement.d.ts',
+  'src/game/navigation/navigationState.mjs',
+  'src/game/navigation/navigationState.d.mts',
+  'src/game/navigation/navigationState.d.ts',
+  'src/game/navigation/navigationValidation.mjs',
+  'src/game/navigation/navigationValidation.d.mts',
+  'src/game/navigation/navigationValidation.d.ts',
+  'tests/m14-area-graph.test.mjs',
+  'tests/m14-area-transition.test.mjs',
+  'tests/m14-horizontal-movement.test.mjs',
+  'tests/m14-navigation-state.test.mjs',
+  'docs/specs/M1_4_NAVIGATION_CORE.md',
+];
+
+const M2_ECONOMY_CORE_FILES = [
+  'src/game/economy/economyCore.mjs',
+  'src/game/economy/economyCore.d.mts',
+  'src/game/economy/economyCore.d.ts',
+  'src/game/economy/rng.mjs',
+  'src/game/economy/rng.d.mts',
+  'src/game/economy/rng.d.ts',
+  'src/game/economy/saveData.mjs',
+  'src/game/economy/saveData.d.mts',
+  'src/game/economy/saveData.d.ts',
+  'tests/economy-core.test.mjs',
+  'tests/economy-save.test.mjs',
+  'docs/specs/M2_VENDING_ECONOMY.md',
+];
+
+const M13_PRESERVED_FILES = [
+  'src/game/scenes/ResidentialScene.ts',
+  'src/game/systems/AreaTransitionSystem.ts',
+  'src/game/systems/areaTransitionState.mjs',
+  'src/game/systems/areaTransitionState.d.mts',
+  'src/game/systems/areaTransitionState.d.ts',
+  'src/game/systems/walkableMovement.mjs',
+  'src/game/systems/walkableMovement.d.mts',
+  'src/game/systems/walkableMovement.d.ts',
+  'src/game/world/m13Map.ts',
+  'src/game/world/residential-m13-map.json',
+  'tests/area-transition.test.mjs',
+  'tests/m13-map.test.mjs',
+  'tests/walkable-movement.test.mjs',
+  'docs/specs/M1_3_RESIDENTIAL_VERTICAL_SLICE.md',
+];
+
+const FINAL_RELEASE_FILES = [
+  '.vercel-production-retry',
+  '.github/workflows/quality.yml',
+  '.github/workflows/browser-smoke.yml',
+  '.github/workflows/production-smoke.yml',
+  'PROJECT_STATE.json',
+  'README.md',
+  'docs/ARCHITECTURE.md',
+  'docs/ART_DIRECTION.md',
+  'docs/ASSET_PROVENANCE.md',
+  'docs/AUDIO_GUIDE.md',
+  'docs/DEPLOYMENT.md',
+  'docs/DEVELOPMENT_RULES.md',
+  'docs/ROADMAP.md',
+  'docs/TESTING.md',
+  'docs/collab/CHATGPT_STATUS.md',
+  'docs/collab/DISCUSSION.md',
+  'docs/evidence/M1_4_PRODUCTION_EVIDENCE.md',
+  'docs/specs/M1.md',
+  'docs/specs/M1_4_SIDE_SCROLL_TOWN.md',
+  'docs/specs/M1_5_POLISH.md',
+];
+
+const requiredFiles = [...new Set([
   'package.json',
   'package-lock.json',
   'PROJECT_STATE.json',
@@ -70,7 +148,11 @@ const requiredFiles = [
   'docs/ROADMAP.md',
   'docs/TESTING.md',
   'docs/DEPLOYMENT.md',
-];
+  ...M14_NAVIGATION_CORE_FILES,
+  ...M2_ECONOMY_CORE_FILES,
+  ...M13_PRESERVED_FILES,
+  ...FINAL_RELEASE_FILES,
+])];
 
 for (const area of M14_AREAS) {
   requiredFiles.push(`public/assets/images/m14/fg-${area}.webp`);
@@ -117,16 +199,25 @@ const [
   m13Manifest,
   m13Atlas,
   m13Map,
+  app,
   createGame,
   sideScrollScene,
   areaWorld,
   areaData,
   navigationAdapter,
+  navigationAreaGraph,
+  navigationTransitionState,
+  navigationMovement,
+  navigationState,
+  navigationValidation,
+  economyCore,
+  economySave,
   gameBridge,
   areaArrowButton,
   gameHud,
   developerHud,
   browserSmoke,
+  browserWorkflow,
   productionSmoke,
 ] = await Promise.all([
   readJson('package.json'),
@@ -139,16 +230,25 @@ const [
   readJson('public/assets/images/m13/asset-manifest.json'),
   readJson('public/assets/images/m13/player-atlas.json'),
   readJson('src/game/world/residential-m13-map.json'),
+  readText('src/App.tsx'),
   readText('src/game/createGame.ts'),
   readText('src/game/scenes/SideScrollTownScene.ts'),
   readText('src/game/areas/M14AreaWorld.ts'),
   readText('src/game/areas/m14AreaData.mjs'),
   readText('src/game/navigationAdapter/m14NavigationAdapter.mjs'),
+  readText('src/game/navigation/areaGraph.mjs'),
+  readText('src/game/navigation/areaTransitionState.mjs'),
+  readText('src/game/navigation/horizontalMovement.mjs'),
+  readText('src/game/navigation/navigationState.mjs'),
+  readText('src/game/navigation/navigationValidation.mjs'),
+  readText('src/game/economy/economyCore.mjs'),
+  readText('src/game/economy/saveData.mjs'),
   readText('src/game/gameBridge.ts'),
   readText('src/ui/AreaArrowButton.tsx'),
   readText('src/ui/GameHud.tsx'),
   readText('src/ui/DeveloperHud.tsx'),
   readText('scripts/browser-smoke.mjs'),
+  readText('.github/workflows/browser-smoke.yml'),
   readText('.github/workflows/production-smoke.yml'),
 ]);
 
@@ -172,6 +272,83 @@ if (projectState.nextMilestone !== 'M2') {
 }
 if (projectState.developmentRulesVersion !== '2.4') {
   failures.push('PROJECT_STATE developmentRulesVersion must remain 2.4.');
+}
+if (projectState.status !== 'completed-production-verified') {
+  failures.push('PROJECT_STATE must mark M1.4 as completed-production-verified.');
+}
+if (
+  projectState.lastProductionCommit
+  !== '147f770a4b73077c4e5dc0523839b3fefb789db4'
+) {
+  failures.push('PROJECT_STATE lastProductionCommit must match the verified M1.4 implementation.');
+}
+if ((projectState.inProgress?.length ?? 0) !== 0) {
+  failures.push('PROJECT_STATE must not leave M1.4 release work in progress.');
+}
+for (const item of [
+  'm1.3-code-and-assets-preserved',
+  'm1.4-navigation-core-merged',
+  'm1.4-production-verification',
+  'm1.4-2d-official-m1-basis',
+]) {
+  if (!projectState.completed?.includes(item)) {
+    failures.push(`PROJECT_STATE completed list is missing ${item}.`);
+  }
+}
+if ((projectState.paused?.length ?? 0) !== 0) {
+  failures.push('PROJECT_STATE must not leave work paused after M1.4 verification.');
+}
+if (!projectState.notStarted?.includes('m2-vending-machine-scene-integration')) {
+  failures.push('PROJECT_STATE must keep M2 economy Scene integration as not started.');
+}
+if (projectState.nextTask !== 'm2-vending-machine-scene-integration') {
+  failures.push('PROJECT_STATE nextTask must advance to M2 vending-machine Scene integration.');
+}
+
+const expectedM14Evidence = {
+  m14Status: 'completed-production-verified',
+  m14M1Basis: '2d-side-scroll',
+  m14NavigationCoreMergeCommit: 'ee255a1a8413768d0e7dbdf512964268c8eaf276',
+  m14PullRequest: 32,
+  m14PullRequestHeadCommit: '5c6895d0d1e2ad31a95f6490e60cc26f89d290cf',
+  m14PullRequestQualityRun: 30008762303,
+  m14PullRequestBrowserRun: 30008762333,
+  m14PullRequestBrowserArtifact: 8564271801,
+  m14ImplementationProductionCommit: '147f770a4b73077c4e5dc0523839b3fefb789db4',
+  m14VercelProductionStatus: 'success',
+  m14MainQualityRun: 30009404756,
+  m14ProductionSmokeRun: 30009405068,
+  m14ProductionBrowserRun: 30009404814,
+  m14ProductionBrowserArtifact: 8564582434,
+  m14ProductionBrowserArtifactDigest:
+    'sha256:6f83bfcf99ac2f2af0e98899568ee2c17ac28e3f3ad70aef29f4c7f7c26744f3',
+  m13Preserved: true,
+  m2EconomyCorePreserved: true,
+  m2EconomySceneConnected: false,
+};
+for (const [key, expected] of Object.entries(expectedM14Evidence)) {
+  if (projectState.evidence?.[key] !== expected) {
+    failures.push(`PROJECT_STATE evidence ${key} does not match verified M1.4 evidence.`);
+  }
+}
+
+const expectedBrowserEvidence = {
+  areaCount: 3,
+  transitionCount: 5,
+  screenCount: 15,
+  pageErrorCount: 0,
+  failedRequestCount: 0,
+  allInvariants: true,
+};
+for (const [key, expected] of Object.entries(expectedBrowserEvidence)) {
+  if (projectState.evidence?.m14ProductionBrowserEvidence?.[key] !== expected) {
+    failures.push(`PROJECT_STATE Production Browser evidence ${key} is not verified.`);
+  }
+}
+for (const item of ['publicBuild', 'leftWalk', 'rightWalk', 'timeOfDay', 'audio']) {
+  if (projectState.evidence?.m14ManualProductionVerification?.[item] !== true) {
+    failures.push(`PROJECT_STATE manual Production verification is missing ${item}.`);
+  }
 }
 if (webManifest.orientation !== 'landscape' || webManifest.display !== 'standalone') {
   failures.push('PWA must remain landscape standalone.');
@@ -240,6 +417,10 @@ for (const marker of [
   }
 }
 for (const marker of [
+  '../navigation/areaGraph.mjs',
+  '../navigation/horizontalMovement.mjs',
+  '../navigation/areaTransitionState.mjs',
+  '../navigation/navigationState.mjs',
   'stepHorizontalMovement',
   'getAvailableBranchDirections',
   'resolveAreaExit',
@@ -247,9 +428,79 @@ for (const marker of [
   'isM14InputLocked',
   'reduceM14Transition',
   'validateM14AreaGraph',
+  'sourceSpawnId',
 ]) {
   if (!navigationAdapter.includes(marker)) {
     failures.push(`M1.4 navigation adapter is missing ${marker}.`);
+  }
+}
+
+const navigationCoreChecks = [
+  [
+    'areaGraph',
+    navigationAreaGraph,
+    ['findHorizontalExit', 'findDirectionalExit', 'isDirectionalPromptVisible', 'validateAreaGraph'],
+  ],
+  [
+    'areaTransitionState',
+    navigationTransitionState,
+    ['NAVIGATION_TRANSITION_STATES', 'nextNavigationTransitionState', 'isReadyForNavigationTransition'],
+  ],
+  [
+    'horizontalMovement',
+    navigationMovement,
+    ['resolveHorizontalMovement', 'horizontalAxis', 'locked'],
+  ],
+  [
+    'navigationState',
+    navigationState,
+    ['createNavigationState', 'resolveAreaSpawn', 'cancelAreaTransition', 'isInputLocked'],
+  ],
+  [
+    'navigationValidation',
+    navigationValidation,
+    ['invalid-spawn-x', 'invalid-spawn-facing', 'invalid-trigger-range'],
+  ],
+];
+for (const [sourceName, source, markers] of navigationCoreChecks) {
+  for (const marker of markers) {
+    if (!source.includes(marker)) {
+      failures.push(`M1.4 navigation core ${sourceName} is missing ${marker}.`);
+    }
+  }
+}
+
+for (const marker of [
+  'SEARCH_TIME_COST_MINUTES',
+  'createEconomyState',
+  'performSearch',
+  'canSearch',
+]) {
+  if (!economyCore.includes(marker)) {
+    failures.push(`Preserved M2 economy core is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  'SAVE_KEY',
+  'serializeEconomyState',
+  'deserializeEconomyState',
+  'saveToStorage',
+  'loadFromStorage',
+]) {
+  if (!economySave.includes(marker)) {
+    failures.push(`Preserved M2 economy save core is missing ${marker}.`);
+  }
+}
+const economyImportPattern =
+  /(?:from\s+|import\s*\()\s*['"][^'"]*economy\//;
+for (const [runtimeFile, source] of [
+  ['src/App.tsx', app],
+  ['src/game/createGame.ts', createGame],
+  ['src/game/scenes/SideScrollTownScene.ts', sideScrollScene],
+  ['src/game/gameBridge.ts', gameBridge],
+]) {
+  if (economyImportPattern.test(source)) {
+    failures.push(`M2 economy core must not be connected from ${runtimeFile} during M1.4.`);
   }
 }
 for (const marker of [
@@ -403,9 +654,26 @@ for (const marker of [
   'trace.zip',
   'pageErrors.length',
   'failedRequests.length',
+  'BROWSER_VIEWPORT_WIDTH',
+  'BROWSER_VIEWPORT_HEIGHT',
+  'BROWSER_TRACE',
+  'viewport',
+  'traceEnabled',
 ]) {
   if (!browserSmoke.includes(marker)) {
     failures.push(`Browser Smoke is missing M1.4 assertion marker ${marker}.`);
+  }
+}
+for (const marker of [
+  'Test pull request build at 844x390 mobile landscape',
+  'Test deployed Production at 844x390 mobile landscape',
+  "BROWSER_VIEWPORT_WIDTH: '844'",
+  "BROWSER_VIEWPORT_HEIGHT: '390'",
+  "BROWSER_TRACE: 'false'",
+  'diagnostics/browser-smoke-mobile-844x390',
+]) {
+  if (!browserWorkflow.includes(marker)) {
+    failures.push(`Browser Smoke workflow is missing mobile landscape gate ${marker}.`);
   }
 }
 for (const marker of [

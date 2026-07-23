@@ -3,10 +3,10 @@
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
   "currentMilestone": "M1.4",
-  "status": "release-candidate",
+  "status": "completed-production-verified",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "393bbabf6c99e3c431247cf3f63eb29ff5b4bce2",
+  "lastProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
@@ -27,9 +27,7 @@
     "m1.3-horizontal-camera-lookahead",
     "m1.3-area-transition-foundation",
     "m1.3-quality-browser-and-production-verification",
-    "m1.3-code-and-assets-preserved"
-  ],
-  "inProgress": [
+    "m1.3-code-and-assets-preserved",
     "m1.4-home-street",
     "m1.4-life-road",
     "m1.4-upper-vending-lane",
@@ -38,12 +36,14 @@
     "m1.4-two-direction-player-atlas",
     "m1.4-time-of-day-and-area-audio",
     "m1.4-quality-and-browser-verification",
-    "m1.4-production-verification"
+    "m1.4-navigation-core-merged",
+    "m1.4-production-verification",
+    "m1.4-2d-official-m1-basis"
   ],
-  "paused": [
-    "m2-scene-integration-until-m1.4-production-verification"
-  ],
+  "inProgress": [],
+  "paused": [],
   "notStarted": [
+    "m2-vending-machine-scene-integration",
     "vending-machine-search",
     "money-system",
     "action-time-consumption",
@@ -53,24 +53,8 @@
     "m3-game-shop"
   ],
   "nextMilestone": "M2",
-  "nextTask": "m1.4-production-browser-smoke-and-visual-verification",
+  "nextTask": "m2-vending-machine-scene-integration",
   "knownIssues": [
-    {
-      "severity": "temporary",
-      "description": "The requested claude/m1-4-area-navigation-core branch and PR do not exist yet. The release candidate uses a contract-compatible pure fallback behind src/game/navigationAdapter/; formal Claude core integration and Claude-authored review remain pending."
-    },
-    {
-      "severity": "temporary",
-      "description": "M1.4 is a release candidate and is not complete until the merged main commit passes Vercel Production, Production Smoke, Production Browser Smoke, and visual verification."
-    },
-    {
-      "severity": "light",
-      "description": "M1.3 code and assets remain intentionally preserved as the completed fallback and design history; they are not the M1.4 primary playable route."
-    },
-    {
-      "severity": "temporary",
-      "description": "M2 economy core is preserved, but its Scene integration is paused until M1.4 Production verification is complete."
-    },
     {
       "severity": "light",
       "description": "Representative iPhone and Android performance still requires device confirmation."
@@ -80,7 +64,7 @@
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-23T08:54:40Z",
+  "lastUpdated": "2026-07-23T13:20:06Z",
   "developmentRulesVersion": "2.4",
   "evidence": {
     "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
@@ -97,6 +81,39 @@
     "m14AreaCount": 3,
     "m14Movement": "horizontal-only-with-branch-input",
     "m14Camera": "horizontal-follow-with-look-ahead",
+    "m14Status": "completed-production-verified",
+    "m14M1Basis": "2d-side-scroll",
+    "m14NavigationCoreMergeCommit": "ee255a1a8413768d0e7dbdf512964268c8eaf276",
+    "m14PullRequest": 32,
+    "m14PullRequestHeadCommit": "5c6895d0d1e2ad31a95f6490e60cc26f89d290cf",
+    "m14PullRequestQualityRun": 30008762303,
+    "m14PullRequestBrowserRun": 30008762333,
+    "m14PullRequestBrowserArtifact": 8564271801,
+    "m14ImplementationProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
+    "m14VercelProductionStatus": "success",
+    "m14MainQualityRun": 30009404756,
+    "m14ProductionSmokeRun": 30009405068,
+    "m14ProductionBrowserRun": 30009404814,
+    "m14ProductionBrowserArtifact": 8564582434,
+    "m14ProductionBrowserArtifactDigest": "sha256:6f83bfcf99ac2f2af0e98899568ee2c17ac28e3f3ad70aef29f4c7f7c26744f3",
+    "m14ProductionBrowserEvidence": {
+      "areaCount": 3,
+      "transitionCount": 5,
+      "screenCount": 15,
+      "pageErrorCount": 0,
+      "failedRequestCount": 0,
+      "allInvariants": true
+    },
+    "m14ManualProductionVerification": {
+      "publicBuild": true,
+      "leftWalk": true,
+      "rightWalk": true,
+      "timeOfDay": true,
+      "audio": true
+    },
+    "m13Preserved": true,
+    "m2EconomyCorePreserved": true,
+    "m2EconomySceneConnected": false,
     "m14AssetGenerationCommand": "python3 tools/art/generate_m14_assets.py",
     "m14ValidationFlow": [
       "npm run check",

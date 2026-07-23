@@ -45,7 +45,7 @@ jobs:
   smoke:
     name: Render and operate the real game in Chromium
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -92,6 +92,18 @@ jobs:
           PRODUCTION_WAIT_MS: '30000'
         run: node scripts/browser-smoke.mjs
 
+      - name: Test pull request build at 844x390 mobile landscape
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_URL: http://127.0.0.1:4173
+          EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}
+          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke-mobile-844x390
+          BROWSER_VIEWPORT_WIDTH: '844'
+          BROWSER_VIEWPORT_HEIGHT: '390'
+          BROWSER_TRACE: 'false'
+          PRODUCTION_WAIT_MS: '30000'
+        run: node scripts/browser-smoke.mjs
+
       - name: Test deployed Production in a real browser
         if: github.event_name != 'pull_request'
         env:
@@ -101,11 +113,25 @@ jobs:
           PRODUCTION_WAIT_MS: '900000'
         run: node scripts/browser-smoke.mjs
 
+      - name: Test deployed Production at 844x390 mobile landscape
+        if: github.event_name != 'pull_request'
+        env:
+          BASE_URL: https://boku-no-jihanki.vercel.app
+          EXPECTED_COMMIT: ${{ github.sha }}
+          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke-mobile-844x390
+          BROWSER_VIEWPORT_WIDTH: '844'
+          BROWSER_VIEWPORT_HEIGHT: '390'
+          BROWSER_TRACE: 'false'
+          PRODUCTION_WAIT_MS: '900000'
+        run: node scripts/browser-smoke.mjs
+
       - name: Upload screenshots, logs and trace
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: browser-smoke-${{ github.run_id }}
-          path: diagnostics/browser-smoke
+          path: |
+            diagnostics/browser-smoke
+            diagnostics/browser-smoke-mobile-844x390
           if-no-files-found: error
           retention-days: 14
