@@ -1,0 +1,33 @@
+name: Export Current Main for M1.3
+
+on:
+  push:
+    branches:
+      - ci/m13-export-main
+    paths:
+      - '.github/workflows/m13-export-main.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Create source archive
+        run: |
+          mkdir -p export
+          zip -rq export/BokuNoJihanki-main.zip . -x '.git/*' 'export/*'
+      - name: Upload source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-main-source
+          path: export/BokuNoJihanki-main.zip
+          retention-days: 2
