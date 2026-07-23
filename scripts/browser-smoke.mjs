@@ -364,33 +364,6 @@ try {
     '04-walk-left.png',
   );
 
-  await page.keyboard.down('ArrowRight');
-  let focusLossStop;
-  try {
-    await waitForHud(page, {
-      area: 'home-street',
-      animation: 'walk-right',
-      minSpeed: 100,
-    });
-    await page.evaluate(() => globalThis.dispatchEvent(new Event('blur')));
-    const stopped = await waitForHud(page, {
-      area: 'home-street',
-      animation: 'idle-right',
-      maxSpeed: 0,
-    });
-    await page.waitForTimeout(350);
-    const stillStopped = await latestHud(page);
-    focusLossStop = (
-      stillStopped.speed === 0
-      && stillStopped.animation === 'idle-right'
-      && stillStopped.playerX === stopped.playerX
-    );
-  } finally {
-    await page.keyboard.up('ArrowRight');
-    await page.evaluate(() => globalThis.dispatchEvent(new Event('focus')));
-  }
-  assert(focusLossStop, 'Focus loss did not stop horizontal movement immediately.');
-
   const homeRightEdge = await moveRightTo(page, 'home-street', 2_210);
   assert(homeRightEdge.playerX < 2_336, 'Home edge setup entered the transition trigger too early.');
   assert(
@@ -486,6 +459,32 @@ try {
   await capture(page, '14-evening.png');
   const night = await advanceTime(page, 14, 1_200);
   await capture(page, '15-night.png');
+
+  await page.keyboard.down('ArrowRight');
+  let focusLossStop;
+  try {
+    await waitForHud(page, {
+      area: 'life-road',
+      animation: 'walk-right',
+      minSpeed: 100,
+    });
+    await page.evaluate(() => globalThis.dispatchEvent(new Event('blur')));
+    const stopped = await waitForHud(page, {
+      area: 'life-road',
+      animation: 'idle-right',
+      maxSpeed: 0,
+    });
+    await page.waitForTimeout(350);
+    const stillStopped = await latestHud(page);
+    focusLossStop = (
+      stillStopped.speed === 0
+      && stillStopped.animation === 'idle-right'
+      && stillStopped.playerX === stopped.playerX
+    );
+  } finally {
+    await page.keyboard.up('ArrowRight');
+  }
+  assert(focusLossStop, 'Focus loss did not stop horizontal movement immediately.');
 
   const snapshots = await hudTimeline(page);
   const m14Snapshots = snapshots.filter((snapshot) => (
