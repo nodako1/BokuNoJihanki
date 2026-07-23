@@ -172,3 +172,54 @@ test('validateAreaGraph detects an invalid direction and invalid worldWidth', ()
   assert.ok(issues.some((issue) => issue.code === 'invalid-direction'));
   assert.ok(issues.some((issue) => issue.code === 'invalid-world-width'));
 });
+
+test('validateAreaGraph detects a non-finite spawn x', () => {
+  const g = graph();
+  const broken = {
+    areas: g.areas.map((area) =>
+      area.id === 'home-street'
+        ? {
+            ...area,
+            spawnPoints: area.spawnPoints.map((spawn, index) => (index === 0 ? { ...spawn, x: NaN } : spawn)),
+          }
+        : area,
+    ),
+  };
+  const issues = validateAreaGraph(broken);
+  assert.ok(issues.some((issue) => issue.code === 'invalid-spawn-x'));
+});
+
+test('validateAreaGraph detects an invalid spawn facing', () => {
+  const g = graph();
+  const broken = {
+    areas: g.areas.map((area) =>
+      area.id === 'home-street'
+        ? {
+            ...area,
+            spawnPoints: area.spawnPoints.map((spawn, index) =>
+              index === 0 ? { ...spawn, facing: 'sideways' } : spawn,
+            ),
+          }
+        : area,
+    ),
+  };
+  const issues = validateAreaGraph(broken);
+  assert.ok(issues.some((issue) => issue.code === 'invalid-spawn-facing'));
+});
+
+test('validateAreaGraph detects a trigger range outside the area worldWidth', () => {
+  const g = graph();
+  const broken = {
+    areas: g.areas.map((area) =>
+      area.id === 'home-street'
+        ? {
+            ...area,
+            worldWidth: 100,
+            exits: area.exits.map((exit) => ({ ...exit, trigger: { kind: 'range', minX: -20, maxX: 120 } })),
+          }
+        : area,
+    ),
+  };
+  const issues = validateAreaGraph(broken);
+  assert.ok(issues.some((issue) => issue.code === 'invalid-trigger-range'));
+});
