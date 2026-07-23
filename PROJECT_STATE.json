@@ -2,26 +2,34 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
-  "currentMilestone": "M1.4",
-  "currentMilestoneScope": "latest-production-delivery",
-  "status": "completed-production-verified",
-  "statusScope": "M1.4-delivery-history-only",
-  "currentStateAuthority": "m1Completion",
+  "currentMilestone": "M1.5",
+  "currentMilestoneScope": "mandatory-real-device-quality-correction",
+  "status": "implementation-in-progress",
+  "statusDetail": "m1.5-real-device-quality-correction",
+  "statusScope": "m1-completion-reopened-after-m1.4-production-success",
+  "currentStateAuthority": "top-level",
   "m1Completion": {
     "status": "reopened",
     "activeMilestone": "M1.5",
     "reason": "mandatory-real-device-quality-correction",
     "nextExecutableTask": "m1.5-real-device-quality-correction",
+    "mainMergeStatus": "blocked-until-preview-user-real-device-approval",
     "m2StartStatus": "blocked",
     "m2StartRequirements": [
-      "m1.5-complete",
-      "m1.5-production-verified",
-      "user-real-device-approved"
+      "m1.5-preview-automated-tests-passed",
+      "m1.5-independent-qa-passed",
+      "m1.5-evidence-audit-passed",
+      "m1.5-preview-user-real-device-approved",
+      "m1.5-main-merged",
+      "m1.5-production-verified"
     ]
   },
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
+  "lastProductionCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+  "lastProductionCommitRole": "current-main-production-baseline-after-pr-34",
+  "currentMainBaselineCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+  "currentProductionBaselineCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
@@ -55,10 +63,13 @@
     "m1.4-production-verification",
     "m1.4-2d-official-m1-basis"
   ],
-  "inProgress": [],
-  "paused": [],
+  "inProgress": [
+    "m1.5-real-device-quality-correction"
+  ],
+  "paused": [
+    "m2-pull-request-31"
+  ],
   "notStarted": [
-    "m1.5-real-device-quality-correction",
     "m2-vending-machine-scene-integration",
     "vending-machine-search",
     "money-system",
@@ -69,9 +80,9 @@
     "m3-game-shop"
   ],
   "nextMilestone": "M2",
-  "nextMilestoneStatus": "blocked-until-m1.5-complete-production-verified-and-user-approved",
-  "nextTask": "m2-vending-machine-scene-integration",
-  "nextTaskStatus": "blocked-not-executable",
+  "nextMilestoneStatus": "blocked-until-m1.5-preview-approved-main-merged-and-production-verified",
+  "nextTask": "m1.5-real-device-quality-correction",
+  "nextTaskStatus": "in-progress",
   "knownIssues": [
     {
       "severity": "blocking",
@@ -98,6 +109,14 @@
       "description": "The current BGM is perceived as noise and does not yet function as finished music."
     },
     {
+      "severity": "blocking",
+      "description": "The M1.5 Preview has not yet passed independent QA, Evidence audit, and user iPhone approval; main merge is prohibited until those gates pass."
+    },
+    {
+      "severity": "blocking",
+      "description": "Any code or asset change after Preview approval requires a new SHA and renewed independent QA, Evidence audit, and user iPhone approval."
+    },
+    {
       "severity": "light",
       "description": "Representative iPhone and Android performance still requires device confirmation."
     },
@@ -106,7 +125,7 @@
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-23T16:39:27Z",
+  "lastUpdated": "2026-07-23T23:14:11Z",
   "developmentRulesVersion": "2.4",
   "evidence": {
     "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
@@ -157,13 +176,23 @@
     "m2EconomyCorePreserved": true,
     "m2EconomySceneConnected": false,
     "m1CompletionReopened": true,
-    "m15Status": "mandatory-real-device-quality-correction-not-started",
+    "currentMainBaselineCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+    "currentMainBaselineRole": "post-pr-34-final-m1.4-documentation-and-mobile-gate",
+    "currentProductionBaselineCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+    "m15Status": "mandatory-real-device-quality-correction-in-progress",
     "m15Specification": "docs/specs/M1_5_REAL_DEVICE_POLISH.md",
     "m15Findings": "docs/evidence/M1_5_REAL_DEVICE_FINDINGS.md",
-    "m15ImplementationCommit": "未実施",
-    "m15ProductionVerification": "未実施",
-    "m15UserRealDeviceApproval": "未実施",
-    "sourceSpawnIdIssueStatus": "resolved-in-production",
+    "m15ImplementationCommit": null,
+    "m15PreviewCommit": null,
+    "m15IndependentQa": "pending",
+    "m15EvidenceAudit": "pending",
+    "m15PreviewUserRealDeviceApproval": "pending",
+    "m15MainMerge": "blocked",
+    "m15ProductionVerification": "pending",
+    "m15CandidateEvidenceStatus": "pending-no-current-candidate-values-recorded",
+    "m2PullRequest": 31,
+    "m2PullRequestStatus": "open-unchanged-paused",
+    "sourceSpawnIdIssueStatus": "resolved-in-m1.4-production-regression-protected",
     "m14AssetGenerationCommand": "python3 tools/art/generate_m14_assets.py",
     "m14ValidationFlow": [
       "npm run check",

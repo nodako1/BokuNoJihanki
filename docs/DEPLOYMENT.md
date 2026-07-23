@@ -1,6 +1,6 @@
 # デプロイ
 
-Production Branchは`main`。Featureブランチの通常Vercel Previewは停止する。
+Production Branchは`main`。Featureブランチの通常Vercel Previewは停止する。ただしM1.5はmain前のユーザー実iPhone承認が必須のため、candidateと同一SHAのVercel Previewを許可済みの手段で用意する例外gateを適用する。
 
 ## M1.3完了フロー
 
@@ -30,7 +30,7 @@ Production Branchは引き続き`main`とし、M1.4のFeatureブランチは`fea
 6. PR Artifactのconsole、state JSON、trace、スクリーンショットを確認する
 7. PR実画面で接地、足滑り、camera、構図、スマートフォン横画面を確認する
 8. navigation adapter境界と統合の自動レビューを行い、指摘を解消する
-9. ユーザーの手動操作待ちで止めず、全gate成功後にmainへマージする
+9. M1.4当時はユーザーの手動操作待ちで止めず、全gate成功後にmainへマージする
 10. Vercel Productionが対象main commitを配信したことをSHAで照合する
 11. Production Smokeを実行する
 12. 実際のProduction URLに対してProduction Browser Smokeを実行する
@@ -75,3 +75,20 @@ M1.4はこの条件をすべて満たした。
 公開URLではbuild `147f770`、左右タッチ移動、停止、時刻操作、mute操作を確認した。3エリア、上下矢印、5遷移、4時間帯はProduction Browser Artifactの15画面とstate JSONで確認した。
 
 run URL、Artifact digest、公開画面確認を含む確定証跡は[M1.4 Production Evidence](evidence/M1_4_PRODUCTION_EVIDENCE.md)を正とする。
+
+## M1.5 必須Preview承認フロー
+
+M1.4実装のProduction確認commit `147f770a4b73077c4e5dc0523839b3fefb789db4`とPR #34後の現main／Production baseline `29223ee31fd4fc4fbca21a37b01fe89277279647`は履歴として保持する。M1.5では次の順序を変更しない。
+
+1. local candidateで`npm run check`、Browser Smoke、背景基準Visual Review、音声解析を完了する
+2. local candidateと同一SHAのVercel Previewを作成し、表示build／deployment SHAを照合する
+3. 3 viewport、3エリア × 4時間帯、実touch、before／after、実矩形、音声Evidenceを揃える
+4. くーちゃんcandidate QAとリダ君Evidence監査を完了する
+5. ユーザーがPreviewを実iPhoneで主人公、接地、上下導線、遷移パネル、BGMの5項目を承認する
+6. 承認後にコード・素材が変わっていないことを確認し、承認済みSHAだけをmainへマージする
+7. Vercel Productionの対象main SHAを照合し、Production SmokeとProduction Browser Smokeを成功させる
+8. Productionで3 viewport、画面・音、`pageerror` 0件、failed request 0件を再確認する
+
+Preview承認後にコード・素材が変わった場合は、新SHAで手順2から5をやり直す。手順5より前にmain／Productionを変更しない。手順8までM2 Scene統合とopen PR #31を変更・マージしない。
+
+`vercel.json`ではfeature branchの通常自動Previewを停止しているため、実装担当はM1.5 candidateと同一SHAのPreviewを作る許可済み手段を事前に確認する。Previewを用意できない場合、mainへ進む条件は未達である。

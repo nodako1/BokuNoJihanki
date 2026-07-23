@@ -1,47 +1,22 @@
-# M1.5 実機polish 仕様書
+# M1.5 旧実機polish仕様（廃止済み）
 
 ## 状態
 
-**任意・品質調整のみ・M2をブロックしない**
+**superseded・現行判断と受入判定への使用禁止**
 
-M1.4はmain `147f770a4b73077c4e5dc0523839b3fefb789db4`でProduction確認済みである。M1.5は新機能を追加する工程ではなく、代表的な実機で再現する品質課題が見つかった場合だけ実施する。
+本書はM1.4配信直後に作成された旧仕様の場所を、既存リンクのために残す案内である。M1.4実装がmain `147f770a4b73077c4e5dc0523839b3fefb789db4`で正常にProduction確認された履歴は有効であり、PR #34後の`29223ee31fd4fc4fbca21a37b01fe89277279647`が現main／Production baselineである。
 
-## 目的
+その後のユーザー実iPhone確認で、主人公、3エリアの接地、上下導線、遷移パネル、BGMにM1 blockingの品質不足が判明した。このためM1全体の完成判定を再オープンし、current milestoneをM1.5必須実機品質修正へ変更した。
 
-- 代表的なiPhone／Androidの横画面で操作性、safe-area、向き変更、再開動作を確認する
-- 実機の描画性能、入力遅延、音声復帰を計測し、必要な範囲だけ調整する
-- 接地感、足滑り、camera look-ahead、遷移時間、矢印可読性、夜間コントラスト、音量バランスを微調整する
+## 現行仕様
 
-## 対象
+[M1.5 必須実機品質修正](M1_5_REAL_DEVICE_POLISH.md)を唯一の現行仕様とする。
 
-- 左右タッチ入力の大きさ、位置、押し続け、指離し時停止
-- ノッチ／ホームインジケータを含むsafe-areaと横画面レイアウト
-- camera追従とlook-aheadの小幅な係数調整
-- 接地影、歩行周期、足音タイミングの小幅な同期調整
-- 暗転、地名表示、環境音crossfadeの小幅な時間調整
-- 上下矢印と夜間UIのコントラスト調整
-- 低性能端末でのアセット負荷または描画設定の安全な最適化
+- local candidateと同一SHAのVercel Previewを用意する
+- 自動テスト、くーちゃんcandidate QA、リダ君Evidence監査を完了する
+- ユーザーがPreviewを実iPhoneで5項目承認するまでmainへ進めない
+- 承認後にコード・素材が変わった場合は、新SHAで再承認する
+- 承認済みSHAだけをmainへマージし、Productionで再確認する
+- M2 Scene統合とopen PR #31は全gate完了まで変更・マージしない
 
-実機HUDで45 FPS未満が継続する、入力遅延や目立つframe dropが再現する、発熱やtexture memoryが継続操作を妨げる場合はpolish対象とする。headless ChromiumのFPSだけでは実機性能を合否判定しない。
-
-## 非対象
-
-- 新しいエリア、出口、NPC、会話、イベント
-- 自販機探索、所持金、時間消費、抽選、セーブ
-- `src/game/economy/`のScene接続
-- navigation APIまたはScene構成の再設計
-- M1.3のコード、素材、生成工程の変更・削除
-
-## 実施条件
-
-実機確認で再現手順、対象端末、期待値、実測値を記録できる課題だけを変更対象とする。代表端末で問題が再現しなければ、コード変更なしでM1.5を終了してよい。
-
-## 完了条件
-
-- 対象端末、OS、ブラウザ、画面サイズ、操作手順、結果を記録する
-- 変更した場合は107件以上の既存テスト、validator、lint、typecheck、buildを成功させる
-- PR Browser Smokeで15画面、3エリア、5遷移、全invariant、エラー0件を維持する
-- mainマージ後にVercel、Production Smoke、Production Browser Smoke、公開画面を再確認する
-- M1.3と`src/game/economy/`が変更されていないことを確認する
-
-M1.5の未実施または未完了は、Production確認済みのM1.4およびM2開始を妨げない。
+旧数値、旧手順、旧完了判断をM1.5 candidateの仕様またはEvidenceとして使用しない。

@@ -4,7 +4,7 @@
 React、Phaser、横画面、PWA、時間帯、音声、CI、Vercel。
 
 ## M1 — 完成判定再オープン・M1.5必須
-移動、入力、カメラ、時間帯、環境音、3エリア遷移の正式方式はM1.4の2D横スクロール。M1.4のProduction配信成功履歴は維持するが、ユーザー実機で6件の品質問題が見つかったため、M1全体の完成判定を再オープンした。M1.5の修正、Production確認、ユーザー実機承認までM2を開始しない。
+移動、入力、カメラ、時間帯、環境音、3エリア遷移の正式方式はM1.4の2D横スクロール。M1.4実装のProduction確認commit `147f770a4b73077c4e5dc0523839b3fefb789db4`と、PR #34後の現main／Production baseline `29223ee31fd4fc4fbca21a37b01fe89277279647`の履歴は維持するが、ユーザー実機で6件の品質問題が見つかったため、M1全体の完成判定を再オープンした。同一SHAのPreviewで自動テスト、独立QA、Evidence監査、ユーザー実iPhone承認を終えるまでmainへ進めず、その後のProduction確認までM2を開始しない。
 
 ## M1.1 — 完了
 高密度ベクター2.5Dビジュアル。
@@ -52,12 +52,13 @@ PR #32 head `5c6895d0d1e2ad31a95f6490e60cc26f89d290cf`とProduction merge `147f7
 
 - 現行仕様: [M1.5 必須実機品質修正](specs/M1_5_REAL_DEVICE_POLISH.md)
 - 確認済み問題: [M1.5 ユーザー実機所見](evidence/M1_5_REAL_DEVICE_FINDINGS.md)
-- 完了条件: M1.5受入条件合格、Production確認、ユーザーiPhone実機の画面・聴感承認
+- 完了条件: 同一SHA Previewの自動テスト、くーちゃん独立QA、リダ君Evidence監査、ユーザーiPhone実機の5項目承認、承認済みSHAのmainマージ、Production再確認
+- 再承認: Preview承認後にコード・素材が変わった場合は、新SHAで全Preview gateをやり直す
 
 ## M2 — 開始保留
 自販機接近、下／返却口、固定乱数、所持金、15分経過、当日一回、18時制限、ローカルセーブ。
 
-既存の`src/game/economy/`コアとテストは変更・削除せず保存済み。M1.5完了、M1.5対象commitのProduction確認、ユーザー実機承認が揃うまでimportもScene統合も行わない。
+既存の`src/game/economy/`コアとテストは変更・削除せず保存済み。open PR #31も変更・マージしない。同一SHA Previewのユーザー実iPhone承認、承認済みSHAのmainマージ、Production再確認が揃うまでimportもScene統合も行わない。
 
 ## M3
 自室、1日の開始・終了、日付変更、ゲームショップ、1日3本、日記。

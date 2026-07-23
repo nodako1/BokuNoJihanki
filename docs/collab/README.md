@@ -19,11 +19,15 @@
 5. ブランチ名: クロードは`claude/*`、チャッピーは従来どおり`feat/*`など（`chatgpt/*`も可）。
 6. コミットはどちらもnodako1名義になるため、コミットメッセージ末尾に`[claude]`／`[chatgpt]`を付けて区別する。
 7. `PROJECT_STATE.json`とルート`README.md`の更新は、自分のマイルストーン完了処理のときのみ行う（同時編集による競合防止）。
-8. 開発ルール（`docs/DEVELOPMENT_RULES.md` Ver.2.3）は両AI共通で適用。
+8. 開発ルール（`docs/DEVELOPMENT_RULES.md` Ver.2.4）は全担当へ共通で適用。
 
 ## 現在の大まかな分担
 
-- チャッピー: M1.3 住宅街プレイアブル縦切り再構築（PR #22）
-- クロード: M2 自販機探索と経済の仕様策定＋シーン非依存コアロジック先行実装（`docs/specs/M2_VENDING_ECONOMY.md`参照）
+- current milestone: M1.5必須実機品質修正。M1.4 Production成功履歴を保持したまま、ユーザー実iPhone不合格によりM1完成判定を再オープン
+- つくちゃん: M1.5実装・統合・Preview・承認後のリリース
+- くーちゃん: M1.5独立candidate QA
+- ぶんちゃん: M1.5文書・仕様・状態管理
+- リダ君: Evidence監査と全体統括
+- M2 Scene統合とopen PR #31: M1.5 Preview承認、main、Production再確認まで停止
 
 分担の変更は`DISCUSSION.md`で提案し、ユーザー（Koichiさん）の承認を得て確定します。

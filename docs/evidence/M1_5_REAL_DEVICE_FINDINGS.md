@@ -6,6 +6,7 @@
 - 確認者: ユーザー
 - 確認対象: `https://boku-no-jihanki.vercel.app/`
 - 対象履歴build: M1.4 Production merge `147f770a4b73077c4e5dc0523839b3fefb789db4`
+- 現main／Production baseline: PR #34後の`29223ee31fd4fc4fbca21a37b01fe89277279647`
 - 確認方法: ユーザー実機でのプレイと聴感
 - 端末: ユーザー実機（機種未記録）
 - 端末モデル、OS version、Safari version、実測viewport: 今回の所見本文には記録なし。M1.5の再確認証跡で実値を記録する
@@ -14,7 +15,7 @@
 
 ## M1.4 Production履歴との関係
 
-M1.4は正常にProductionへ配信され、既存の自動検証と公開画面確認に成功している。この履歴は有効なまま保持する。
+M1.4は正常にProductionへ配信され、既存の自動検証と公開画面確認に成功している。この履歴は有効なまま保持する。`147f770...`はM1.4実装のProduction確認commit、`29223ee...`はPR #34後の最終文書・mobile gateを含む現baselineであり、役割を混同しない。
 
 | 項目 | 既存結果 |
 | --- | --- |
@@ -83,7 +84,9 @@ M1.4は正常にProductionへ配信され、既存の自動検証と公開画面
 - M1.4のProduction配信成功履歴と既存証跡は維持する
 - M1全体の完成判定は再オープンする
 - M1.5を必須の実機品質修正とする
-- M2はM1.5完了、Production確認、ユーザー実機承認まで開始しない
+- local candidateと同一SHAのVercel Previewで自動テスト、くーちゃんcandidate QA、リダ君Evidence監査、ユーザー実iPhone承認を行う
+- Previewのユーザー実iPhone承認前はmainへ進めず、承認後にコード・素材が変われば新SHAで再承認する
+- M2とopen PR #31は承認済みSHAのmainマージとProduction再確認まで停止し、変更・マージしない
 - M1.3と`src/game/economy/`を保存し、M1.5では変更・接続しない
 - `sourceSpawnId`問題は修正済みのため、未解決課題へ戻さない
 
@@ -91,17 +94,19 @@ M1.4は正常にProductionへ配信され、既存の自動検証と公開画面
 
 | 項目 | 状態 |
 | --- | --- |
-| M1.5実装commit SHA | 未実施 |
+| local candidate／Vercel Previewの同一SHA | 未実施 |
 | M1.5 PR Quality run ID | 未実施 |
 | M1.5 PR Browser Smoke run ID | 未実施 |
 | 主人公素材の出所・生成方法・ライセンス・hash | 未実施 |
 | 背景基準の接地・分岐測定 | 未実施 |
 | 3 viewportのUI／主人公重なり測定 | 未実施 |
 | BGM客観解析 | 未実施 |
+| くーちゃんcandidate QA | 未実施 |
+| リダ君Evidence監査 | 未実施 |
+| PreviewのユーザーiPhone実機5項目承認 | 未実施 |
+| M1.5 main merge SHA | 未実施 |
 | M1.5 Production対象SHA | 未実施 |
 | M1.5 Production Smoke run ID | 未実施 |
 | M1.5 Production Browser Smoke run ID | 未実施 |
-| ユーザーiPhone実機の画面承認 | 未実施 |
-| ユーザーiPhoneスピーカーの聴感承認 | 未実施 |
 
-M1.5の実装、PR、mainマージ、Production配信は本書作成時点では行っていない。
+M1.5のcandidate、Preview、独立QA、Evidence監査、ユーザー承認、mainマージ、Production配信は本書作成時点では行っていない。未取得のSHA、run ID、測定値を現candidateの確定Evidenceとして補完しない。

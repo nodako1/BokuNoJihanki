@@ -169,13 +169,13 @@ run URL、Artifact digest、目視確認を含む確定証跡は[M1.4 Production
 
 ### 背景を正解にした接地検証
 
-実装済み`groundY`を期待値にしない。各時間帯の背景から道路面を独立して特定し、主人公の足裏pivotを同じCSS座標系へ変換して比較する。
+3エリアを背景画像から独立注釈したfixtureを唯一の期待値とする。実装済み`groundY`、spawn、triggerやruntime screenshotから期待値を自己参照してはならない。各時間帯の背景から道路面を独立して特定し、主人公の足裏pivotを同じCSS座標系へ変換して比較する。
 
 ```text
 groundGapCssPx = abs(playerFootPivotCssY - backgroundRoadCssY)
 ```
 
-開始、中央、終端、全spawn、全分岐で`groundGapCssPx <= 6`を必須とする。道路が傾斜または段差を持つ場合は、単一Yではなく背景から採った区間別またはX別のground lineを使う。
+開始、中央、終端、全spawn、全分岐で表示上の`groundGapCssPx <= 2`を原則とする。全spawn設定点のYは独立fixtureの同一Xにあるgroundから6 CSS px以内でなければならず、spawn後の表示上の足裏は2 CSS px原則でも別途確認する。道路が傾斜または段差を持つ場合は、単一Yではなく背景から採った区間別またはX別のground lineを使う。背景を変更した場合は、ground、spawn、入口を再注釈・再計測する。
 
 各エリアの証跡には次を同じ表で記録する。
 
@@ -186,7 +186,7 @@ groundGapCssPx = abs(playerFootPivotCssY - backgroundRoadCssY)
 - trigger範囲
 - 各測定地点の足裏差
 
-`life-road`は背景上の上り道へ到達した時点で上案内が表示されること、`upper-vending-lane`は下案内に対応する道、坂、階段、開口部が背景に存在することを確認する。見えている道と内部triggerが矛盾する場合は不合格とする。
+`life-road`は背景上の上り道へ到達した時点で上案内が表示されること、`upper-vending-lane`は下案内に対応する道、坂、階段、開口部が背景に存在することを確認する。背景入口中心とtrigger中心の差は5 CSS px以内とし、対応prompt表示中だけ上下遷移入力を有効にする。見えている道と内部triggerが矛盾する場合は不合格とする。
 
 ### 主人公Visual QA matrix
 
@@ -195,16 +195,18 @@ groundGapCssPx = abs(playerFootPivotCssY - backgroundRoadCssY)
 各状態で次を確認する。
 
 - 背景と同等の完成度を持つ最終ラスタ素材である
-- 足元pivot、体格、輪郭、服装、光方向、影がframe間で一貫する
+- 少年の設定、服装、世界観を維持し、足元pivot、顔、体格、輪郭、服装、光方向がframe間と向き変更で一貫する
+- atlasとfoot pivotが再計測され、影が別レイヤーである
+- 透過縁、切断、halo、足元の欠けがない
 - 浮遊、埋没、足滑りがない
 - 停止時にidleへ戻り、端やinput lock中に足踏みしない
-- 素材の出所、生成方法、ライセンス、SHA-256が記録されている
+- 素材の出所、生成方法、日付、権利・ライセンス、SHA-256が記録されている
 
 ### 分岐と状態
 
 - `life-road`から`upper-vending-lane`へ上移動し、下移動で戻る
 - `upper-vending-lane`から`life-road`へ下移動し、再度上移動する
-- 案内表示前、表示中、通過後に表示位置、残留、再表示を確認する
+- 上下 × trigger開始・中央・終端 × 左右向きの12状態で表示位置、残留、再表示を確認する
 - 往復後もarea、spawn、向き、時刻、時間帯、mute、AudioContext、Scene、bridge listenerを維持する
 - `sourceSpawnId`の非初期spawn回帰テストを維持し、修正済み問題として扱う
 
@@ -214,30 +216,56 @@ groundGapCssPx = abs(playerFootPivotCssY - backgroundRoadCssY)
 
 - 主人公と遷移パネルの交差面積: 0
 - 主人公と遷移パネルの最短間隔: 12 CSS px以上
+- 遷移パネルとHUDの交差面積: 0
 - タッチ領域: 44×44 CSS px以上
 - safe-area内で主人公、足元、進行方向を隠さない
 
-UI同士の重なりだけを測って合格にしない。
+player／panel／HUDの実矩形をEvidenceへ保存する。UI同士の重なりだけを測って合格にしない。
 
 ### BGM
 
 - BGMと環境音が分離され、環境ノイズをBGM本体にしていない
-- 旋律、和音、反復構造を認識できる
-- decode error 0件、clipping 0件
+- 「夏休みの田舎・朝・郷愁」が伝わり、旋律、和音、リズム、反復構造を認識できる
+- 48kHz stereo、decode error 0件、clipping 0件
 - true peak -1 dBTP以下
+- 過大なDC offsetと意図しない長い無音がない
 - ループ境界が自然で、クリック、急な無音、音量跳躍、拍の欠落がない
+- mute、遷移、visibility、`frozen`、iOS `interrupted`から復帰できる
+- provenance、SHA-256、duration、LUFS、dBTP、loop境界を記録する
+- 解析JSON、波形、スペクトログラムを保存する
 - iPhoneスピーカーでユーザーの聴感承認を得る
 
-### 自動検証と実機承認
+### same-SHA Previewと独立QA
 
-Node.js 22で次を成功させる。
+Node.js 22で次を成功させ、local candidateと同一SHAのVercel Previewを作成してSHAを照合する。
 
 ```bash
 npm run check
 ```
 
-PRとProductionの両方で、既存の3エリア、5遷移、時刻・音声状態保持、`pageerror` 0件、failed request 0件を維持する。M1.3と`src/game/economy/`のコード、素材、テストを保持し、M1.5からeconomyをScene接続しない。
+3 viewportすべてで3エリア × 4時間帯を確認し、before／afterを同一viewport、area、時間帯、位置、向きで保存する。mobileでは実touchによる左右dragと遷移panelのtapを行う。Previewで既存の3エリア、5遷移、時刻・音声状態保持、`pageerror` 0件、failed request 0件を維持する。M1.3と`src/game/economy/`のコード、素材、テストを保持し、M1.5からeconomyをScene接続しない。
 
-headless screenshotの枚数、内部`groundY` invariant、内部trigger通過だけではM1.5を合格にしない。最後にProductionをユーザーのiPhone実機で操作し、画面とBGMの両方の明示承認を得る。
+headless screenshotの枚数、state invariant、内部`groundY` invariant、内部trigger通過、`pageerror` 0件だけでは見た目や音声を合格にしない。くーちゃんcandidate QAとリダ君Evidence監査を完了し、その後、mainへ進める前にユーザーが同一SHAのPreviewをiPhone実機で操作して次の5項目を明示承認する。
 
-M1.5実装SHA、run ID、Artifact、Production SHA、ユーザー実機承認は本書更新時点で**未実施**である。存在しない値を推測して記録しない。
+1. 主人公の見た目と歩行
+2. 3エリアの接地
+3. 上下導線と背景の一致
+4. 遷移パネルが主人公・UIを隠さない
+5. BGMの聴感、loop、mute／復帰
+
+承認後にコード・素材が変わった場合は、新SHAでPreview、独立QA、Evidence監査、実iPhone承認をやり直す。承認済みSHAだけをmainへマージし、その後にProduction SHA照合、Production Smoke、Production Browser Smoke、同条件Visual Reviewを行う。
+
+M1.5 candidate SHA、run ID、Artifact、Preview承認、Production SHAは本書更新時点で**未実施**である。存在しない値を推測して記録しない。
+
+### 文書branchの既知の一時的不整合
+
+2026-07-23、Node.js `22.14.0`／npm `10.9.2`でM1.5状態正規化後の文書branchを検証した。
+
+- `npm run validate`: 失敗。既存`validate-project.mjs`が`currentMilestone=M1.4`、`status=completed-production-verified`、`lastProductionCommit=147f770...`、`inProgress=[]`、`paused=[]`、`nextTask=m2-vending-machine-scene-integration`を固定しているため、正規化したM1.5状態を6項目で拒否する。現stateの`lastProductionCommit=29223ee...`はPR #34後の現main／Production baseline、`evidence.m14ImplementationProductionCommit=147f770...`はM1.4実装のProduction確認履歴である。`nextMilestone=M2`は将来milestoneとして維持し、blocked statusで保護している
+- `npm test`: 106/107成功。`tests/project-structure.test.mjs`の旧状態テスト1件だけが`M1.5 !== M1.4`で失敗する
+- `npm run check`: 先頭の`npm run validate`で上記6項目により停止する
+- `npm run lint`: 成功
+- `npm run typecheck`: 成功
+- `npm run build`: 成功
+
+これはM1.5状態更新に伴う既存validator／状態テストの一時的不整合であり、runtime実装の失敗を示さない。本docs branchではvalidatorとテストを変更・弱体化しない。つくちゃんが実装candidateへ文書を採用するとき、`scripts/validate-project.mjs`と`tests/project-structure.test.mjs`をM1.5の正規化済み状態・承認gateへ意図的に更新し、M1.4 Production Evidenceの固定検証は保持する必要がある。
