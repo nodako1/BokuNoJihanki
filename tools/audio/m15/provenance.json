@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "assetId": "m15-summer-morning-loop",
+  "createdDate": "2026-07-23",
+  "purpose": "M1.5 BGM for the rural Japanese summer-morning exploration scene",
+  "creationMethod": "Project-original note score and deterministic procedural synthesis using Python, NumPy, SciPy, and FFmpeg",
+  "externalSamples": false,
+  "thirdPartyMelody": false,
+  "generativeAudioService": false,
+  "fixedSeed": 15072026,
+  "copyrightOwner": "nodako1",
+  "license": "Project-original BokuNoJihanki asset; all rights reserved under the repository LICENSE",
+  "sourceFiles": [
+    "tools/audio/m15/score.json",
+    "tools/audio/m15/generate_m15_bgm.py"
+  ],
+  "runtimeAssetPattern": "public/assets/audio/m15/summer-morning-loop-<sha256-prefix>.m4a",
+  "notes": [
+    "The composition was authored specifically for BokuNoJihanki.",
+    "No field recordings, sample packs, copied game audio, or third-party stems are used.",
+    "Cicadas, birds, wind, traffic, footsteps, and UI sounds are intentionally excluded from this BGM and remain separate runtime buses."
+  ]
+}

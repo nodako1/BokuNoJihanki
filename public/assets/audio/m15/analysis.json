@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "assetId": "m15-summer-morning-loop",
+  "title": "夏の朝、坂の自販機へ",
+  "runtimeFile": "public/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a",
+  "sha256": "9ea9bb8b71d71d9cb60a31372fc1fe5ea5411eb02374d60d78cca04cab3401c6",
+  "bytes": 929056,
+  "provenance": {
+    "createdDate": "2026-07-23",
+    "creationMethod": "Project-original note score and deterministic procedural synthesis using Python, NumPy, SciPy, and FFmpeg",
+    "externalSamples": false,
+    "thirdPartyMelody": false,
+    "copyrightOwner": "nodako1",
+    "license": "Project-original BokuNoJihanki asset; all rights reserved under the repository LICENSE",
+    "scoreSha256": "fef004a863835b5418c3c46c176d3d5e60645f4b9047be3616a54d72287dccb0",
+    "generatorSha256": "796ec365589d3d476018fb1d3481af30fe9ff5b358e0e8f1cc9aba214ac76ebc",
+    "provenanceSha256": "4d52bb286dbd245ce24cd9a4deec986caaebceb8a5fa64e5c31fea43082866a5",
+    "fixedSeed": 15072026
+  },
+  "format": {
+    "container": "M4A",
+    "codec": "aac",
+    "codecLongName": "AAC (Advanced Audio Coding)",
+    "profile": "LC",
+    "sampleRateHz": 48000,
+    "channels": 2,
+    "channelLayout": "stereo",
+    "bitRate": 191787,
+    "durationSeconds": 38.4,
+    "decodedFrames": 1843200
+  },
+  "composition": {
+    "tempoBpm": 100,
+    "meter": [
+      4,
+      4
+    ],
+    "bars": 16,
+    "key": "G major",
+    "durationSeconds": 38.4,
+    "layers": [
+      "lead melody",
+      "four-note harmony pad",
+      "plucked arpeggio",
+      "root-and-fifth bass",
+      "gentle synthetic rhythm"
+    ],
+    "environmentIncluded": false
+  },
+  "signal": {
+    "samplePeakDbfs": -5.409384,
+    "truePeakDbtp": -5.406713,
+    "truePeakOversampleFactor": 4,
+    "rmsDbfs": -18.007615,
+    "clippingSampleCount": 0,
+    "dcOffset": [
+      9.124e-06,
+      5.4938e-06
+    ],
+    "longestSilenceSeconds": 0.0,
+    "silenceThresholdDbfs": -60.0,
+    "stereoCorrelation": 0.973234,
+    "integratedLufs": -15.76,
+    "loudnessRangeLu": 0.7,
+    "loudnessThresholdLufs": -25.76,
+    "ffmpegReportedTruePeakDbtp": -5.41,
+    "meanSpectralCentroidHz": 821.115,
+    "meanTop24BinTonalEnergyRatio": 0.773219
+  },
+  "loop": {
+    "loopStartSeconds": 0.0,
+    "loopEndSeconds": 38.4,
+    "boundaryJump": 0.006837003,
+    "boundaryJumpPerChannel": [
+      0.006837003,
+      0.000396639
+    ],
+    "adjacentStepP99": 0.029459924,
+    "boundaryToP99StepRatio": 0.232078,
+    "head100msRmsDbfs": -16.307132,
+    "tail100msRmsDbfs": -19.505174
+  },
+  "checks": {
+    "codecIsAac": true,
+    "sampleRateIs48000": true,
+    "channelsAreStereo": true,
+    "decodedFrameCountExact": true,
+    "durationIs38Point4Seconds": true,
+    "truePeakAtOrBelowMinus1Dbtp": true,
+    "clippingSamplesZero": true,
+    "dcBelowMinus60Dbfs": true,
+    "noSilenceAtOrAbove100ms": true,
+    "loopBoundaryJumpBelowMinus34Dbfs": true,
+    "loopEdgeRmsDifferenceBelow6Db": true
+  },
+  "allChecksPassed": true,
+  "toolchain": {
+    "python": "3.12.13",
+    "numpy": "2.3.5",
+    "scipy": "1.17.0",
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers",
+    "ffprobe": "ffprobe version 6.1.1-3ubuntu5 Copyright (c) 2007-2023 the FFmpeg developers"
+  }
+}

@@ -1,0 +1,13 @@
+Use case: stylized-concept
+Asset type: production game-character sprite atlas for BokuNoJihanki M1.5
+Primary request: create one polished 7-column by 2-row sprite atlas containing exactly 14 equal cells of the same Japanese boy viewed in strict full-body left-facing side profile. Cells 1-4 are a subtle idle loop (breathing, one natural blink); cells 5-14 are a seamless 10-frame walk cycle with convincing contact, passing, recoil, and weight shift. The character must remain the identical person in all 14 cells.
+Subject: Japanese boy about 10-12 years old, short slightly tousled dark brown-black hair, warm expressive but understated face, cream short-sleeve T-shirt with one muted brick-red horizontal chest stripe, navy shorts, white ankle socks, worn blue-gray summer sneakers. Preserve identical proportions, face, outfit colors, clothing folds, and scale across every cell.
+Style/medium: finished hand-painted 2D game animation, softly painterly Japanese summer-adventure illustration, refined texture and gentle natural shading that matches a high-quality rural Japanese background; clean readable silhouette; no thick cartoon outline; not pixel art; not a vector mascot.
+Composition/framing: exact 7x2 atlas grid, equal-size cells, no gaps except even transparent-removal margin; each full body fully visible and centered; every standing/contact foot rests on the exact same horizontal baseline; identical camera and scale; at least 8% padding around each figure. Left-facing in every cell. Chronological order left-to-right on row 1, then left-to-right on row 2.
+Scene/backdrop: perfectly flat solid #ff00ff chroma-key background for local background removal. The background must be one uniform color in every cell, with no gradient, texture, floor plane, lighting variation, grid lines, cell borders, labels, or separators.
+Constraints: no cast shadow, no contact shadow, no ground, no reflection, no props, no backpack, no text, no numbers, no watermark. Do not use #ff00ff anywhere in the boy. Do not crop hair, hands, legs, or shoes. Keep feet and body dimensions stable; no extra limbs, missing fingers, distorted shoes, floating feet, or pose jumps. Exactly one boy per cell and exactly 14 cells.
+
+Generation note: the built-in image generator returned a consistent 6-column by
+2-row sheet with 12 usable figures. M1.5 intentionally formalizes the measured
+result as 4 idle plus 8 walk frames per facing direction; it does not pretend
+that the requested 14-cell output was produced.

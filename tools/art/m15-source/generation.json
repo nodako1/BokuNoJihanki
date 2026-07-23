@@ -1,0 +1,29 @@
+{
+  "revision": "M1.5",
+  "generatedAt": "2026-07-23",
+  "tool": "OpenAI built-in image generator",
+  "rights": "Project-original assets generated for BokuNoJihanki. No third-party game art or trademarked character was requested or used.",
+  "player": {
+    "prompt": "tools/art/m15-source/player-prompt.txt",
+    "chromaSource": "tools/art/m15-source/player-left-atlas-chroma.png",
+    "keyedSource": "tools/art/m15-source/player-left-atlas-keyed.png",
+    "postProcess": "OpenAI imagegen chroma source; initial remove_chroma_key.py validation exposed nonuniform generator artifacts; final deterministic largest-connected-character matte, edge despill, crop, alignment and mirroring in generate_m15_assets.py",
+    "actualGrid": {
+      "columns": 6,
+      "rows": 2,
+      "idleFrames": 4,
+      "walkFrames": 8,
+      "sourceFacing": "left"
+    }
+  },
+  "upperVendingLane": {
+    "prompt": "tools/art/m15-source/upper-edit-prompt.txt",
+    "input": "tools/art/m14-source/upper-vending-lane-master.png",
+    "output": "tools/art/m15-source/upper-vending-lane-master.png",
+    "edit": "Localized T-junction stone stairway at the front edge of the horizontal lane"
+  },
+  "unchangedAreaInputs": [
+    "tools/art/m14-source/home-street-master.png",
+    "tools/art/m14-source/life-road-master.png"
+  ]
+}
