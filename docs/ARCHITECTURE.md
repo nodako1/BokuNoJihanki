@@ -2,9 +2,9 @@
 
 ## 構成
 
-Reactはタイトル、HUD、仮想スティック、画面方向ガードを担当し、Phaserは住宅街Scene、主人公、カメラ、背景、walkable、衝突、時間帯を担当する。`gameBridge.ts`で疎結合に接続する。
+Reactはタイトル、HUD、横方向仮想スティック、上下分岐ボタン、画面方向ガードを担当し、Phaserは`SideScrollTownScene`、主人公、横カメラ、3エリア表示、遷移、時間帯を担当する。`gameBridge.ts`で疎結合に接続する。M1.3の`ResidentialScene`はフォールバックとして保存するが、M1.4失敗時に自動起動する仕組みではない。
 
-## M1.3住宅街Scene
+## M1.3住宅街Scene（フォールバック／設計履歴）
 
 ```text
 ResidentialScene
@@ -27,11 +27,11 @@ ResidentialScene
 
 足元円がwalkable内かつobstacle外にあることを毎サブステップ検査する。X/Y軸の部分移動を試して壁沿いスライドを実現する。家や私有地を個別矩形で塞ぐのではなく、最初からwalkable外にする。
 
-### Scene分割
+### M1.3当時のScene分割方針
 
-今後の公園、駅前、商店街、山、海は専用Sceneと専用背景を持つ。AreaTransitionSystemがフェードアウト、読み込み、地名表示、フェードインを担当する。無理なシームレス接続は行わない。
+M1.3では追加エリアを専用Sceneと専用背景へ分け、AreaTransitionSystemで切り替える方針だった。M1.4では正式方式を単一永続Scene内のエリア交換へ変更した。この節はロールバック可能な実装と設計履歴を説明する。
 
-## M1.4 2D横スクロール街探索（実装中・Production確認前）
+## M1.4 2D横スクロール街探索（完了・Production確認済み）
 
 M1.4では斜め見下ろしの巨大walkable mapをメイン方式にせず、独立した横長エリアをグラフで接続する。M1.3の`ResidentialScene`、map、移動ロジック、アセットは削除せずフォールバックとして残す。
 
@@ -57,7 +57,7 @@ M1.4 Town Scene（単一・永続）
 Navigation adapter
         │
         ▼
-Claude navigation core（純粋ロジック）
+Navigation core（純粋ロジック）
 ```
 
 ### 単一永続Scene
@@ -80,11 +80,13 @@ Claude navigation core（純粋ロジック）
 
 ### navigation adapter境界
 
-`src/game/navigation/`はPhaser、React、DOM、Web Audioから独立したClaude担当の純粋コアとする。area graph、横移動、exit判定、transition state、spawn解決、input lock、データ検証を担当する。
+`src/game/navigation/`はPhaser、React、DOM、Web Audioから独立した純粋コアとする。area graph、横移動、exit判定、transition state、spawn解決、input lock、データ検証を担当する。
 
-ChatGPT側adapterは入力とdelta timeをコアへ渡し、返されたX、速度、向き、prompt、transition intentをSceneへ反映する。Texture読み込み、Tween、camera、表示レイヤー、時間帯、音声はadapterより外に置く。APIに問題がある場合はコアを直接変更せず連携ボードで合意する。
+adapterは入力とdelta timeをコアへ渡し、返されたX、速度、向き、prompt、transition intentをSceneへ反映する。Texture読み込み、Tween、camera、表示レイヤー、時間帯、音声はadapterより外に置く。API変更はコアとadapterの契約を同時に検証する。
 
-M1.4 Release Candidate作成時点では、依頼済みの`claude/m1-4-area-navigation-core`ブランチ／PRが存在しない。このため`src/game/navigationAdapter/`には、上記契約を固定してScene統合とProduction検証を進めるためのPhaser非依存fallbackを置く。Claude成果到着後は、公開APIを維持したままadapter内部を`src/game/navigation/`呼び出しへ置換し、fallback内部ロジックは削除する。これはClaude担当領域を代替完了したものとは扱わない。
+navigation coreはPR #33でmainへマージ済み（`ee255a1a8413768d0e7dbdf512964268c8eaf276`）。`src/game/navigationAdapter/`は公開APIを維持しながら、area graph query、横移動、9状態のnavigation state、spawn解決、input lock、validationを`src/game/navigation/`へ委譲する。Scene向け4フェーズへの変換、カメラ、表示、時間帯、音声はadapter／Scene側に残す。
+
+遷移開始時の`sourceSpawnId`をadapter stateへ保存し、cloneされた`fading-in`状態のresetでも非初期spawnへ正しく復帰する。P2修正と回帰テストを含む最終PR head `5c6895d0d1e2ad31a95f6490e60cc26f89d290cf`は、Quality、Browser Smoke、最終Codexレビューを通過した。
 
 ### 遷移状態
 
@@ -109,3 +111,7 @@ idle
 - audio engine: AudioContext、ミュート、時間帯・エリアmix
 
 M2の`src/game/economy/`は保存するが、M1.4 Sceneからimportせず、所持金、探索、15分消費、saveを接続しない。
+
+## M1正式基盤
+
+Production確認済みmerge `147f770a4b73077c4e5dc0523839b3fefb789db4`以降、M1の正式な街探索基盤は`SideScrollTownScene`を中心とするM1.4方式とする。新しい街エリアは、独立した横長world、area graph、明示的なspawn／exit、短い暗転遷移を基本単位として追加する。M1.3は削除せず、比較・復旧・設計履歴に使用する。

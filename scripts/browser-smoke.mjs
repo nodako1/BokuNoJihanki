@@ -2,10 +2,33 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 
+function positiveIntegerFromEnv(name, fallback) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === '') return fallback;
+  const value = Number(rawValue);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
+function booleanFromEnv(name, fallback) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === '') return fallback;
+  if (/^(1|true|yes|on)$/i.test(rawValue)) return true;
+  if (/^(0|false|no|off)$/i.test(rawValue)) return false;
+  throw new RangeError(`${name} must be true or false.`);
+}
+
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173';
 const expectedCommit = (process.env.EXPECTED_COMMIT ?? '').slice(0, 7);
 const outputDir = process.env.BROWSER_ARTIFACT_DIR ?? 'diagnostics/browser-smoke';
 const productionWaitMs = Number(process.env.PRODUCTION_WAIT_MS ?? 480_000);
+const viewport = Object.freeze({
+  width: positiveIntegerFromEnv('BROWSER_VIEWPORT_WIDTH', 1280),
+  height: positiveIntegerFromEnv('BROWSER_VIEWPORT_HEIGHT', 720),
+});
+const traceEnabled = booleanFromEnv('BROWSER_TRACE', true);
 const areaGroundY = {
   'home-street': 525,
   'life-road': 614,
@@ -21,7 +44,12 @@ const pageErrors = [];
 const failedRequests = [];
 const transitionChecks = [];
 const evidence = {};
-let statePayload = { baseUrl, expectedCommit };
+let statePayload = {
+  baseUrl,
+  expectedCommit,
+  viewport,
+  traceEnabled,
+};
 
 const record = (kind, value) => {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
@@ -277,7 +305,7 @@ try {
     ],
   });
   context = await browser.newContext({
-    viewport: { width: 1280, height: 720 },
+    viewport,
     deviceScaleFactor: 1,
     locale: 'ja-JP',
   });
@@ -294,7 +322,13 @@ try {
       if (state.snapshots.length > 1_200) state.snapshots.shift();
     });
   });
-  await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+  if (traceEnabled) {
+    await context.tracing.start({
+      screenshots: true,
+      snapshots: true,
+      sources: false,
+    });
+  }
   page = await context.newPage();
   page.on('console', (message) => record(`console:${message.type()}`, message.text()));
   page.on('pageerror', (error) => {
@@ -581,6 +615,8 @@ try {
   statePayload = {
     baseUrl,
     expectedCommit,
+    viewport,
+    traceEnabled,
     evidence,
     invariants,
     transitionCount: transitionChecks.length,
@@ -600,6 +636,8 @@ try {
   statePayload = {
     baseUrl,
     expectedCommit,
+    viewport,
+    traceEnabled,
     evidence,
     transitionChecks,
     lastHud,
@@ -619,7 +657,7 @@ try {
     path.join(outputDir, 'state.json'),
     `${JSON.stringify(statePayload, null, 2)}\n`,
   );
-  if (context) {
+  if (context && traceEnabled) {
     await context.tracing.stop({
       path: path.join(outputDir, 'trace.zip'),
     }).catch((error) => record('trace-error', error?.stack ?? String(error)));
