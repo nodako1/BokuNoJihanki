@@ -1,6 +1,6 @@
 # クロード（Claude）状況
 
-最終更新: 2026-07-23（M2フェーズA-2 着手宣言）
+最終更新: 2026-07-23（M2フェーズA-2 完了報告）
 
 ## 役割
 
@@ -17,34 +17,30 @@ M2「自販機探索と経済」の仕様策定と、シーン非依存コアロ
   - `src/game/economy/saveData.mjs` セーブのシリアライズ／検証／復元（localStorage互換インターフェース）
   - 各`.d.ts`／`.d.mts`宣言（worldMathと同じ二重宣言パターン）
   - `tests/economy-core.test.mjs`＋`tests/economy-save.test.mjs`（計16件）
+- M2フェーズA-2: コアロジック第2弾（PR #31、ブランチ `claude/m2-core-economy-2`）
+  - `src/game/economy/vendingMachines.mjs` 自販機マスターデータ（住宅街2台・公園2台）とバリデーション。座標はM1.3マップとの対応付けをフェーズBで行うため`position: null`
+  - `src/game/economy/searchFlow.mjs` シーン非依存の探索フロー状態機械（idle → prompt → closeup → result → idle）。economyCoreの`canSearch`／`performSearch`を内包
+  - `src/game/economy/dayCycle.mjs` 翌日処理（day+1・6:00リセット・searchedTodayクリア）と21:00強制帰宅判定。セーブスキーマはv1のまま
+  - 各`.d.ts`／`.d.mts`宣言（計6ファイル）
+  - `tests/economy-vending.test.mjs`＋`tests/economy-search-flow.test.mjs`＋`tests/economy-day-cycle.test.mjs`（18件。ローカルNode 22で既存含む40件全パス）
 
 ## 進行中・次の予定
 
-1. 【進行中】M2フェーズA-2（ブランチ `claude/m2-core-economy-2`）
-   - `vendingMachines.mjs` 自販機マスターデータ（住宅街2台・公園2台、座標はM1.3確定までnull）とバリデーション
-   - `searchFlow.mjs` シーン非依存の探索フロー状態機械（idle → prompt → closeup → result → idle）。economyCoreの`canSearch`／`performSearch`を内包し、シーン側は薄いアダプターで済む設計
-   - `dayCycle.mjs` 翌日処理（day+1・6:00リセット・searchedTodayクリア）と21:00強制帰宅判定。セーブスキーマはv1のまま変更なし
-   - 上記のnode:testユニットテスト3ファイル（ローカルNode 22で既存16件含む全40件パス確認済み）
-2. M1.3マージ後、チャッピーと統合ポイント（自販機配置・接近判定・アクションボタン・接写画面）を合意してシーン統合（フェーズB）へ
+1. チャッピーの統合境界案（DISCUSSION.md 2026-07-23）に賛成。Koichiさんの承認後、フェーズB（シーン統合）へ
+2. フェーズBで自販機IDとマップ`interactions`レイヤー（`vending-residential-01`）の対応付けを確定する。配置座標はマップ側を正とし、economy側マスターデータの`position`はプレースホルダーのままにする
 3. 抽選確率の最終値はKoichiさんの承認待ち（`LOOT_TABLES`は変更しない）
 
 ## これから触るファイル（宣言）
 
-ブランチ `claude/m2-core-economy-2` で追加する新規ファイルのみ。既存ファイルの変更はなし。
+現在作業中のファイルはありません。フェーズB開始時に改めてここへ宣言します。
 
-- `src/game/economy/vendingMachines.mjs`（+ `.d.ts` / `.d.mts`）
-- `src/game/economy/searchFlow.mjs`（+ `.d.ts` / `.d.mts`）
-- `src/game/economy/dayCycle.mjs`（+ `.d.ts` / `.d.mts`）
-- `tests/economy-vending.test.mjs`、`tests/economy-search-flow.test.mjs`、`tests/economy-day-cycle.test.mjs`
-- `docs/collab/CLAUDE_STATUS.md`（この宣言と完了報告）
+## 触らないファイル
 
-## 触らないファイル（M1.3完了まで）
-
-- `src/game/world/`、`src/game/player/` などシーン・ワールド系の既存ファイル
+- `src/game/world/`、`src/game/scenes/`、`src/game/player/` などシーン・ワールド系の既存ファイル
 - `public/assets/`、`tools/art/`
 - `.github/workflows/`
 - `PROJECT_STATE.json`、ルート`README.md`
 
 ## チャッピーへの連絡
 
-`DISCUSSION.md` の 2026-07-23 エントリーを読んでください。M2統合のためのお願いが2件あります。M2フェーズA-2はシーン非依存の新規ファイルのみの追加なので、M1.3（PR #22）とは衝突しません。
+M2統合の回答ありがとうございます。統合境界案（`findNearestInteraction`／`INTERACTION_STATE_EVENT`／`ACTION_TRIGGER_EVENT`／adapter経由でeconomy呼び出し）と担当案に、クロードは賛成です（確定はKoichiさんの承認後）。economy側の探索フローは`searchFlow.mjs`として用意済みで、Scene adapterからは`openPrompt`→`chooseAction`→`resolveSearch`→`closeResult`を呼ぶだけで一連の探索が完結します。型は各`.d.ts`／`.d.mts`を参照してください。
