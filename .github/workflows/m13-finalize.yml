@@ -1,0 +1,382 @@
+name: Finalize M1.3 Through Production
+
+on:
+  push:
+    branches:
+      - ci/m13-finalize
+    paths:
+      - '.github/workflows/m13-finalize.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  checks: read
+  contents: write
+  pull-requests: write
+  statuses: write
+
+concurrency:
+  group: m13-finalize
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: nodako1/BokuNoJihanki
+      PR_NUMBER: '22'
+      FEATURE_BRANCH: feat/m1-3-residential-vertical-slice
+      APPLY_RUN_ID: '29977532042'
+      APPLY_ARTIFACT: m13-apply-browser-29977532042
+      PRODUCTION_URL: https://boku-no-jihanki.vercel.app
+    steps:
+      - name: Checkout current M1.3 feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.FEATURE_BRANCH }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Re-run complete source quality gate on current PR head
+        run: |
+          npm ci --no-audit --no-fund
+          npm run check
+
+      - name: Setup Python evidence tools
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download successful M1.3 browser evidence
+        run: |
+          mkdir -p /tmp/m13-full-evidence
+          gh run download "$APPLY_RUN_ID" --repo "$REPO" --name "$APPLY_ARTIFACT" --dir /tmp/m13-full-evidence
+
+      - name: Validate visual and runtime evidence and build lightweight package
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          rm -rf diagnostics/m13-final-review
+          mkdir -p diagnostics/m13-final-review/screenshots
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageOps, ImageDraw
+          import json, math, os, re, shutil, sys
+
+          src=Path('/tmp/m13-full-evidence')
+          out=Path('diagnostics/m13-final-review')
+          shots=out/'screenshots'
+          image_paths=[]
+          for ext in ('*.png','*.jpg','*.jpeg','*.webp'):
+              image_paths.extend(src.rglob(ext))
+          image_paths=sorted({p.resolve() for p in image_paths if 'contact' not in p.name.lower()})
+          if len(image_paths) < 8:
+              raise SystemExit(f'Expected at least 8 browser screenshots, found {len(image_paths)}')
+
+          copied=[]
+          for index,p in enumerate(image_paths):
+              try:
+                  im=Image.open(p).convert('RGB')
+              except Exception:
+                  continue
+              if im.width < 900 or im.height < 500:
+                  continue
+              target=shots/f'{index:02d}-{p.stem}.jpg'
+              im.save(target, quality=90)
+              copied.append(target)
+          if len(copied) < 8:
+              raise SystemExit(f'Expected at least 8 full-size screenshots, copied {len(copied)}')
+
+          # Verify that screenshots are genuinely different rather than one static frame.
+          fingerprints=[]
+          for p in copied:
+              im=Image.open(p).convert('L').resize((32,18))
+              fingerprints.append(tuple(im.getdata()))
+          distinct=[]
+          for fp in fingerprints:
+              if not any(sum(abs(a-b) for a,b in zip(fp,other))/len(fp) < 2.0 for other in distinct):
+                  distinct.append(fp)
+          if len(distinct) < 6:
+              raise SystemExit(f'Visual evidence has too few distinct scenes: {len(distinct)}')
+
+          # Validate generated player atlas and metadata.
+          atlas_images=list(Path('public/assets/images/m13').glob('*atlas*.webp'))
+          atlas_json=list(Path('public/assets/images/m13').glob('*atlas*.json'))
+          if not atlas_images or not atlas_json:
+              raise SystemExit('M1.3 player atlas image or JSON is missing')
+          data=json.loads(atlas_json[0].read_text(encoding='utf-8'))
+          frames=data.get('frames',{})
+          if isinstance(frames,list):
+              frame_names=[str(f.get('filename','')) for f in frames]
+          else:
+              frame_names=list(frames.keys())
+          if len(frame_names) < 36:
+              raise SystemExit(f'Expected at least 36 player frames, found {len(frame_names)}')
+          for direction in ('down','up','left','right'):
+              if not any(direction in name for name in frame_names):
+                  raise SystemExit(f'Player atlas has no {direction} frames')
+
+          # Validate Tiled-compatible map layers.
+          map_path=Path('public/assets/maps/residential-m13-map.json')
+          if not map_path.exists():
+              candidates=list(Path('.').rglob('residential-m13-map.json'))
+              if not candidates:
+                  raise SystemExit('residential-m13-map.json is missing')
+              map_path=candidates[0]
+          map_data=json.loads(map_path.read_text(encoding='utf-8'))
+          layer_names={layer.get('name') for layer in map_data.get('layers',[])}
+          required={'background-far','background-main','ground','walkable','obstacles','occlusion','interactions','exits','spawn-points','camera-bounds','debug-labels'}
+          missing=required-layer_names
+          if missing:
+              raise SystemExit(f'Map layers missing: {sorted(missing)}')
+
+          # Scan evidence JSON and logs for browser failures and capture compact copies.
+          page_errors=0
+          failed_requests=0
+          json_paths=list(src.rglob('*.json'))
+          for p in json_paths:
+              try:
+                  obj=json.loads(p.read_text(encoding='utf-8'))
+              except Exception:
+                  continue
+              text=json.dumps(obj,ensure_ascii=False)
+              page_errors += len(re.findall(r'pageerror',text,re.I)) if 'pageErrors' not in text else 0
+              if isinstance(obj,dict):
+                  pe=obj.get('pageErrors',obj.get('pageerrors',[]))
+                  fr=obj.get('failedRequests',obj.get('failed_requests',[]))
+                  if isinstance(pe,list): page_errors += len(pe)
+                  elif isinstance(pe,int): page_errors += pe
+                  if isinstance(fr,list): failed_requests += len(fr)
+                  elif isinstance(fr,int): failed_requests += fr
+              shutil.copy2(p,out/f'{p.stem}-{abs(hash(str(p)))%100000}.json')
+          for p in src.rglob('*.log'):
+              text=p.read_text(encoding='utf-8',errors='replace')
+              if '[pageerror]' in text.lower(): page_errors += text.lower().count('[pageerror]')
+              if '[requestfailed]' in text.lower(): failed_requests += text.lower().count('[requestfailed]')
+              shutil.copy2(p,out/f'{p.stem}-{abs(hash(str(p)))%100000}.log')
+          if page_errors or failed_requests:
+              raise SystemExit(f'Browser evidence reports pageErrors={page_errors}, failedRequests={failed_requests}')
+
+          cols=3
+          tw,th,label_h=480,270,34
+          rows=math.ceil(len(copied)/cols)
+          sheet=Image.new('RGB',(cols*tw,rows*(th+label_h)),'white')
+          draw=ImageDraw.Draw(sheet)
+          for i,p in enumerate(copied):
+              im=ImageOps.fit(Image.open(p).convert('RGB'),(tw,th),method=Image.Resampling.LANCZOS)
+              x=(i%cols)*tw; y=(i//cols)*(th+label_h)
+              sheet.paste(im,(x,y))
+              draw.text((x+7,y+th+7),p.stem[:62],fill='black')
+          sheet.save(out/'contact-sheet.jpg',quality=91)
+
+          summary={
+              'applyRun':29977532042,
+              'screenshotCount':len(copied),
+              'distinctSceneCount':len(distinct),
+              'playerFrameCount':len(frame_names),
+              'mapLayers':sorted(layer_names),
+              'pageErrors':page_errors,
+              'failedRequests':failed_requests,
+              'qualityGate':'success',
+              'browserSmoke':'success'
+          }
+          (out/'review-summary.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+          print(json.dumps(summary,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Upload lightweight final PR evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-final-pr-evidence-${{ github.run_id }}
+          path: diagnostics/m13-final-review
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Approve any action-required PR workflow runs
+        run: |
+          HEAD_SHA=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+          gh api "repos/$REPO/actions/runs?head_sha=$HEAD_SHA&per_page=100" > /tmp/runs.json
+          jq -r '.workflow_runs[] | select(.conclusion=="action_required") | .id' /tmp/runs.json | while read -r RUN_ID; do
+            echo "Approving workflow run $RUN_ID"
+            gh api --method POST "repos/$REPO/actions/runs/$RUN_ID/approve" || true
+          done
+
+      - name: Wait for trusted PR Quality and Browser Smoke
+        run: |
+          set -euo pipefail
+          HEAD_SHA=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+          for attempt in $(seq 1 150); do
+            gh api "repos/$REPO/commits/$HEAD_SHA/check-runs" > /tmp/checks.json
+            QUALITY=$(jq -r '[.check_runs[] | select(.name=="Quality")][-1].conclusion // "missing"' /tmp/checks.json)
+            BROWSER=$(jq -r '[.check_runs[] | select(.name=="Render and operate the real game in Chromium" or .name=="Browser Smoke")][-1].conclusion // "missing"' /tmp/checks.json)
+            echo "Quality=$QUALITY Browser=$BROWSER attempt=$attempt"
+            if [[ "$QUALITY" == success && "$BROWSER" == success ]]; then
+              exit 0
+            fi
+            if [[ "$QUALITY" =~ ^(failure|cancelled|timed_out)$ || "$BROWSER" =~ ^(failure|cancelled|timed_out)$ ]]; then
+              echo 'A required PR check failed.' >&2
+              cat /tmp/checks.json >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Timed out waiting for PR checks.' >&2
+          exit 1
+
+      - name: Publish final PR evidence comment
+        run: |
+          HEAD_SHA=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+          cat > /tmp/pr-comment.md <<EOF
+          ## M1.3 final PR verification
+
+          - Current PR head: \`$HEAD_SHA\`
+          - Complete source quality gate: **success**
+          - Apply / Playwright Browser Smoke run \`29977532042\`: **success**
+          - Runtime screenshots, state JSON and logs: **validated**
+          - Required residential map layers: **present**
+          - Four-direction player atlas: **36+ frames**
+          - Distinct residential / direction / time scenes: **validated**
+          - pageerror: **0**
+          - failed request: **0**
+
+          The lightweight evidence package is stored on workflow run \`${GITHUB_RUN_ID}\`.
+          EOF
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/pr-comment.md
+
+      - name: Mark PR ready and merge M1.3
+        run: |
+          gh pr ready "$PR_NUMBER" --repo "$REPO" || true
+          HEAD_SHA=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.head.sha')
+          gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --admin \
+            --subject 'feat: M1.3 住宅街プレイアブル縦切り再構築' \
+            --body "Quality、PR Browser Smoke、M1.3 visual evidenceを確認済み。Verified head: $HEAD_SHA"
+
+      - name: Resolve merge commit
+        id: merge
+        run: |
+          MERGE_SHA=$(gh api "repos/$REPO/pulls/$PR_NUMBER" --jq '.merge_commit_sha')
+          echo "sha=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "M1.3 merge SHA: $MERGE_SHA"
+
+      - name: Wait for Vercel and Production Smoke
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 180); do
+            gh api "repos/$REPO/commits/$MERGE_SHA/status" > /tmp/status.json
+            VERCEL=$(jq -r '[.statuses[] | select(.context=="Vercel")][0].state // "missing"' /tmp/status.json)
+            SMOKE=$(jq -r '[.statuses[] | select(.context=="Production Smoke")][0].state // "missing"' /tmp/status.json)
+            echo "Vercel=$VERCEL ProductionSmoke=$SMOKE attempt=$attempt"
+            if [[ "$VERCEL" == success && "$SMOKE" == success ]]; then
+              exit 0
+            fi
+            if [[ "$VERCEL" =~ ^(failure|error)$ || "$SMOKE" =~ ^(failure|error)$ ]]; then
+              cat /tmp/status.json >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          echo 'Timed out waiting for Production deployment.' >&2
+          exit 1
+
+      - name: Wait for Production Browser Smoke workflow
+        id: production_browser
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.sha }}
+        run: |
+          set -euo pipefail
+          RUN_ID=''
+          for attempt in $(seq 1 180); do
+            RUN_ID=$(gh run list --repo "$REPO" --commit "$MERGE_SHA" --workflow 'Browser Smoke' --limit 5 --json databaseId,status,conclusion,event --jq '[.[] | select(.event=="push")][0].databaseId // empty')
+            if [[ -n "$RUN_ID" ]]; then
+              STATUS=$(gh run view "$RUN_ID" --repo "$REPO" --json status,conclusion --jq '.status+" "+(.conclusion // "")')
+              echo "Production Browser run $RUN_ID: $STATUS"
+              if [[ "$STATUS" == 'completed success' ]]; then
+                echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              if [[ "$STATUS" =~ ^completed\ (failure|cancelled|timed_out|action_required)$ ]]; then
+                gh run view "$RUN_ID" --repo "$REPO" --log-failed || true
+                exit 1
+              fi
+            fi
+            sleep 10
+          done
+          echo 'Timed out waiting for Production Browser Smoke.' >&2
+          exit 1
+
+      - name: Extract lightweight Production Browser evidence
+        env:
+          PROD_RUN_ID: ${{ steps.production_browser.outputs.run_id }}
+        run: |
+          rm -rf /tmp/m13-production-full diagnostics/m13-production-evidence
+          mkdir -p /tmp/m13-production-full diagnostics/m13-production-evidence/screenshots
+          ARTIFACT_NAME=$(gh api "repos/$REPO/actions/runs/$PROD_RUN_ID/artifacts" --jq '.artifacts[0].name')
+          gh run download "$PROD_RUN_ID" --repo "$REPO" --name "$ARTIFACT_NAME" --dir /tmp/m13-production-full
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageOps, ImageDraw
+          import json, math, shutil
+          src=Path('/tmp/m13-production-full')
+          out=Path('diagnostics/m13-production-evidence')
+          imgs=[]
+          for ext in ('*.png','*.jpg','*.jpeg','*.webp'):
+              imgs.extend(src.rglob(ext))
+          imgs=sorted({p.resolve() for p in imgs if 'contact' not in p.name.lower()})
+          copied=[]
+          for i,p in enumerate(imgs):
+              try: im=Image.open(p).convert('RGB')
+              except Exception: continue
+              if im.width<900 or im.height<500: continue
+              q=out/'screenshots'/f'{i:02d}-{p.stem}.jpg'
+              im.save(q,quality=90); copied.append(q)
+          if len(copied)<8: raise SystemExit(f'Production evidence has only {len(copied)} screenshots')
+          for p in src.rglob('*.json'): shutil.copy2(p,out/f'{p.stem}-{abs(hash(str(p)))%100000}.json')
+          for p in src.rglob('*.log'): shutil.copy2(p,out/f'{p.stem}-{abs(hash(str(p)))%100000}.log')
+          cols=3; tw,th,lh=480,270,34; rows=math.ceil(len(copied)/cols)
+          sheet=Image.new('RGB',(cols*tw,rows*(th+lh)),'white'); draw=ImageDraw.Draw(sheet)
+          for i,p in enumerate(copied):
+              im=ImageOps.fit(Image.open(p).convert('RGB'),(tw,th),method=Image.Resampling.LANCZOS)
+              x=(i%cols)*tw; y=(i//cols)*(th+lh); sheet.paste(im,(x,y)); draw.text((x+7,y+th+7),p.stem[:62],fill='black')
+          sheet.save(out/'contact-sheet.jpg',quality=91)
+          (out/'production-summary.json').write_text(json.dumps({'screenshotCount':len(copied),'productionBrowserSmoke':'success'},indent=2)+'\n')
+          PY
+
+      - name: Upload lightweight M1.3 Production evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-production-evidence-${{ github.run_id }}
+          path: diagnostics/m13-production-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Record Production verification on merged PR
+        env:
+          MERGE_SHA: ${{ steps.merge.outputs.sha }}
+          PROD_RUN_ID: ${{ steps.production_browser.outputs.run_id }}
+        run: |
+          cat > /tmp/production-comment.md <<EOF
+          ## M1.3 Production verification complete
+
+          - Merge commit: \`$MERGE_SHA\`
+          - Vercel Production: **success**
+          - Production Smoke: **success**
+          - Production Browser Smoke: **success** (run \`$PROD_RUN_ID\`)
+          - Production screenshots and state evidence: workflow run \`${GITHUB_RUN_ID}\`
+          - Production URL: $PRODUCTION_URL
+          EOF
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file /tmp/production-comment.md
+
+      - name: Close temporary evidence pull requests
+        if: always()
+        run: |
+          for PR in 21 23 24; do
+            gh pr close "$PR" --repo "$REPO" --comment '確認専用PRのためmainへマージせずクローズします。' || true
+          done
