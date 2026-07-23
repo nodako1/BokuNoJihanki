@@ -1,0 +1,1155 @@
+{
+  "pr22": {
+    "number": 22,
+    "state": "closed",
+    "draft": false,
+    "merged": true,
+    "merged_at": "2026-07-23T06:32:50Z",
+    "merge_commit_sha": "308abe9bc954e1b53eaba1ad5b904b8c156b838d",
+    "head": {
+      "label": "nodako1:feat/m1-3-residential-vertical-slice",
+      "ref": "feat/m1-3-residential-vertical-slice",
+      "sha": "a09fb5f6989a49cd6ece9128083293fc7aee9349",
+      "user": {
+        "login": "nodako1",
+        "id": 79571927,
+        "node_id": "MDQ6VXNlcjc5NTcxOTI3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/79571927?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/nodako1",
+        "html_url": "https://github.com/nodako1",
+        "followers_url": "https://api.github.com/users/nodako1/followers",
+        "following_url": "https://api.github.com/users/nodako1/following{/other_user}",
+        "gists_url": "https://api.github.com/users/nodako1/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/nodako1/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/nodako1/subscriptions",
+        "organizations_url": "https://api.github.com/users/nodako1/orgs",
+        "repos_url": "https://api.github.com/users/nodako1/repos",
+        "events_url": "https://api.github.com/users/nodako1/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/nodako1/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "repo": {
+        "id": 1308234946,
+        "node_id": "R_kgDOTfoUwg",
+        "name": "BokuNoJihanki",
+        "full_name": "nodako1/BokuNoJihanki",
+        "private": false,
+        "owner": {
+          "login": "nodako1",
+          "id": 79571927,
+          "node_id": "MDQ6VXNlcjc5NTcxOTI3",
+          "avatar_url": "https://avatars.githubusercontent.com/u/79571927?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/nodako1",
+          "html_url": "https://github.com/nodako1",
+          "followers_url": "https://api.github.com/users/nodako1/followers",
+          "following_url": "https://api.github.com/users/nodako1/following{/other_user}",
+          "gists_url": "https://api.github.com/users/nodako1/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/nodako1/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/nodako1/subscriptions",
+          "organizations_url": "https://api.github.com/users/nodako1/orgs",
+          "repos_url": "https://api.github.com/users/nodako1/repos",
+          "events_url": "https://api.github.com/users/nodako1/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/nodako1/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "html_url": "https://github.com/nodako1/BokuNoJihanki",
+        "description": "夏休みの町を歩き回り、お金を集めてゲームを買いまくる探索RPG。",
+        "fork": false,
+        "url": "https://api.github.com/repos/nodako1/BokuNoJihanki",
+        "forks_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/forks",
+        "keys_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/keys{/key_id}",
+        "collaborators_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/collaborators{/collaborator}",
+        "teams_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/teams",
+        "hooks_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/hooks",
+        "issue_events_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/issues/events{/number}",
+        "events_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/events",
+        "assignees_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/assignees{/user}",
+        "branches_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/branches{/branch}",
+        "tags_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/tags",
+        "blobs_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/blobs{/sha}",
+        "git_tags_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/tags{/sha}",
+        "git_refs_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/refs{/sha}",
+        "trees_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/trees{/sha}",
+        "statuses_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/statuses/{sha}",
+        "languages_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/languages",
+        "stargazers_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/stargazers",
+        "contributors_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/contributors",
+        "subscribers_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/subscribers",
+        "subscription_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/subscription",
+        "commits_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/commits{/sha}",
+        "git_commits_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/commits{/sha}",
+        "comments_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/comments{/number}",
+        "issue_comment_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/issues/comments{/number}",
+        "contents_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/contents/{+path}",
+        "compare_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/compare/{base}...{head}",
+        "merges_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/merges",
+        "archive_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/{archive_format}{/ref}",
+        "downloads_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/downloads",
+        "issues_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/issues{/number}",
+        "pulls_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/pulls{/number}",
+        "milestones_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/milestones{/number}",
+        "notifications_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/notifications{?since,all,participating}",
+        "labels_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/labels{/name}",
+        "releases_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/releases{/id}",
+        "deployments_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/deployments",
+        "created_at": "2026-07-22T00:34:26Z",
+        "updated_at": "2026-07-23T06:32:59Z",
+        "pushed_at": "2026-07-23T06:37:45Z",
+        "git_url": "git://github.com/nodako1/BokuNoJihanki.git",
+        "ssh_url": "git@github.com:nodako1/BokuNoJihanki.git",
+        "clone_url": "https://github.com/nodako1/BokuNoJihanki.git",
+        "svn_url": "https://github.com/nodako1/BokuNoJihanki",
+        "homepage": "https://boku-no-jihanki.vercel.app",
+        "size": 9153,
+        "stargazers_count": 0,
+        "watchers_count": 0,
+        "language": "TypeScript",
+        "has_issues": true,
+        "has_projects": true,
+        "has_downloads": false,
+        "has_wiki": true,
+        "has_pages": false,
+        "has_discussions": false,
+        "forks_count": 0,
+        "mirror_url": null,
+        "archived": false,
+        "disabled": false,
+        "open_issues_count": 6,
+        "license": {
+          "key": "other",
+          "name": "Other",
+          "spdx_id": "NOASSERTION",
+          "url": null,
+          "node_id": "MDc6TGljZW5zZTA="
+        },
+        "allow_forking": true,
+        "is_template": false,
+        "web_commit_signoff_required": false,
+        "has_pull_requests": true,
+        "pull_request_creation_policy": "all",
+        "topics": [],
+        "visibility": "public",
+        "forks": 0,
+        "open_issues": 6,
+        "watchers": 0,
+        "default_branch": "main"
+      }
+    },
+    "base": {
+      "label": "nodako1:main",
+      "ref": "main",
+      "sha": "a100a72393f5ff6e32f5d45151d361f27f77da59",
+      "user": {
+        "login": "nodako1",
+        "id": 79571927,
+        "node_id": "MDQ6VXNlcjc5NTcxOTI3",
+        "avatar_url": "https://avatars.githubusercontent.com/u/79571927?v=4",
+        "gravatar_id": "",
+        "url": "https://api.github.com/users/nodako1",
+        "html_url": "https://github.com/nodako1",
+        "followers_url": "https://api.github.com/users/nodako1/followers",
+        "following_url": "https://api.github.com/users/nodako1/following{/other_user}",
+        "gists_url": "https://api.github.com/users/nodako1/gists{/gist_id}",
+        "starred_url": "https://api.github.com/users/nodako1/starred{/owner}{/repo}",
+        "subscriptions_url": "https://api.github.com/users/nodako1/subscriptions",
+        "organizations_url": "https://api.github.com/users/nodako1/orgs",
+        "repos_url": "https://api.github.com/users/nodako1/repos",
+        "events_url": "https://api.github.com/users/nodako1/events{/privacy}",
+        "received_events_url": "https://api.github.com/users/nodako1/received_events",
+        "type": "User",
+        "user_view_type": "public",
+        "site_admin": false
+      },
+      "repo": {
+        "id": 1308234946,
+        "node_id": "R_kgDOTfoUwg",
+        "name": "BokuNoJihanki",
+        "full_name": "nodako1/BokuNoJihanki",
+        "private": false,
+        "owner": {
+          "login": "nodako1",
+          "id": 79571927,
+          "node_id": "MDQ6VXNlcjc5NTcxOTI3",
+          "avatar_url": "https://avatars.githubusercontent.com/u/79571927?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/nodako1",
+          "html_url": "https://github.com/nodako1",
+          "followers_url": "https://api.github.com/users/nodako1/followers",
+          "following_url": "https://api.github.com/users/nodako1/following{/other_user}",
+          "gists_url": "https://api.github.com/users/nodako1/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/nodako1/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/nodako1/subscriptions",
+          "organizations_url": "https://api.github.com/users/nodako1/orgs",
+          "repos_url": "https://api.github.com/users/nodako1/repos",
+          "events_url": "https://api.github.com/users/nodako1/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/nodako1/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "html_url": "https://github.com/nodako1/BokuNoJihanki",
+        "description": "夏休みの町を歩き回り、お金を集めてゲームを買いまくる探索RPG。",
+        "fork": false,
+        "url": "https://api.github.com/repos/nodako1/BokuNoJihanki",
+        "forks_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/forks",
+        "keys_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/keys{/key_id}",
+        "collaborators_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/collaborators{/collaborator}",
+        "teams_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/teams",
+        "hooks_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/hooks",
+        "issue_events_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/issues/events{/number}",
+        "events_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/events",
+        "assignees_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/assignees{/user}",
+        "branches_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/branches{/branch}",
+        "tags_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/tags",
+        "blobs_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/blobs{/sha}",
+        "git_tags_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/tags{/sha}",
+        "git_refs_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/refs{/sha}",
+        "trees_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/trees{/sha}",
+        "statuses_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/statuses/{sha}",
+        "languages_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/languages",
+        "stargazers_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/stargazers",
+        "contributors_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/contributors",
+        "subscribers_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/subscribers",
+        "subscription_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/subscription",
+        "commits_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/commits{/sha}",
+        "git_commits_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/git/commits{/sha}",
+        "comments_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/comments{/number}",
+        "issue_comment_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/issues/comments{/number}",
+        "contents_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/contents/{+path}",
+        "compare_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/compare/{base}...{head}",
+        "merges_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/merges",
+        "archive_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/{archive_format}{/ref}",
+        "downloads_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/downloads",
+        "issues_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/issues{/number}",
+        "pulls_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/pulls{/number}",
+        "milestones_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/milestones{/number}",
+        "notifications_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/notifications{?since,all,participating}",
+        "labels_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/labels{/name}",
+        "releases_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/releases{/id}",
+        "deployments_url": "https://api.github.com/repos/nodako1/BokuNoJihanki/deployments",
+        "created_at": "2026-07-22T00:34:26Z",
+        "updated_at": "2026-07-23T06:32:59Z",
+        "pushed_at": "2026-07-23T06:37:45Z",
+        "git_url": "git://github.com/nodako1/BokuNoJihanki.git",
+        "ssh_url": "git@github.com:nodako1/BokuNoJihanki.git",
+        "clone_url": "https://github.com/nodako1/BokuNoJihanki.git",
+        "svn_url": "https://github.com/nodako1/BokuNoJihanki",
+        "homepage": "https://boku-no-jihanki.vercel.app",
+        "size": 9153,
+        "stargazers_count": 0,
+        "watchers_count": 0,
+        "language": "TypeScript",
+        "has_issues": true,
+        "has_projects": true,
+        "has_downloads": false,
+        "has_wiki": true,
+        "has_pages": false,
+        "has_discussions": false,
+        "forks_count": 0,
+        "mirror_url": null,
+        "archived": false,
+        "disabled": false,
+        "open_issues_count": 6,
+        "license": {
+          "key": "other",
+          "name": "Other",
+          "spdx_id": "NOASSERTION",
+          "url": null,
+          "node_id": "MDc6TGljZW5zZTA="
+        },
+        "allow_forking": true,
+        "is_template": false,
+        "web_commit_signoff_required": false,
+        "has_pull_requests": true,
+        "pull_request_creation_policy": "all",
+        "topics": [],
+        "visibility": "public",
+        "forks": 0,
+        "open_issues": 6,
+        "watchers": 0,
+        "default_branch": "main"
+      }
+    },
+    "title": "feat: M1.3 住宅街プレイアブル縦切り再構築"
+  },
+  "mainSha": "308abe9bc954e1b53eaba1ad5b904b8c156b838d",
+  "mainStatuses": [
+    {
+      "context": "Vercel",
+      "state": "success",
+      "description": "Deployment has completed",
+      "target_url": "https://vercel.com/rutantan88-7611s-projects/boku-no-jihanki/4bGeF1EvnrhQf85pzWN5Ja8Th1HV"
+    },
+    {
+      "context": "Production Smoke",
+      "state": "success",
+      "description": "Vercel Production contains the M1.3 residential vertical slice",
+      "target_url": "https://boku-no-jihanki.vercel.app"
+    }
+  ],
+  "mainChecks": [
+    {
+      "name": "Verify Vercel Production contains M1.3",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985378347/job/89135975790"
+    },
+    {
+      "name": "Render and operate the real game in Chromium",
+      "status": "in_progress",
+      "conclusion": null,
+      "details_url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985378341/job/89135960134"
+    },
+    {
+      "name": "Lint, typecheck, test and build",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985378346/job/89135954051"
+    }
+  ],
+  "projectState": {
+    "project": "BokuNoJihanki",
+    "gameTitle": "ぼくの自販機",
+    "version": "0.1.0",
+    "currentMilestone": "M1.3",
+    "status": "implementation-in-progress",
+    "productionBranch": "main",
+    "productionUrl": "https://boku-no-jihanki.vercel.app",
+    "lastProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+    "completed": [
+      "m0-development-foundation",
+      "m1-player-four-direction-movement",
+      "m1-camera-and-input-foundation",
+      "m1.1-high-density-vector-visuals",
+      "m1.1-production-verification",
+      "m1.2-approved-concept-raster-master",
+      "m1.2-four-chunk-time-of-day-backgrounds",
+      "m1.2-foreground-occlusion-layers",
+      "m1.2-raster-player-sprites",
+      "m1.2-reproducible-art-generation",
+      "m1.2-production-verification"
+    ],
+    "inProgress": [
+      "m1.3-authored-residential-map",
+      "m1.3-walkable-polygon-movement",
+      "m1.3-substep-collision-and-wall-slide",
+      "m1.3-four-direction-player-atlas",
+      "m1.3-frame-synchronised-footsteps",
+      "m1.3-horizontal-camera-lookahead",
+      "m1.3-area-transition-foundation",
+      "m1.3-quality-and-browser-verification"
+    ],
+    "notStarted": [
+      "vending-machine-search",
+      "money-system",
+      "action-time-consumption",
+      "daily-search-state",
+      "m2-local-save",
+      "m3-day-transition",
+      "m3-game-shop"
+    ],
+    "nextMilestone": "M2",
+    "nextTask": "vending-machine-search-and-money-system",
+    "knownIssues": [
+      {
+        "severity": "temporary",
+        "description": "M1.3 residential vertical slice is on a feature branch and has not yet passed Production Browser Smoke."
+      },
+      {
+        "severity": "light",
+        "description": "M1.2 park and mirrored chunk assets remain as fallback art but are no longer part of the M1.3 playable Production route."
+      },
+      {
+        "severity": "light",
+        "description": "Representative iPhone and Android performance still requires device confirmation."
+      },
+      {
+        "severity": "light",
+        "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
+      }
+    ],
+    "lastUpdated": "2026-07-23T01:30:00Z",
+    "developmentRulesVersion": "2.4",
+    "evidence": {
+      "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+      "m13MapFormat": "Tiled-compatible JSON",
+      "m13WorldWidth": 5120,
+      "m13PlayerAtlasFrames": 36,
+      "m13PlayableArea": "residential-only"
+    }
+  },
+  "mainRuns": [
+    {
+      "conclusion": "",
+      "createdAt": "2026-07-23T06:32:53Z",
+      "databaseId": 29985378341,
+      "event": "push",
+      "headSha": "308abe9bc954e1b53eaba1ad5b904b8c156b838d",
+      "name": "Browser Smoke",
+      "status": "in_progress",
+      "updatedAt": "2026-07-23T06:33:01Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985378341"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-23T06:32:53Z",
+      "databaseId": 29985378346,
+      "event": "push",
+      "headSha": "308abe9bc954e1b53eaba1ad5b904b8c156b838d",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:33:27Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985378346"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-23T06:32:53Z",
+      "databaseId": 29985378347,
+      "event": "push",
+      "headSha": "308abe9bc954e1b53eaba1ad5b904b8c156b838d",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:33:38Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985378347"
+    },
+    {
+      "conclusion": "cancelled",
+      "createdAt": "2026-07-23T06:32:48Z",
+      "databaseId": 29985373881,
+      "event": "push",
+      "headSha": "9308b0a104e80ec1ff918b1b4fa3a057c61c203d",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:32:58Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985373881"
+    },
+    {
+      "conclusion": "cancelled",
+      "createdAt": "2026-07-23T06:32:48Z",
+      "databaseId": 29985373950,
+      "event": "push",
+      "headSha": "9308b0a104e80ec1ff918b1b4fa3a057c61c203d",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:32:56Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985373950"
+    },
+    {
+      "conclusion": "cancelled",
+      "createdAt": "2026-07-23T06:32:48Z",
+      "databaseId": 29985373888,
+      "event": "push",
+      "headSha": "9308b0a104e80ec1ff918b1b4fa3a057c61c203d",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:33:04Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985373888"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-23T06:01:10Z",
+      "databaseId": 29983760733,
+      "event": "push",
+      "headSha": "cdafb9a7f39316be1fda31c7a3bc0b4885b8f09d",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:01:37Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29983760733"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:58:27Z",
+      "databaseId": 29967725233,
+      "event": "push",
+      "headSha": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-23T00:04:56Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29967725233"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:58:27Z",
+      "databaseId": 29967725210,
+      "event": "push",
+      "headSha": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:59:06Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29967725210"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:58:27Z",
+      "databaseId": 29967725173,
+      "event": "push",
+      "headSha": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:58:52Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29967725173"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:48:10Z",
+      "databaseId": 29967221675,
+      "event": "push",
+      "headSha": "117a42df3b2c5c393c4fa02ee5733d36a1bce362",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:54:19Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29967221675"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:48:10Z",
+      "databaseId": 29967221680,
+      "event": "push",
+      "headSha": "117a42df3b2c5c393c4fa02ee5733d36a1bce362",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:48:43Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29967221680"
+    },
+    {
+      "conclusion": "failure",
+      "createdAt": "2026-07-22T23:48:10Z",
+      "databaseId": 29967221676,
+      "event": "push",
+      "headSha": "117a42df3b2c5c393c4fa02ee5733d36a1bce362",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:48:38Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29967221676"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:25:29Z",
+      "databaseId": 29966079504,
+      "event": "push",
+      "headSha": "ecc77aa9ec2801a89e1d28edfd48d981f4de2665",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:31:42Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29966079504"
+    },
+    {
+      "conclusion": "failure",
+      "createdAt": "2026-07-22T23:25:29Z",
+      "databaseId": 29966079550,
+      "event": "push",
+      "headSha": "ecc77aa9ec2801a89e1d28edfd48d981f4de2665",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:25:58Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29966079550"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T23:25:29Z",
+      "databaseId": 29966079519,
+      "event": "push",
+      "headSha": "ecc77aa9ec2801a89e1d28edfd48d981f4de2665",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T23:25:56Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29966079519"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T11:28:13Z",
+      "databaseId": 29915816692,
+      "event": "push",
+      "headSha": "f06f5ef138d8871d7768103591ecf88dcd846626",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T11:28:43Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29915816692"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T11:28:13Z",
+      "databaseId": 29915816766,
+      "event": "push",
+      "headSha": "f06f5ef138d8871d7768103591ecf88dcd846626",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T11:28:42Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29915816766"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T11:28:13Z",
+      "databaseId": 29915816670,
+      "event": "push",
+      "headSha": "f06f5ef138d8871d7768103591ecf88dcd846626",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T11:32:55Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29915816670"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T11:18:40Z",
+      "databaseId": 29915213624,
+      "event": "push",
+      "headSha": "8b9e4c2b77cb65750ae4b74ba14695636241269f",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T11:19:04Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29915213624"
+    },
+    {
+      "conclusion": "failure",
+      "createdAt": "2026-07-22T11:18:40Z",
+      "databaseId": 29915213619,
+      "event": "push",
+      "headSha": "8b9e4c2b77cb65750ae4b74ba14695636241269f",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T11:19:09Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29915213619"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T11:18:40Z",
+      "databaseId": 29915213618,
+      "event": "push",
+      "headSha": "8b9e4c2b77cb65750ae4b74ba14695636241269f",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T11:22:57Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29915213618"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T08:39:21Z",
+      "databaseId": 29904837914,
+      "event": "push",
+      "headSha": "0b431e1332fb7c6c2d77cd4cdd2c5a6694aa365c",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T08:39:48Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29904837914"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T08:39:21Z",
+      "databaseId": 29904838038,
+      "event": "push",
+      "headSha": "0b431e1332fb7c6c2d77cd4cdd2c5a6694aa365c",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T08:40:00Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29904838038"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T08:39:21Z",
+      "databaseId": 29904837911,
+      "event": "push",
+      "headSha": "0b431e1332fb7c6c2d77cd4cdd2c5a6694aa365c",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T08:40:39Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29904837911"
+    },
+    {
+      "conclusion": "failure",
+      "createdAt": "2026-07-22T06:57:44Z",
+      "databaseId": 29898474089,
+      "event": "push",
+      "headSha": "28b7ab6454d523d8ba4c4572e5c940356d8a5513",
+      "name": "Browser Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T07:08:46Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29898474089"
+    },
+    {
+      "conclusion": "failure",
+      "createdAt": "2026-07-22T06:57:44Z",
+      "databaseId": 29898474171,
+      "event": "push",
+      "headSha": "28b7ab6454d523d8ba4c4572e5c940356d8a5513",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T06:57:53Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29898474171"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T06:57:44Z",
+      "databaseId": 29898474321,
+      "event": "push",
+      "headSha": "28b7ab6454d523d8ba4c4572e5c940356d8a5513",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T06:58:10Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29898474321"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T05:57:57Z",
+      "databaseId": 29895280167,
+      "event": "push",
+      "headSha": "a169757a823e4ad19205072ab3ea1fc8651547aa",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-22T05:58:20Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29895280167"
+    },
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-22T05:57:57Z",
+      "databaseId": 29895280170,
+      "event": "push",
+      "headSha": "a169757a823e4ad19205072ab3ea1fc8651547aa",
+      "name": "Production Smoke",
+      "status": "completed",
+      "updatedAt": "2026-07-22T05:58:38Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29895280170"
+    }
+  ],
+  "finalizeRuns": [
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-23T06:24:06Z",
+      "databaseId": 29984919705,
+      "event": "pull_request",
+      "headSha": "170bcd4610ff820d4cceb1a3a9b229465f72eaff",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:24:34Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29984919705"
+    },
+    {
+      "conclusion": "",
+      "createdAt": "2026-07-23T06:23:47Z",
+      "databaseId": 29984903943,
+      "event": "push",
+      "headSha": "170bcd4610ff820d4cceb1a3a9b229465f72eaff",
+      "name": "Finalize M1.3 Through Production",
+      "status": "in_progress",
+      "updatedAt": "2026-07-23T06:23:51Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29984903943"
+    }
+  ],
+  "docsFinalizeRuns": [
+    {
+      "conclusion": "success",
+      "createdAt": "2026-07-23T06:29:14Z",
+      "databaseId": 29985183383,
+      "event": "pull_request",
+      "headSha": "acc049aca99905ff782c425ecec6abf5cb8046b5",
+      "name": "Quality",
+      "status": "completed",
+      "updatedAt": "2026-07-23T06:29:40Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985183383"
+    },
+    {
+      "conclusion": "",
+      "createdAt": "2026-07-23T06:29:01Z",
+      "databaseId": 29985172227,
+      "event": "push",
+      "headSha": "acc049aca99905ff782c425ecec6abf5cb8046b5",
+      "name": "Finalize M1.3 Production Documentation",
+      "status": "in_progress",
+      "updatedAt": "2026-07-23T06:29:04Z",
+      "url": "https://github.com/nodako1/BokuNoJihanki/actions/runs/29985172227"
+    }
+  ],
+  "pullRequests": [
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "ci/m13-state-snapshot",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 29,
+      "state": "OPEN",
+      "title": "ci: capture M1.3 final state snapshot",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/29"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "ci/m13-docs-finalize",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 28,
+      "state": "OPEN",
+      "title": "ci: finalize M1.3 Production documentation",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/28"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "ci/m13-finalize",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 27,
+      "state": "OPEN",
+      "title": "ci: finalize M1.3 through Production verification",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/27"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T06:32:46Z",
+      "headRefName": "claude/m2-core-economy",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "9308b0a104e80ec1ff918b1b4fa3a057c61c203d"
+      },
+      "mergedAt": "2026-07-23T06:32:45Z",
+      "number": 26,
+      "state": "MERGED",
+      "title": "feat: M2フェーズA コア経済ロジックとユニットテスト（シーン非依存） [claude]",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/26"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T06:01:07Z",
+      "headRefName": "claude/collab-board-m2-spec",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "cdafb9a7f39316be1fda31c7a3bc0b4885b8f09d"
+      },
+      "mergedAt": "2026-07-23T06:01:07Z",
+      "number": 25,
+      "state": "MERGED",
+      "title": "docs: AI連携ボード（docs/collab）とM2仕様ドラフトを追加 [claude]",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/25"
+    },
+    {
+      "baseRefName": "feat/m1-3-residential-vertical-slice",
+      "closedAt": null,
+      "headRefName": "ci/m13-export-feature",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 24,
+      "state": "OPEN",
+      "title": "ci: export M1.3 feature source",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/24"
+    },
+    {
+      "baseRefName": "feat/m1-3-residential-vertical-slice",
+      "closedAt": null,
+      "headRefName": "ci/m13-evidence-lite",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 23,
+      "state": "OPEN",
+      "title": "ci: extract lightweight M1.3 browser evidence",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/23"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T06:32:50Z",
+      "headRefName": "feat/m1-3-residential-vertical-slice",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "308abe9bc954e1b53eaba1ad5b904b8c156b838d"
+      },
+      "mergedAt": "2026-07-23T06:32:50Z",
+      "number": 22,
+      "state": "MERGED",
+      "title": "feat: M1.3 住宅街プレイアブル縦切り再構築",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/22"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": null,
+      "headRefName": "ci/m13-export-main",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 21,
+      "state": "OPEN",
+      "title": "ci: export current main for M1.3 development",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/21"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T00:15:42Z",
+      "headRefName": "docs/m12-production-complete",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "a100a72393f5ff6e32f5d45151d361f27f77da59"
+      },
+      "mergedAt": "2026-07-23T00:15:42Z",
+      "number": 20,
+      "state": "MERGED",
+      "title": "docs: M1.2 Production確認済み状態を確定",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/20"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-23T00:09:28Z",
+      "headRefName": "ci/m12-production-browser-evidence",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 19,
+      "state": "CLOSED",
+      "title": "ci: M1.2 Production実画面を最終確認",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/19"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T23:58:25Z",
+      "headRefName": "fix/m12-production-verification-markers",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46"
+      },
+      "mergedAt": "2026-07-22T23:58:25Z",
+      "number": 18,
+      "state": "MERGED",
+      "title": "ci: M1.2 Production Smokeの実行時マーカーを修正",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/18"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T23:48:08Z",
+      "headRefName": "fix/m12-production-verification",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "117a42df3b2c5c393c4fa02ee5733d36a1bce362"
+      },
+      "mergedAt": "2026-07-22T23:48:08Z",
+      "number": 17,
+      "state": "MERGED",
+      "title": "ci: M1.2 Production検証をペインタリー版へ更新",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/17"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T23:25:27Z",
+      "headRefName": "feat/m1-2-painterly-raster",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "ecc77aa9ec2801a89e1d28edfd48d981f4de2665"
+      },
+      "mergedAt": "2026-07-22T23:25:27Z",
+      "number": 16,
+      "state": "MERGED",
+      "title": "feat: M1.2 ペインターリー高精細ラスタービジュアル",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/16"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T12:08:47Z",
+      "headRefName": "docs/m11-production-complete",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "85a6cd2e0a0a539a2ff805ed3af996d37d3eddcd"
+      },
+      "mergedAt": "2026-07-22T12:08:47Z",
+      "number": 15,
+      "state": "MERGED",
+      "title": "docs: M1.1 Production確認済み状態を確定",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/15"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T12:05:48Z",
+      "headRefName": "ci/m11-production-browser-evidence",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 14,
+      "state": "CLOSED",
+      "title": "ci: M1.1 Production実画面を最終確認",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/14"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T11:28:10Z",
+      "headRefName": "fix/m11-production-verification",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "f06f5ef138d8871d7768103591ecf88dcd846626"
+      },
+      "mergedAt": "2026-07-22T11:28:10Z",
+      "number": 13,
+      "state": "MERGED",
+      "title": "ci: M1.1 Production検証を実装内容に更新",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/13"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T11:18:37Z",
+      "headRefName": "feat/m1-1-visual-complete",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "8b9e4c2b77cb65750ae4b74ba14695636241269f"
+      },
+      "mergedAt": "2026-07-22T11:18:37Z",
+      "number": 12,
+      "state": "MERGED",
+      "title": "feat: M1.1 ビジュアル完成対応",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/12"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T08:33:15Z",
+      "headRefName": "fix/m1-production-verification",
+      "isDraft": false,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 11,
+      "state": "CLOSED",
+      "title": "ci: 現在のM1 Productionを実ブラウザーで再確認",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/11"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T08:39:18Z",
+      "headRefName": "chore/m1-production-recovery",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "0b431e1332fb7c6c2d77cd4cdd2c5a6694aa365c"
+      },
+      "mergedAt": "2026-07-22T08:39:18Z",
+      "number": 10,
+      "state": "MERGED",
+      "title": "chore: M1本番復旧ルールと実ブラウザ検証を確定",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/10"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T07:06:48Z",
+      "headRefName": "fix/m1-render-black-screen",
+      "isDraft": true,
+      "mergeCommit": null,
+      "mergedAt": null,
+      "number": 9,
+      "state": "CLOSED",
+      "title": "fix: M1の黒画面を修正",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/9"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T06:57:41Z",
+      "headRefName": "diag/m1-black-screen",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "28b7ab6454d523d8ba4c4572e5c940356d8a5513"
+      },
+      "mergedAt": "2026-07-22T06:57:41Z",
+      "number": 8,
+      "state": "MERGED",
+      "title": "fix: M1の黒画面を修正し実ブラウザテストを追加",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/8"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T06:42:25Z",
+      "headRefName": "docs/m1-production-verified",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "64d7a90f6bce3c3dbb1c77ff2b5279b3b28ccfec"
+      },
+      "mergedAt": "2026-07-22T06:42:25Z",
+      "number": 7,
+      "state": "MERGED",
+      "title": "docs: M1 Production確認済み状態を確定",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/7"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T05:57:55Z",
+      "headRefName": "ci/m1-production-verification",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "a169757a823e4ad19205072ab3ea1fc8651547aa"
+      },
+      "mergedAt": "2026-07-22T05:57:55Z",
+      "number": 6,
+      "state": "MERGED",
+      "title": "ci: Vercel ProductionのM1実体を検証",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/6"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T05:52:09Z",
+      "headRefName": "codex/m1-real-complete",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "432108024b40c9f3fc20aeec38b7bf871c192da1"
+      },
+      "mergedAt": "2026-07-22T05:52:09Z",
+      "number": 5,
+      "state": "MERGED",
+      "title": "feat: M1 住宅街・公園のロード無し町探索を実装",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/5"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T04:20:58Z",
+      "headRefName": "feat/m1-streaming-map",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "558721ae2cd3a2b5174caadfd7660400b5fd6324"
+      },
+      "mergedAt": "2026-07-22T04:20:58Z",
+      "number": 4,
+      "state": "MERGED",
+      "title": "feat: M1 ロード無しストリーミングマップを実装",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/4"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T02:34:19Z",
+      "headRefName": "chore/m0-production-verified",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "9624eea11808c29a4f66710959eb90c693b7039e"
+      },
+      "mergedAt": "2026-07-22T02:34:19Z",
+      "number": 3,
+      "state": "MERGED",
+      "title": "chore: M0本番確認後の状態を確定",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/3"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T02:30:30Z",
+      "headRefName": "chore/m0-status",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "de511ccd353e3533feb5c25e64d3b889ccfb0838"
+      },
+      "mergedAt": "2026-07-22T02:30:30Z",
+      "number": 2,
+      "state": "MERGED",
+      "title": "docs: M0完了状態を記録",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/2"
+    },
+    {
+      "baseRefName": "main",
+      "closedAt": "2026-07-22T02:21:32Z",
+      "headRefName": "feat/m0-foundation",
+      "isDraft": false,
+      "mergeCommit": {
+        "oid": "21fa396724028b410ef23e11df8ede77c79ebbcd"
+      },
+      "mergedAt": "2026-07-22T02:21:32Z",
+      "number": 1,
+      "state": "MERGED",
+      "title": "feat: M0 開発基盤を実装",
+      "url": "https://github.com/nodako1/BokuNoJihanki/pull/1"
+    }
+  ]
+}
