@@ -2,9 +2,9 @@
 
 ## 構成
 
-Reactはタイトル、HUD、仮想スティック、画面方向ガードを担当し、Phaserは住宅街Scene、主人公、カメラ、背景、walkable、衝突、時間帯を担当する。`gameBridge.ts`で疎結合に接続する。
+Reactはタイトル、HUD、横方向仮想スティック、上下分岐ボタン、画面方向ガードを担当し、Phaserは単一永続のM1.4 Town Scene、主人公、横方向カメラ、3エリアの背景・前景、時間帯、遷移演出を担当する。`gameBridge.ts`で疎結合に接続する。
 
-## M1.3住宅街Scene
+## M1.3住宅街Scene（fallback／設計履歴）
 
 ```text
 ResidentialScene
@@ -27,13 +27,13 @@ ResidentialScene
 
 足元円がwalkable内かつobstacle外にあることを毎サブステップ検査する。X/Y軸の部分移動を試して壁沿いスライドを実現する。家や私有地を個別矩形で塞ぐのではなく、最初からwalkable外にする。
 
-### Scene分割
+### M1.3当時のScene分割方針
 
-今後の公園、駅前、商店街、山、海は専用Sceneと専用背景を持つ。AreaTransitionSystemがフェードアウト、読み込み、地名表示、フェードインを担当する。無理なシームレス接続は行わない。
+M1.3では追加エリアを専用Sceneと専用背景へ分け、AreaTransitionSystemで切り替える方針だった。M1.4では正式方式を単一永続Scene内のエリア交換へ変更済みであり、この節はrollback用実装と設計履歴を説明する。`ResidentialScene`は登録を維持するが自動起動せず、実行時に失敗したM1.4へ自動で切り替わる仕組みではない。
 
-## M1.4 2D横スクロール街探索（実装中・Production確認前）
+## M1.4 2D横スクロール街探索（Release Candidate実装済み・Production確認前）
 
-M1.4では斜め見下ろしの巨大walkable mapをメイン方式にせず、独立した横長エリアをグラフで接続する。M1.3の`ResidentialScene`、map、移動ロジック、アセットは削除せずフォールバックとして残す。
+M1.4は正式なプレイ経路として、独立した横長エリアをグラフで接続する。M1.3の`ResidentialScene`、map、移動ロジック、アセットは削除せずfallbackと設計履歴として残す。
 
 ```text
 React UI
@@ -84,7 +84,9 @@ Claude navigation core（純粋ロジック）
 
 ChatGPT側adapterは入力とdelta timeをコアへ渡し、返されたX、速度、向き、prompt、transition intentをSceneへ反映する。Texture読み込み、Tween、camera、表示レイヤー、時間帯、音声はadapterより外に置く。APIに問題がある場合はコアを直接変更せず連携ボードで合意する。
 
-M1.4 Release Candidate作成時点では、依頼済みの`claude/m1-4-area-navigation-core`ブランチ／PRが存在しない。このため`src/game/navigationAdapter/`には、上記契約を固定してScene統合とProduction検証を進めるためのPhaser非依存fallbackを置く。Claude成果到着後は、公開APIを維持したままadapter内部を`src/game/navigation/`呼び出しへ置換し、fallback内部ロジックは削除する。これはClaude担当領域を代替完了したものとは扱わない。
+Claude navigation core PR #33はmainへマージ済み（`ee255a1a8413768d0e7dbdf512964268c8eaf276`）。`src/game/navigationAdapter/m14NavigationAdapter.mjs`はfallbackではなく`src/game/navigation/`のarea graph、横移動、遷移、navigation stateを直接利用し、正規化した`horizontalAxis`を`resolveHorizontalMovement`へ渡す。
+
+coreは`idle`、`requested`、`fading-out`、`loading`、`spawning`、`fading-in`、`completed`、`cancelled`、`error`の9状態を持つ。adapterは遷移ロジックを複製せず、Scene公開層へ`idle`、`fading-out`、`loading`、`fading-in`の4状態として投影する。core状態はadapter内部で保持・必要時に復元し、Sceneはcore内部の状態機械を所有しない。
 
 ### 遷移状態
 
