@@ -1,5 +1,5 @@
 name: Apply and Verify M1.3 Residential Vertical Slice
-# refresh: production-smoke-m13
+# refresh: typescript-declarations
 
 on:
   push:
@@ -41,6 +41,50 @@ jobs:
           cat .m13-bootstrap/chunk-*.b64 | tr -d '\r\n ' | base64 --decode > /tmp/m13-payload.tar.gz
           tar -xzf /tmp/m13-payload.tar.gz
           rm -rf .m13-bootstrap
+
+      - name: Add strict TypeScript declarations and geometry fixes
+        shell: bash
+        run: |
+          cat > src/game/systems/walkableMovement.d.mts <<'EOF'
+          export interface Point2D { x: number; y: number }
+          export type Polygon2D = readonly Point2D[];
+          export type Facing = 'down' | 'up' | 'left' | 'right';
+          export interface MovementResolution extends Point2D {
+            movedX: number;
+            movedY: number;
+            blockedX: boolean;
+            blockedY: boolean;
+          }
+          export function clamp(value: number, minimum: number, maximum: number): number;
+          export function pointInPolygon(point: Point2D, polygon: Polygon2D): boolean;
+          export function distancePointToSegment(point: Point2D, start: Point2D, end: Point2D): number;
+          export function circleIntersectsPolygon(center: Point2D, radius: number, polygon: Polygon2D): boolean;
+          export function circleInsideWalkable(center: Point2D, radius: number, polygons: readonly Polygon2D[]): boolean;
+          export function isFootprintValid(center: Point2D, radius: number, walkablePolygons: readonly Polygon2D[], obstaclePolygons: readonly Polygon2D[]): boolean;
+          export function resolveWalkableMovement(position: Point2D, delta: Point2D, radius: number, walkablePolygons: readonly Polygon2D[], obstaclePolygons: readonly Polygon2D[], maxSubstep?: number): MovementResolution;
+          export function approach(current: number, target: number, maximumDelta: number): number;
+          export function chooseFacing(x: number, y: number, fallback?: Facing): Facing;
+          export function sectionIndexForX(x: number, sectionWidth: number, count: number): number;
+          EOF
+
+          cat > src/game/systems/areaTransitionState.d.mts <<'EOF'
+          export type AreaTransitionStateValue = 'idle' | 'fading-out' | 'loading' | 'fading-in';
+          export type AreaTransitionEvent = 'start' | 'fade-out-complete' | 'scene-ready' | 'fade-in-complete';
+          export const AREA_TRANSITION_STATES: readonly AreaTransitionStateValue[];
+          export function nextAreaTransitionState(state: AreaTransitionStateValue, event: AreaTransitionEvent): AreaTransitionStateValue;
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/game/world/ResidentialWorld.ts')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('constructor(private readonly scene: Phaser.Scene) {', 'constructor(scene: Phaser.Scene) {')
+          text = text.replace(
+              'const points = polygon.map((point) => new Phaser.Geom.Point(point.x, point.y));',
+              'const points = polygon.map((point) => ({ x: point.x, y: point.y }));',
+          )
+          path.write_text(text, encoding='utf-8')
+          PY
 
       - name: Setup Python
         uses: actions/setup-python@v5
