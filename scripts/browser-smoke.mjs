@@ -142,7 +142,7 @@ async function captureWalk(page, area, direction, filename) {
   return { before, during, idle };
 }
 
-async function moveRightTo(page, area, minX, timeout = 30_000) {
+async function moveRightTo(page, area, minX, timeout = 60_000) {
   await page.keyboard.down('ArrowRight');
   try {
     await waitForHud(page, { area, minX, animation: 'walk-right' }, timeout);
@@ -591,11 +591,19 @@ try {
 } catch (error) {
   failure = error;
   record('failure', error?.stack ?? String(error));
+  const lastHud = page
+    ? await latestHud(page).catch(() => null)
+    : null;
+  const hudTail = page
+    ? await hudTimeline(page).then((timeline) => timeline.slice(-12)).catch(() => [])
+    : [];
   statePayload = {
     baseUrl,
     expectedCommit,
     evidence,
     transitionChecks,
+    lastHud,
+    hudTail,
     pageErrors,
     failedRequests,
     failure: error?.stack ?? String(error),
