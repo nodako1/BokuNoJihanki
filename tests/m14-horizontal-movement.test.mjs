@@ -237,7 +237,7 @@ test('a single very large delta does not explode: it clamps to max speed and res
 test('a half-magnitude axis ramps toward roughly half maxSpeed, not full speed', () => {
   let moving = state();
   for (let i = 0; i < 30; i += 1) {
-    moving = resolveHorizontalMovement(moving, { axis: 0.5, deltaSeconds: 1 / 60 }, CONFIG, BOUNDS);
+    moving = resolveHorizontalMovement(moving, { horizontalAxis: 0.5, deltaSeconds: 1 / 60 }, CONFIG, BOUNDS);
   }
   assert.ok(
     Math.abs(moving.velocityX - CONFIG.maxSpeed * 0.5) < 1,
@@ -248,10 +248,10 @@ test('a half-magnitude axis ramps toward roughly half maxSpeed, not full speed',
 });
 
 test('releasing the axis (dropping back to 0) decelerates the same as releasing left/right', () => {
-  const held = resolveHorizontalMovement(state(), { axis: 1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
+  const held = resolveHorizontalMovement(state(), { horizontalAxis: 1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
   assert.ok(held.velocityX > 0);
 
-  const released = resolveHorizontalMovement(held, { axis: 0, deltaSeconds: 0.05 }, CONFIG, BOUNDS);
+  const released = resolveHorizontalMovement(held, { horizontalAxis: 0, deltaSeconds: 0.05 }, CONFIG, BOUNDS);
   assert.ok(
     released.velocityX < held.velocityX,
     `expected velocity to decay after releasing the axis, got ${released.velocityX}`,
@@ -260,11 +260,11 @@ test('releasing the axis (dropping back to 0) decelerates the same as releasing 
 });
 
 test('axis sign flips both velocity direction and facing', () => {
-  const right = resolveHorizontalMovement(state(), { axis: 1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
+  const right = resolveHorizontalMovement(state(), { horizontalAxis: 1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
   assert.ok(right.velocityX > 0);
   assert.equal(right.facing, 'right');
 
-  const left = resolveHorizontalMovement(state(), { axis: -1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
+  const left = resolveHorizontalMovement(state(), { horizontalAxis: -1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
   assert.ok(left.velocityX < 0);
   assert.equal(left.facing, 'left');
 });
@@ -272,7 +272,7 @@ test('axis sign flips both velocity direction and facing', () => {
 test('an out-of-range axis is clamped to [-1, 1] instead of exceeding maxSpeed', () => {
   let moving = state();
   for (let i = 0; i < 30; i += 1) {
-    moving = resolveHorizontalMovement(moving, { axis: 5, deltaSeconds: 1 / 60 }, CONFIG, BOUNDS);
+    moving = resolveHorizontalMovement(moving, { horizontalAxis: 5, deltaSeconds: 1 / 60 }, CONFIG, BOUNDS);
   }
   assert.ok(moving.velocityX <= CONFIG.maxSpeed, `expected velocity to clamp at maxSpeed, got ${moving.velocityX}`);
 });
@@ -281,13 +281,13 @@ test('omitting axis (or passing a non-finite value) keeps the original left/righ
   const digital = resolveHorizontalMovement(state(), { left: false, right: true, deltaSeconds: 0.5 }, CONFIG, BOUNDS);
   const noAxis = resolveHorizontalMovement(
     state(),
-    { left: false, right: true, deltaSeconds: 0.5, axis: undefined },
+    { left: false, right: true, deltaSeconds: 0.5, horizontalAxis: undefined },
     CONFIG,
     BOUNDS,
   );
   const nanAxis = resolveHorizontalMovement(
     state(),
-    { left: false, right: true, deltaSeconds: 0.5, axis: NaN },
+    { left: false, right: true, deltaSeconds: 0.5, horizontalAxis: NaN },
     CONFIG,
     BOUNDS,
   );
