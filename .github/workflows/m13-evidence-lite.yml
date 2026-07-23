@@ -1,0 +1,110 @@
+name: Extract M1.3 Browser Evidence Lite
+
+on:
+  pull_request:
+    branches:
+      - feat/m1-3-residential-vertical-slice
+    paths:
+      - '.github/workflows/m13-evidence-lite.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download full M1.3 evidence
+        run: |
+          mkdir -p /tmp/m13-full
+          gh run download 29977532042 \
+            --repo nodako1/BokuNoJihanki \
+            --name m13-apply-browser-29977532042 \
+            --dir /tmp/m13-full
+          find /tmp/m13-full -type f -printf '%s %p\n' | sort -n > /tmp/m13-file-list.txt
+          tail -n 200 /tmp/m13-file-list.txt
+
+      - name: Build lightweight review package
+        run: |
+          python -m pip install --disable-pip-version-check pillow
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image, ImageDraw, ImageFont
+          import json, shutil
+
+          source = Path('/tmp/m13-full')
+          target = Path('diagnostics/m13-evidence-lite')
+          target.mkdir(parents=True, exist_ok=True)
+
+          allowed = {'.png', '.jpg', '.jpeg', '.webp', '.json', '.log', '.txt', '.md'}
+          copied = []
+          images = []
+          for path in sorted(source.rglob('*')):
+              if not path.is_file():
+                  continue
+              name = path.name.lower()
+              if name in {'trace.zip'} or path.suffix.lower() not in allowed:
+                  continue
+              rel = path.relative_to(source)
+              out = target / rel
+              out.parent.mkdir(parents=True, exist_ok=True)
+              shutil.copy2(path, out)
+              copied.append(str(rel))
+              if path.suffix.lower() in {'.png', '.jpg', '.jpeg', '.webp'}:
+                  try:
+                      with Image.open(path) as im:
+                          images.append((str(rel), im.convert('RGB').copy()))
+                  except Exception:
+                      pass
+
+          Path(target / 'file-list.txt').write_text('\n'.join(copied) + '\n', encoding='utf-8')
+
+          # Create a compact visual review sheet from all captured screenshots.
+          thumb_w, thumb_h = 480, 300
+          label_h = 42
+          cols = 3
+          rows = max(1, (len(images) + cols - 1) // cols)
+          sheet = Image.new('RGB', (cols * thumb_w, rows * (thumb_h + label_h)), (24, 24, 24))
+          draw = ImageDraw.Draw(sheet)
+          font = ImageFont.load_default()
+          for index, (name, image) in enumerate(images):
+              col = index % cols
+              row = index // cols
+              image.thumbnail((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+              x = col * thumb_w + (thumb_w - image.width) // 2
+              y = row * (thumb_h + label_h) + (thumb_h - image.height) // 2
+              sheet.paste(image, (x, y))
+              label = name[-72:]
+              draw.rectangle((col * thumb_w, row * (thumb_h + label_h) + thumb_h, (col + 1) * thumb_w, (row + 1) * (thumb_h + label_h)), fill=(10, 10, 10))
+              draw.text((col * thumb_w + 8, row * (thumb_h + label_h) + thumb_h + 8), label, fill=(240, 240, 240), font=font)
+          sheet.save(target / 'contact-sheet.jpg', quality=88, optimize=True)
+
+          summary = {
+              'sourceRun': 29977532042,
+              'copiedFiles': len(copied),
+              'imageFiles': len(images),
+              'excluded': ['trace.zip', 'non-review binary files'],
+          }
+          Path(target / 'extraction-summary.json').write_text(json.dumps(summary, indent=2), encoding='utf-8')
+          PY
+
+      - name: Upload lightweight evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: m13-browser-evidence-lite-${{ github.run_id }}
+          path: diagnostics/m13-evidence-lite
+          if-no-files-found: error
+          retention-days: 14
