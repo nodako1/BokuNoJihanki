@@ -1,0 +1,55 @@
+name: Monitor M1.3 Final Checks V2
+
+on:
+  push:
+    branches:
+      - ci/m13-final-monitor
+    paths:
+      - '.github/workflows/m13-final-monitor-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  pull-requests: write
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Collect PR head and checks
+        run: |
+          set -euo pipefail
+          gh api repos/nodako1/BokuNoJihanki/pulls/22 > /tmp/pr.json
+          HEAD_SHA=$(jq -r '.head.sha' /tmp/pr.json)
+          HEAD_REF=$(jq -r '.head.ref' /tmp/pr.json)
+          gh api "repos/nodako1/BokuNoJihanki/commits/${HEAD_SHA}/check-runs" > /tmp/checks.json
+          gh run list --repo nodako1/BokuNoJihanki --branch "$HEAD_REF" --limit 12 --json databaseId,name,event,status,conclusion,headSha,updatedAt,url > /tmp/runs.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          pr=json.loads(Path('/tmp/pr.json').read_text())
+          checks=json.loads(Path('/tmp/checks.json').read_text()).get('check_runs',[])
+          runs=json.loads(Path('/tmp/runs.json').read_text())
+          lines=[
+            '## M1.3 final check monitor',
+            '',
+            f"- PR state: `{pr['state']}`",
+            f"- Draft: `{pr['draft']}`",
+            f"- Head ref: `{pr['head']['ref']}`",
+            f"- Head SHA: `{pr['head']['sha']}`",
+            '',
+            '### Check runs',
+          ]
+          for c in checks:
+              lines.append(f"- {c['name']}: **{c['status']} / {c.get('conclusion') or '—'}**")
+          lines += ['', '### Workflow runs']
+          for r in runs:
+              lines.append(f"- [{r['databaseId']}]({r['url']}) {r['name']} / {r['event']}: **{r['status']} / {r.get('conclusion') or '—'}** (`{r['headSha'][:7]}`)")
+          Path('/tmp/comment.md').write_text('\n'.join(lines)+'\n')
+          PY
+          gh pr comment 22 --repo nodako1/BokuNoJihanki --body-file /tmp/comment.md
