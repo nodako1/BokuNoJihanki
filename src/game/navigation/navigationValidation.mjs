@@ -5,6 +5,11 @@
  */
 
 const VALID_DIRECTIONS = new Set(['left', 'right', 'up', 'down']);
+// Kept as a separate set from VALID_DIRECTIONS even though the values are
+// currently identical: Facing and Direction are conceptually different types
+// (facing is "which way the sprite looks", direction is "which way an exit
+// leads") and this documents that intent independently of the coincidence.
+const VALID_FACINGS = new Set(['up', 'down', 'left', 'right']);
 
 /**
  * @param {AreaGraphIssue[]} issues
@@ -60,6 +65,21 @@ export function validateAreaGraph(graph) {
         });
       }
       spawnIds.add(spawn.id);
+
+      if (!Number.isFinite(spawn.x)) {
+        pushIssue(issues, 'invalid-spawn-x', `Spawn "${spawn.id}" in area "${area.id}" has a non-finite x.`, {
+          areaId: area.id,
+          spawnId: spawn.id,
+        });
+      }
+      if (!VALID_FACINGS.has(spawn.facing)) {
+        pushIssue(
+          issues,
+          'invalid-spawn-facing',
+          `Spawn "${spawn.id}" in area "${area.id}" has an invalid facing: ${String(spawn.facing)}.`,
+          { areaId: area.id, spawnId: spawn.id },
+        );
+      }
     }
 
     const exitIds = new Set();
@@ -83,7 +103,18 @@ export function validateAreaGraph(graph) {
 
       const trigger = exit.trigger;
       if (trigger?.kind === 'range') {
-        if (!Number.isFinite(trigger.minX) || !Number.isFinite(trigger.maxX) || trigger.minX > trigger.maxX) {
+        const isMalformed =
+          !Number.isFinite(trigger.minX) || !Number.isFinite(trigger.maxX) || trigger.minX > trigger.maxX;
+        // Only compare against worldWidth when it is itself finite/positive -
+        // an already-flagged invalid-world-width area would otherwise cause a
+        // confusing second issue here (any comparison against a bad width is
+        // meaningless, not just falsy).
+        const isOutOfAreaBounds =
+          !isMalformed &&
+          Number.isFinite(area.worldWidth) &&
+          area.worldWidth > 0 &&
+          (trigger.minX < 0 || trigger.maxX > area.worldWidth);
+        if (isMalformed || isOutOfAreaBounds) {
           pushIssue(
             issues,
             'invalid-trigger-range',

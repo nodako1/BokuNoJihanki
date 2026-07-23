@@ -149,6 +149,11 @@ test('M1.4 adapter delegates navigation behavior to the shared core', async () =
     /\bvalidate(?:Core)?AreaGraph\s*\(/,
     'the adapter must call the core graph validator',
   );
+  assert.match(
+    adapter,
+    /horizontalAxis:\s*normalizedAxis/,
+    'the adapter must pass analog input directly into the core',
+  );
 });
 
 test('M1.3 residential scene, art, atlas and authored map remain preserved', async () => {

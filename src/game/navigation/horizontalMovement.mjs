@@ -27,7 +27,11 @@ function applyObstacles(fromX, toX, obstacles) {
   let blocked = false;
 
   for (const obstacle of obstacles) {
-    const wasOutside = fromX < obstacle.minX || fromX > obstacle.maxX;
+    // Inclusive on purpose: a position resting exactly on the obstacle's edge
+    // (where the previous frame stopped it) must still count as "outside",
+    // otherwise the next frame's entering-check is skipped and the same
+    // direction input walks straight through the obstacle.
+    const wasOutside = fromX <= obstacle.minX || fromX >= obstacle.maxX;
     if (!wasOutside) continue;
     const entersFromLeft = fromX <= obstacle.minX && resultX > obstacle.minX;
     const entersFromRight = fromX >= obstacle.maxX && resultX < obstacle.maxX;
@@ -70,10 +74,26 @@ export function resolveHorizontalMovement(state, input, config, bounds) {
     };
   }
 
-  const effectiveLeft = Boolean(input.left) && !input.right;
-  const effectiveRight = Boolean(input.right) && !input.left;
+  // `horizontalAxis` is an optional analog override (e.g. a phone's virtual
+  // stick) in [-1, 1] - named to match the adapter's existing
+  // M14DirectionalInput.horizontalAxis convention. When present it takes
+  // priority over the digital left/right booleans so a soft push yields a
+  // proportionally lower target speed instead of always snapping to
+  // maxSpeed. Omitting it (or passing a non-finite value) falls back to the
+  // original digital behavior untouched.
+  const hasAxis = Number.isFinite(input.horizontalAxis);
+  const axisValue = hasAxis ? clamp(input.horizontalAxis, -1, 1) : 0;
 
-  const targetVelocity = effectiveRight ? config.maxSpeed : effectiveLeft ? -config.maxSpeed : 0;
+  const effectiveLeft = hasAxis ? axisValue < 0 : Boolean(input.left) && !input.right;
+  const effectiveRight = hasAxis ? axisValue > 0 : Boolean(input.right) && !input.left;
+
+  const targetVelocity = hasAxis
+    ? axisValue * config.maxSpeed
+    : effectiveRight
+      ? config.maxSpeed
+      : effectiveLeft
+        ? -config.maxSpeed
+        : 0;
   const rate = targetVelocity === 0 ? config.deceleration : config.acceleration;
   const velocityX = clamp(
     approach(state.velocityX, targetVelocity, Math.max(0, rate) * deltaSeconds),

@@ -8,6 +8,8 @@ export type AreaGraphIssueCode =
   | 'invalid-direction'
   | 'invalid-world-width'
   | 'invalid-ground-y'
+  | 'invalid-spawn-x'
+  | 'invalid-spawn-facing'
   | 'invalid-trigger-range'
   | 'missing-target-area'
   | 'missing-target-spawn'

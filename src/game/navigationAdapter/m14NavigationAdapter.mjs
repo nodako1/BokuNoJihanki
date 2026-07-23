@@ -266,19 +266,17 @@ function resolveMovementWithCore(
   locked = false,
 ) {
   const normalizedAxis = clamp(finiteOr(axis, 0), -1, 1);
-  const analogMaxSpeed = normalizedAxis === 0
-    ? motion.maxSpeed
-    : Math.max(motion.stopEpsilon, Math.abs(normalizedAxis) * motion.maxSpeed);
   const result = resolveHorizontalMovement(
     state,
     {
+      horizontalAxis: normalizedAxis,
       left: normalizedAxis < 0,
       right: normalizedAxis > 0,
       deltaSeconds,
       locked,
     },
     {
-      maxSpeed: analogMaxSpeed,
+      maxSpeed: motion.maxSpeed,
       acceleration: motion.acceleration,
       deceleration: motion.deceleration,
       maxSubstep: 4,

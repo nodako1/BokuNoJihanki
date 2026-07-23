@@ -98,6 +98,36 @@ test('movement does not cross an obstacle range', () => {
   assert.equal(result.blocked, true);
 });
 
+test('resting exactly on an obstacle edge still blocks further entry on the next frame', () => {
+  // Regression test: the obstacle "entering" check must treat the exact
+  // boundary as outside, otherwise a position resolved to obstacle.minX by
+  // frame N is silently treated as already-inside on frame N+1, and holding
+  // the same direction walks straight through the obstacle.
+  const bounds = { ...BOUNDS, obstacles: [{ minX: 1100, maxX: 1150 }] };
+
+  const first = resolveHorizontalMovement(
+    state({ x: 1050, velocityX: 150 }),
+    { left: false, right: true, deltaSeconds: 1 },
+    CONFIG,
+    bounds,
+  );
+  assert.equal(first.x, 1100, `expected the first frame to stop exactly at the obstacle, got ${first.x}`);
+  assert.equal(first.blocked, true);
+
+  // Same rightward input again, starting exactly at the obstacle's minX.
+  const second = resolveHorizontalMovement(first, { left: false, right: true, deltaSeconds: 1 }, CONFIG, bounds);
+  assert.equal(second.x, 1100, `expected to stay blocked at the obstacle edge, got ${second.x}`);
+  assert.equal(second.blocked, true);
+
+  // And a third frame for good measure, so this isn't a one-substep fluke.
+  const third = resolveHorizontalMovement(second, { left: false, right: true, deltaSeconds: 1 }, CONFIG, bounds);
+  assert.equal(third.x, 1100, `expected to remain blocked after repeated pressure, got ${third.x}`);
+
+  // Moving away (left) from the same resting position must still work.
+  const away = resolveHorizontalMovement(second, { left: true, right: false, deltaSeconds: 0.05 }, CONFIG, bounds);
+  assert.ok(away.x < 1100, `expected to be able to move away from the obstacle, got ${away.x}`);
+});
+
 test('a large delta cannot tunnel through a thin obstacle', () => {
   const bounds = { ...BOUNDS, obstacles: [{ minX: 1100, maxX: 1104 }] };
   const approaching = state({ x: 1090, velocityX: 150 });
@@ -199,4 +229,68 @@ test('a single very large delta does not explode: it clamps to max speed and res
   assert.equal(result.velocityX, CONFIG.maxSpeed);
   assert.ok(result.x <= BOUNDS.maxX);
   assert.ok(Number.isFinite(result.x));
+});
+
+// Analog `axis` input (adapter compatibility: e.g. a phone virtual stick),
+// requested by ChatGPT so a soft push doesn't always register as maxSpeed.
+
+test('a half-magnitude axis ramps toward roughly half maxSpeed, not full speed', () => {
+  let moving = state();
+  for (let i = 0; i < 30; i += 1) {
+    moving = resolveHorizontalMovement(moving, { horizontalAxis: 0.5, deltaSeconds: 1 / 60 }, CONFIG, BOUNDS);
+  }
+  assert.ok(
+    Math.abs(moving.velocityX - CONFIG.maxSpeed * 0.5) < 1,
+    `expected velocity to settle near half maxSpeed, got ${moving.velocityX}`,
+  );
+  assert.ok(moving.velocityX < CONFIG.maxSpeed * 0.9, 'a half-magnitude axis must not snap to full speed');
+  assert.equal(moving.facing, 'right');
+});
+
+test('releasing the axis (dropping back to 0) decelerates the same as releasing left/right', () => {
+  const held = resolveHorizontalMovement(state(), { horizontalAxis: 1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
+  assert.ok(held.velocityX > 0);
+
+  const released = resolveHorizontalMovement(held, { horizontalAxis: 0, deltaSeconds: 0.05 }, CONFIG, BOUNDS);
+  assert.ok(
+    released.velocityX < held.velocityX,
+    `expected velocity to decay after releasing the axis, got ${released.velocityX}`,
+  );
+  assert.equal(released.facing, 'right', 'facing should hold while decelerating, same as releasing left/right');
+});
+
+test('axis sign flips both velocity direction and facing', () => {
+  const right = resolveHorizontalMovement(state(), { horizontalAxis: 1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
+  assert.ok(right.velocityX > 0);
+  assert.equal(right.facing, 'right');
+
+  const left = resolveHorizontalMovement(state(), { horizontalAxis: -1, deltaSeconds: 0.2 }, CONFIG, BOUNDS);
+  assert.ok(left.velocityX < 0);
+  assert.equal(left.facing, 'left');
+});
+
+test('an out-of-range axis is clamped to [-1, 1] instead of exceeding maxSpeed', () => {
+  let moving = state();
+  for (let i = 0; i < 30; i += 1) {
+    moving = resolveHorizontalMovement(moving, { horizontalAxis: 5, deltaSeconds: 1 / 60 }, CONFIG, BOUNDS);
+  }
+  assert.ok(moving.velocityX <= CONFIG.maxSpeed, `expected velocity to clamp at maxSpeed, got ${moving.velocityX}`);
+});
+
+test('omitting axis (or passing a non-finite value) keeps the original left/right behavior', () => {
+  const digital = resolveHorizontalMovement(state(), { left: false, right: true, deltaSeconds: 0.5 }, CONFIG, BOUNDS);
+  const noAxis = resolveHorizontalMovement(
+    state(),
+    { left: false, right: true, deltaSeconds: 0.5, horizontalAxis: undefined },
+    CONFIG,
+    BOUNDS,
+  );
+  const nanAxis = resolveHorizontalMovement(
+    state(),
+    { left: false, right: true, deltaSeconds: 0.5, horizontalAxis: NaN },
+    CONFIG,
+    BOUNDS,
+  );
+  assert.equal(noAxis.x, digital.x);
+  assert.equal(nanAxis.x, digital.x);
 });
