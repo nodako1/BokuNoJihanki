@@ -74,13 +74,15 @@ export function resolveHorizontalMovement(state, input, config, bounds) {
     };
   }
 
-  // `axis` is an optional analog override (e.g. a phone's virtual stick) in
-  // [-1, 1]. When present it takes priority over the digital left/right
-  // booleans so a soft push yields a proportionally lower target speed
-  // instead of always snapping to maxSpeed. Omitting it (or passing a
-  // non-finite value) falls back to the original digital behavior untouched.
-  const hasAxis = Number.isFinite(input.axis);
-  const axisValue = hasAxis ? clamp(input.axis, -1, 1) : 0;
+  // `horizontalAxis` is an optional analog override (e.g. a phone's virtual
+  // stick) in [-1, 1] - named to match the adapter's existing
+  // M14DirectionalInput.horizontalAxis convention. When present it takes
+  // priority over the digital left/right booleans so a soft push yields a
+  // proportionally lower target speed instead of always snapping to
+  // maxSpeed. Omitting it (or passing a non-finite value) falls back to the
+  // original digital behavior untouched.
+  const hasAxis = Number.isFinite(input.horizontalAxis);
+  const axisValue = hasAxis ? clamp(input.horizontalAxis, -1, 1) : 0;
 
   const effectiveLeft = hasAxis ? axisValue < 0 : Boolean(input.left) && !input.right;
   const effectiveRight = hasAxis ? axisValue > 0 : Boolean(input.right) && !input.left;
