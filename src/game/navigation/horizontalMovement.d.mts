@@ -14,8 +14,17 @@ export interface HorizontalMovementConfig {
 }
 
 export interface HorizontalMovementInput {
-  readonly left: boolean;
-  readonly right: boolean;
+  readonly left?: boolean;
+  readonly right?: boolean;
+  /**
+   * Optional analog override in [-1, 1] (e.g. a phone virtual stick axis).
+   * When finite, this takes priority over `left`/`right` and the target
+   * velocity is `clamp(axis, -1, 1) * config.maxSpeed`, so a soft push
+   * yields a proportionally lower speed instead of snapping to maxSpeed.
+   * Omit it (or pass a non-finite value) to keep the original digital
+   * left/right behavior.
+   */
+  readonly axis?: number;
   /** Elapsed time for this update, in seconds. */
   readonly deltaSeconds: number;
   /** When true, all directional input is ignored and position does not change this frame. */
