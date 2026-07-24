@@ -23,6 +23,7 @@ import {
   M15_BASELINE_GEOMETRY_FIXTURE,
   getM15BaselineGeometryArea,
 } from './m15BaselineGeometryFixture.mjs';
+import { createM15ScreenshotManifest } from './m15ScreenshotManifest.mjs';
 import { getM15GeometryArea } from '../../src/game/areas/m15GeometryFixture.mjs';
 
 const EXACT_BASELINE = '29223ee31fd4fc4fbca21a37b01fe89277279647';
@@ -2041,10 +2042,18 @@ try {
     `${JSON.stringify(statePayload, null, 2)}\n`,
   );
   if (!failure) {
+    const screenshotManifest = createM15ScreenshotManifest(
+      outputDirectory,
+      {
+        viewportWidth: viewport.width,
+        viewportHeight: viewport.height,
+        deviceScaleFactor,
+      },
+    );
     fs.writeFileSync(
       path.join(outputDirectory, 'completion.json'),
       `${JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 'complete',
         expectedCommit,
         observedCommit: baselineContract.sourceCommit,
@@ -2052,6 +2061,7 @@ try {
         traceFinalized,
         stateSha256: fileSha256(statePath),
         runtimeLogSha256: fileSha256(runtimeLogPath),
+        screenshotManifest,
         completedAt: finalization.completedAt,
       }, null, 2)}\n`,
     );

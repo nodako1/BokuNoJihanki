@@ -54,6 +54,7 @@ const M15_RUNTIME_FILES = [
   'tests/m15-audio-contract.test.mjs',
   'tests/m15-asset-validator.test.mjs',
   'tests/m15-evidence-environment.test.mjs',
+  'tests/m15-evidence-integrity.test.mjs',
   'tests/m15-evidence-phase-coordinate.test.mjs',
   'tests/m15-heartbeat-contract.test.mjs',
   'tests/m15-geometry-panel-contract.test.mjs',
@@ -77,6 +78,7 @@ const M15_RUNTIME_FILES = [
   'tools/evidence/capture_m15_baseline.mjs',
   'tools/evidence/generate_m15_audio_evidence.py',
   'tools/evidence/m15BaselineGeometryFixture.mjs',
+  'tools/evidence/m15ScreenshotManifest.mjs',
   'tools/evidence/probe_m15_x11_visibility.mjs',
 ];
 const M14_SCREENSHOTS = [
@@ -324,6 +326,8 @@ const [
   audioEvidenceGenerator,
   evidenceAssembler,
   evidenceContractTest,
+  evidenceIntegrityTest,
+  screenshotManifest,
   browserSmoke,
   playwrightNativeVisibility,
   playwrightNativeVisibilityTest,
@@ -379,6 +383,8 @@ const [
   readText('tools/evidence/generate_m15_audio_evidence.py'),
   readText('tools/evidence/assemble_m15_evidence.py'),
   readText('tests/m15-evidence-environment.test.mjs'),
+  readText('tests/m15-evidence-integrity.test.mjs'),
+  readText('tools/evidence/m15ScreenshotManifest.mjs'),
   readText('scripts/browser-smoke.mjs'),
   readText('scripts/prepare-playwright-native-visibility.mjs'),
   readText('tests/m15-playwright-native-visibility.test.mjs'),
@@ -977,6 +983,8 @@ for (const marker of [
   'await browser.close().then',
   'stateSha256: fileSha256(statePath)',
   'runtimeLogSha256: fileSha256(runtimeLogPath)',
+  'createM15ScreenshotManifest',
+  'screenshotManifest',
   'assert.equal(pageErrors.length, 0',
   'Baseline failed requests:',
 ]) {
@@ -1391,6 +1399,14 @@ for (const marker of [
   'EXPECTED_SPAWN_MEASUREMENTS',
   'EXPECTED_BASELINE_SPAWN_MEASUREMENTS',
   'BASELINE_SPAWN_X_TOLERANCE_WORLD_PX',
+  'validate_run_screenshot_manifest',
+  'expected_run_pixel_size',
+  'rect_intersection_area',
+  'rect_distance',
+  'validate_baseline_measurement',
+  'validate_candidate_measurement',
+  'validate_panel_geometry',
+  'panel_inside_viewport',
   'validate_player_foot_evidence(',
   '"player-foot-alpha.json"',
   'state["pageErrors"] == []',
@@ -1419,6 +1435,41 @@ if (/if role != ["']baseline["']:/.test(evidenceAssembler)) {
   failures.push(
     'M1.5 Evidence assembler must require completion hashes for baseline runs.',
   );
+}
+for (const marker of [
+  'createM15ScreenshotManifest',
+  'readPngDimensions',
+  'expectedPixelSize',
+  'screenshotCount',
+  'sha256',
+  'dimensions.width === expectedWidth',
+]) {
+  if (!screenshotManifest.includes(marker)) {
+    failures.push(`M1.5 screenshot manifest is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  'candidate-css-delta',
+  'candidate-foot-rect',
+  'baseline-ground-delta',
+  'baseline-coherent-fixture-drift',
+  'candidate-coherent-player-rect',
+  'panel-player-intersection',
+  'candidate-panel-prompt-state',
+  'baseline-panel-prompt-state',
+  'candidate-coherent-panel-body',
+  'baseline-coherent-panel-body',
+  'panel-obstacle-distance',
+  'panel-outside-viewport',
+  'consumer-hash',
+  'consumer-bytes',
+  'consumer-dimensions',
+  'consumer-coverage',
+  'expected 2x1',
+]) {
+  if (!evidenceIntegrityTest.includes(marker)) {
+    failures.push(`M1.5 Evidence integrity test is missing ${marker}.`);
+  }
 }
 for (const marker of [
   "import { execFile as execFileCallback } from 'node:child_process';",
@@ -1974,6 +2025,8 @@ for (const marker of [
   'const postActiveInput = await exerciseWalk(',
   'fileSha256(statePath)',
   'fileSha256(runtimeLogPath)',
+  'createM15ScreenshotManifest',
+  'screenshotManifest',
   "path.join(outputDir, 'completion.json')",
   'CDP frozen state did not suspend the page heartbeat:',
   'prepareVercelPreviewAccess',

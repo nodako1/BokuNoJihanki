@@ -25,6 +25,7 @@ import {
   captureX11TabVisibilityLifecycle,
   createM15BrowserLifecycleLaunch,
 } from './x11-tab-visibility.mjs';
+import { createM15ScreenshotManifest } from '../tools/evidence/m15ScreenshotManifest.mjs';
 import {
   resolveInstalledPlaywrightCoreRoot,
   verifyPlaywrightNativeVisibility,
@@ -2831,10 +2832,15 @@ try {
     `${JSON.stringify(statePayload, null, 2)}\n`,
   );
   if (!failure) {
+    const screenshotManifest = createM15ScreenshotManifest(outputDir, {
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      deviceScaleFactor,
+    });
     fs.writeFileSync(
       path.join(outputDir, 'completion.json'),
       `${JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 'complete',
         expectedCommit,
         observedCommit,
@@ -2842,6 +2848,7 @@ try {
         traceFinalized,
         stateSha256: fileSha256(statePath),
         runtimeLogSha256: fileSha256(runtimeLogPath),
+        screenshotManifest,
         completedAt: finalization.completedAt,
       }, null, 2)}\n`,
     );

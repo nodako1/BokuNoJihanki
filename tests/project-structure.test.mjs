@@ -144,6 +144,8 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
     audioEvidence,
     evidenceAssembler,
     evidenceContractTest,
+    evidenceIntegrityTest,
+    screenshotManifest,
   ] =
     await Promise.all([
       readJson('public/assets/images/m15/asset-manifest.json'),
@@ -153,6 +155,8 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
       readFile('tools/evidence/generate_m15_audio_evidence.py', 'utf-8'),
       readFile('tools/evidence/assemble_m15_evidence.py', 'utf-8'),
       readFile('tests/m15-evidence-environment.test.mjs', 'utf-8'),
+      readFile('tests/m15-evidence-integrity.test.mjs', 'utf-8'),
+      readFile('tools/evidence/m15ScreenshotManifest.mjs', 'utf-8'),
     ]);
   assert.deepEqual(M15_AREA_IDS, M14_AREAS);
   assert.equal(
@@ -293,6 +297,8 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
     'await browser.close().then',
     'stateSha256: fileSha256(statePath)',
     'runtimeLogSha256: fileSha256(runtimeLogPath)',
+    'createM15ScreenshotManifest',
+    'screenshotManifest',
     'assert.equal(pageErrors.length, 0',
     'Baseline failed requests:',
   ]) {
@@ -349,6 +355,14 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
     'EXPECTED_SPAWN_MEASUREMENTS',
     'EXPECTED_BASELINE_SPAWN_MEASUREMENTS',
     'BASELINE_SPAWN_X_TOLERANCE_WORLD_PX',
+    'validate_run_screenshot_manifest',
+    'expected_run_pixel_size',
+    'rect_intersection_area',
+    'rect_distance',
+    'validate_baseline_measurement',
+    'validate_candidate_measurement',
+    'validate_panel_geometry',
+    'panel_inside_viewport',
     'validate_player_foot_evidence(',
     '"player-foot-alpha.json"',
     'state["pageErrors"] == []',
@@ -500,6 +514,36 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
     '"candidatePass": False',
   ]) {
     assert.ok(evidenceAssembler.includes(marker), marker);
+  }
+  for (const marker of [
+    'createM15ScreenshotManifest',
+    'readPngDimensions',
+    'expectedPixelSize',
+    'screenshotCount',
+    'dimensions.width === expectedWidth',
+  ]) {
+    assert.ok(screenshotManifest.includes(marker), marker);
+  }
+  for (const marker of [
+    'candidate-css-delta',
+    'candidate-foot-rect',
+    'baseline-ground-delta',
+    'baseline-coherent-fixture-drift',
+    'candidate-coherent-player-rect',
+    'panel-player-intersection',
+    'candidate-panel-prompt-state',
+    'baseline-panel-prompt-state',
+    'candidate-coherent-panel-body',
+    'baseline-coherent-panel-body',
+    'panel-obstacle-distance',
+    'panel-outside-viewport',
+    'consumer-hash',
+    'consumer-bytes',
+    'consumer-dimensions',
+    'consumer-coverage',
+    'expected 2x1',
+  ]) {
+    assert.ok(evidenceIntegrityTest.includes(marker), marker);
   }
   assert.doesNotMatch(
     evidenceAssembler,
@@ -729,6 +773,8 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'const postActiveInput = await exerciseWalk(',
     'fileSha256(statePath)',
     'fileSha256(runtimeLogPath)',
+    'createM15ScreenshotManifest',
+    'screenshotManifest',
     "path.join(outputDir, 'completion.json')",
     'CDP frozen state did not suspend the page heartbeat:',
     'prepareVercelPreviewAccess',

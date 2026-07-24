@@ -39,6 +39,12 @@ DIRECTIONS = ("up", "down")
 FACINGS = ("left", "right")
 PANEL_SAMPLES = ("start", "center", "end")
 PANEL_TRIGGER_INSET_WORLD_PX = 8
+PANEL_DIRECTION_AREAS = {
+    "up": "life-road",
+    "down": "upper-vending-lane",
+}
+M15_GAME_WIDTH = 1280
+M15_GAME_HEIGHT = 720
 REQUIRED_PANEL_OBSTACLE_SELECTORS = frozenset(
     {
         ".game-date-chip",
@@ -46,6 +52,14 @@ REQUIRED_PANEL_OBSTACLE_SELECTORS = frozenset(
         ".virtual-joystick",
         ".control-hint",
         ".build-badge",
+    },
+)
+ALLOWED_PANEL_OBSTACLE_SELECTORS = frozenset(
+    {
+        *REQUIRED_PANEL_OBSTACLE_SELECTORS,
+        ".developer-hud",
+        ".dev-control-panel",
+        "[data-area-panel-obstacle]",
     },
 )
 RECOVERY_INITIAL_HIDDEN_AUTOMATION_REASONS = frozenset(
@@ -193,6 +207,86 @@ def validate_positive_rect(value: Any, name: str) -> dict[str, float]:
     return rectangle
 
 
+def rect_intersection_area(
+    first: dict[str, float],
+    second: dict[str, float],
+) -> float:
+    width = max(
+        0.0,
+        min(
+            first["left"] + first["width"],
+            second["left"] + second["width"],
+        )
+        - max(first["left"], second["left"]),
+    )
+    height = max(
+        0.0,
+        min(
+            first["top"] + first["height"],
+            second["top"] + second["height"],
+        )
+        - max(first["top"], second["top"]),
+    )
+    return width * height
+
+
+def rect_distance(
+    first: dict[str, float],
+    second: dict[str, float],
+) -> float:
+    if rect_intersection_area(first, second) > 0:
+        return 0.0
+    horizontal = max(
+        0.0,
+        first["left"] - (second["left"] + second["width"]),
+        second["left"] - (first["left"] + first["width"]),
+    )
+    vertical = max(
+        0.0,
+        first["top"] - (second["top"] + second["height"]),
+        second["top"] - (first["top"] + first["height"]),
+    )
+    return math.hypot(horizontal, vertical)
+
+
+def require_close(
+    recorded: Any,
+    recomputed: float,
+    name: str,
+    *,
+    abs_tol: float = 1e-6,
+) -> float:
+    value = finite_number(recorded, name)
+    require(
+        math.isclose(value, recomputed, rel_tol=0, abs_tol=abs_tol),
+        f"{name} is {value}; recomputed value is {recomputed}.",
+    )
+    return value
+
+
+def require_numeric_string_close(
+    recorded: Any,
+    recomputed: float,
+    name: str,
+    *,
+    abs_tol: float,
+) -> float:
+    require(
+        isinstance(recorded, str) and recorded.strip() == recorded,
+        f"{name} must be a canonical numeric string.",
+    )
+    try:
+        value = float(recorded)
+    except ValueError as error:
+        raise EvidenceError(f"{name} is not numeric.") from error
+    require(
+        math.isfinite(value)
+        and math.isclose(value, recomputed, rel_tol=0, abs_tol=abs_tol),
+        f"{name} is {value}; recomputed value is {recomputed}.",
+    )
+    return value
+
+
 def strict_json_load(path: Path) -> dict[str, Any]:
     require(path.is_file() and not path.is_symlink(), f"Missing regular JSON file: {path}")
 
@@ -291,16 +385,52 @@ def viewport_key(state: dict[str, Any]) -> tuple[int, int, float, bool]:
     return (width, height, float(dpr), touch)
 
 
-def check_png(path: Path) -> None:
+def check_png(
+    path: Path,
+    *,
+    expected_pixel_size: tuple[int, int] | None = None,
+) -> tuple[int, int]:
     require(path.is_file() and not path.is_symlink(), f"Missing regular PNG: {path}")
     require(path.suffix.lower() == ".png", f"Expected PNG input: {path}")
     try:
         with Image.open(path) as image:
             image.verify()
         with Image.open(path) as image:
-            require(image.width > 0 and image.height > 0, f"Empty image: {path}")
+            dimensions = (image.width, image.height)
+            require(
+                dimensions[0] > 0 and dimensions[1] > 0,
+                f"Empty image: {path}",
+            )
+            if expected_pixel_size is not None:
+                require(
+                    dimensions == expected_pixel_size,
+                    f"Run screenshot {path} is {dimensions[0]}x"
+                    f"{dimensions[1]}; expected {expected_pixel_size[0]}x"
+                    f"{expected_pixel_size[1]}.",
+                )
     except (OSError, SyntaxError) as error:
         raise EvidenceError(f"Invalid PNG {path}: {error}") from error
+    return dimensions
+
+
+def expected_run_pixel_size(
+    key: tuple[int, int, float, bool],
+) -> tuple[int, int]:
+    css_width, css_height, dpr, _ = key
+    pixel_width = css_width * dpr
+    pixel_height = css_height * dpr
+    require(
+        pixel_width.is_integer() and pixel_height.is_integer(),
+        f"Viewport/DPR tuple does not produce integer pixels: {key}",
+    )
+    return (int(pixel_width), int(pixel_height))
+
+
+def check_run_png(run: Run, path: Path) -> tuple[int, int]:
+    return check_png(
+        path,
+        expected_pixel_size=expected_run_pixel_size(run.viewport_key),
+    )
 
 
 def safe_run_file(run: Run, filename: str, *, png: bool = False) -> Path:
@@ -321,8 +451,65 @@ def safe_run_file(run: Run, filename: str, *, png: bool = False) -> Path:
     )
     require(target.is_file() and not target.is_symlink(), f"Missing run artifact: {target}")
     if png:
-        check_png(target)
+        check_run_png(run, target)
     return target
+
+
+def validate_run_screenshot_manifest(
+    source: Path,
+    completion: dict[str, Any],
+    key: tuple[int, int, float, bool],
+    label: str,
+) -> None:
+    manifest = nested(completion, "screenshotManifest")
+    expected_size = expected_run_pixel_size(key)
+    require(
+        completion.get("schemaVersion") == 2
+        and manifest.get("schemaVersion") == 1
+        and manifest.get("expectedPixelSize")
+        == {"width": expected_size[0], "height": expected_size[1]},
+        f"{label}: screenshot completion schema or expected dimensions differ.",
+    )
+    records = manifest.get("files")
+    require(
+        isinstance(records, list)
+        and bool(records)
+        and manifest.get("screenshotCount") == len(records),
+        f"{label}: screenshot manifest is empty or miscounted.",
+    )
+    actual_png_paths = [
+        path for path in source.iterdir() if path.suffix.lower() == ".png"
+    ]
+    require(
+        all(path.is_file() and not path.is_symlink() for path in actual_png_paths),
+        f"{label}: every run PNG must be a regular non-symlink file.",
+    )
+    actual_png_names = sorted(path.name for path in actual_png_paths)
+    recorded_names: list[str] = []
+    for record in records:
+        require(isinstance(record, dict), f"{label}: screenshot record is invalid.")
+        filename = record.get("filename")
+        require(
+            isinstance(filename, str)
+            and filename
+            and Path(filename).name == filename,
+            f"{label}: screenshot manifest filename is unsafe.",
+        )
+        target = source / filename
+        dimensions = check_png(target, expected_pixel_size=expected_size)
+        require(
+            record.get("width") == dimensions[0]
+            and record.get("height") == dimensions[1]
+            and record.get("bytes") == target.stat().st_size
+            and record.get("sha256") == sha256(target),
+            f"{label}: screenshot manifest does not bind {filename}.",
+        )
+        recorded_names.append(filename)
+    require(
+        len(recorded_names) == len(set(recorded_names))
+        and sorted(recorded_names) == actual_png_names,
+        f"{label}: screenshot manifest does not exactly cover run PNG files.",
+    )
 
 
 def load_run(role: str, source: Path) -> Run:
@@ -362,6 +549,12 @@ def load_run(role: str, source: Path) -> Run:
         completion.get("stateSha256") == sha256(state_path)
         and completion.get("runtimeLogSha256") == sha256(runtime_log),
         f"{role}/{EXPECTED_VIEWPORTS[key]} completion hashes do not bind the final files.",
+    )
+    validate_run_screenshot_manifest(
+        resolved,
+        completion,
+        key,
+        f"{role}/{EXPECTED_VIEWPORTS[key]}",
     )
     return Run(
         role=role,
@@ -634,7 +827,7 @@ def candidate_ground_entry(run: Run, area_id: str, position: str) -> tuple[dict[
         f"{run.role}/{run.device_id}: expected exactly one fresh screenshot for "
         f"{area_id}/{position}, found {[path.name for path in existing]}.",
     )
-    check_png(existing[0])
+    check_run_png(run, existing[0])
     return measurement, existing[0]
 
 
@@ -757,6 +950,684 @@ def panel_entries(run: Run) -> dict[tuple[str, str, str], tuple[dict[str, Any], 
     }
     require(set(result) == expected, f"{run.role}/{run.device_id}: panel state coverage is incomplete.")
     return result
+
+
+def require_same_rect(
+    recorded: Any,
+    recomputed: dict[str, float],
+    name: str,
+) -> dict[str, float]:
+    rectangle = validate_positive_rect(recorded, name)
+    for key in ("left", "top", "width", "height"):
+        require_close(rectangle[key], recomputed[key], f"{name}.{key}", abs_tol=0.05)
+    return rectangle
+
+
+def validate_baseline_measurement(
+    run: Run,
+    measurement: dict[str, Any],
+    *,
+    spawn: bool,
+) -> None:
+    label = (
+        f"{run.role}/{run.device_id}: baseline "
+        f"{measurement.get('areaId')}/{measurement.get('position')}"
+    )
+    snapshot = nested(measurement, "runtimeSnapshot")
+    geometry = nested(measurement, "playerGeometry")
+    player_contract = nested(run.state, "runtimeContract", "player")
+    area_id = measurement.get("areaId")
+    fixture_samples = nested(
+        run.state,
+        "independentVisualFixture",
+        "areas",
+        area_id,
+        "visualGround",
+        "samples",
+    )
+    require(
+        isinstance(fixture_samples, list) and bool(fixture_samples),
+        f"{label}: independent visual ground samples are missing.",
+    )
+    if spawn:
+        snapshot_x = finite_number(
+            snapshot.get("playerX"),
+            f"{label} spawn player X",
+        )
+        expected_visual_sample = min(
+            fixture_samples,
+            key=lambda sample: abs(
+                finite_number(sample.get("x"), f"{label} visual sample X")
+                - snapshot_x
+            ),
+        )
+    else:
+        matching_samples = [
+            sample
+            for sample in fixture_samples
+            if isinstance(sample, dict)
+            and sample.get("position") == measurement.get("position")
+        ]
+        require(
+            len(matching_samples) == 1,
+            f"{label}: independent visual ground sample is ambiguous.",
+        )
+        expected_visual_sample = matching_samples[0]
+    require(
+        measurement.get("independentVisualSample") == expected_visual_sample,
+        f"{label}: measurement is not bound to the independent visual fixture.",
+    )
+    atlas_frame = nested(geometry, "atlasFrame")
+    expected_atlas_frame = {
+        "width": player_contract.get("frameWidth"),
+        "height": player_contract.get("frameHeight"),
+        "scale": player_contract.get("scale"),
+        "originX": player_contract.get("originX"),
+        "originY": player_contract.get("originY"),
+    }
+    require(
+        geometry.get("derivation") == player_contract.get("derivation")
+        and atlas_frame == expected_atlas_frame,
+        f"{label}: player atlas geometry is not runtime-contract-backed.",
+    )
+
+    canvas_geometry = nested(geometry, "canvas")
+    canvas_rect = validate_positive_rect(
+        canvas_geometry.get("cssRect"),
+        f"{label} canvas rectangle",
+    )
+    backing_width = finite_number(
+        canvas_geometry.get("backingWidth"),
+        f"{label} canvas backing width",
+    )
+    backing_height = finite_number(
+        canvas_geometry.get("backingHeight"),
+        f"{label} canvas backing height",
+    )
+    require(
+        backing_width == M15_GAME_WIDTH
+        and backing_height == M15_GAME_HEIGHT
+        and canvas_geometry.get("objectFit") in {"contain", "fill"},
+        f"{label}: baseline canvas contract is invalid.",
+    )
+    scale_x = canvas_rect["width"] / backing_width
+    scale_y = canvas_rect["height"] / backing_height
+    require_close(
+        canvas_geometry.get("scaleX"),
+        scale_x,
+        f"{label} canvas scaleX",
+    )
+    require_close(
+        canvas_geometry.get("scaleY"),
+        scale_y,
+        f"{label} canvas scaleY",
+    )
+
+    player_x = finite_number(snapshot.get("playerX"), f"{label} player X")
+    player_y = finite_number(snapshot.get("playerY"), f"{label} player Y")
+    camera_x = finite_number(
+        snapshot.get("cameraScrollX"),
+        f"{label} camera scroll X",
+    )
+    frame_width = finite_number(atlas_frame.get("width"), f"{label} frame width")
+    frame_height = finite_number(
+        atlas_frame.get("height"),
+        f"{label} frame height",
+    )
+    sprite_scale = finite_number(atlas_frame.get("scale"), f"{label} sprite scale")
+    origin_x = finite_number(atlas_frame.get("originX"), f"{label} origin X")
+    origin_y = finite_number(atlas_frame.get("originY"), f"{label} origin Y")
+    require(
+        frame_width > 0 and frame_height > 0 and sprite_scale > 0,
+        f"{label}: baseline sprite dimensions are invalid.",
+    )
+    screen_world_x = player_x - camera_x
+    recomputed_world_rect = {
+        "left": screen_world_x - frame_width * sprite_scale * origin_x,
+        "top": player_y - frame_height * sprite_scale * origin_y,
+        "width": frame_width * sprite_scale,
+        "height": frame_height * sprite_scale,
+    }
+    require_same_rect(
+        geometry.get("worldRect"),
+        recomputed_world_rect,
+        f"{label} world rectangle",
+    )
+    recomputed_css_rect = {
+        "left": canvas_rect["left"] + recomputed_world_rect["left"] * scale_x,
+        "top": canvas_rect["top"] + recomputed_world_rect["top"] * scale_y,
+        "width": recomputed_world_rect["width"] * scale_x,
+        "height": recomputed_world_rect["height"] * scale_y,
+    }
+    require_same_rect(
+        geometry.get("cssRect"),
+        recomputed_css_rect,
+        f"{label} CSS rectangle",
+    )
+
+    visual_ground_y = finite_number(
+        nested(measurement, "independentVisualSample", "y"),
+        f"{label} independent visual ground Y",
+    )
+    require_close(
+        geometry.get("visualGroundY"),
+        visual_ground_y,
+        f"{label} visual ground Y",
+    )
+    recomputed_foot = {
+        "worldX": player_x,
+        "worldY": player_y,
+        "cssX": canvas_rect["left"] + screen_world_x * scale_x,
+        "cssY": canvas_rect["top"] + player_y * scale_y,
+    }
+    foot = nested(geometry, "foot")
+    for key, value in recomputed_foot.items():
+        require_close(foot.get(key), value, f"{label} foot.{key}")
+    visual_ground_css_y = canvas_rect["top"] + visual_ground_y * scale_y
+    require_close(
+        geometry.get("visualGroundCssY"),
+        visual_ground_css_y,
+        f"{label} visual ground CSS Y",
+    )
+    signed_world_delta = player_y - visual_ground_y
+    signed_css_delta = recomputed_foot["cssY"] - visual_ground_css_y
+    absolute_css_delta = abs(signed_css_delta)
+    require_close(
+        geometry.get("signedFootGroundWorldDelta"),
+        signed_world_delta,
+        f"{label} signed foot/ground world delta",
+    )
+    require_close(
+        geometry.get("signedFootGroundCssDelta"),
+        signed_css_delta,
+        f"{label} signed foot/ground CSS delta",
+    )
+    require_close(
+        geometry.get("absoluteFootGroundCssDelta"),
+        absolute_css_delta,
+        f"{label} absolute foot/ground CSS delta",
+    )
+    expected_requirement = 6.0 if spawn else 2.0
+    require(
+        finite_number(
+            measurement.get("requirementCssPx"),
+            f"{label} CSS requirement",
+        )
+        == expected_requirement
+        and measurement.get("withinRequirement")
+        is (absolute_css_delta <= expected_requirement),
+        f"{label}: baseline foot/ground pass flag is not recomputed.",
+    )
+
+
+def validate_panel_geometry(
+    run: Run,
+    entry: dict[str, Any],
+    *,
+    baseline: bool,
+) -> dict[str, float]:
+    label = (
+        f"{run.role}/{run.device_id}: {entry.get('direction')}/"
+        f"{nested(entry, 'triggerSample', 'name')}/{entry.get('facing')} panel"
+    )
+    direction = entry.get("direction")
+    expected_area = PANEL_DIRECTION_AREAS.get(direction)
+    hud_prompt = nested(entry, "prompt")
+    require(
+        expected_area is not None
+        and entry.get("areaId") == expected_area
+        and hud_prompt.get("area") == expected_area
+        and hud_prompt.get("facing") == entry.get("facing")
+        and hud_prompt.get("branchVisible") is True
+        and hud_prompt.get("branchDirection") == direction,
+        f"{label}: HUD prompt does not prove the requested area, facing, "
+        "visible branch, and direction.",
+    )
+    geometry = nested(entry, "geometry")
+    if not baseline:
+        rendered_prompt = nested(geometry, "prompt")
+        require(
+            rendered_prompt.get("visible") is True
+            and rendered_prompt.get("direction") == direction
+            and rendered_prompt.get("areaId") == expected_area,
+            f"{label}: rendered panel prompt state differs from the HUD witness.",
+        )
+    panel_rect = validate_positive_rect(
+        geometry.get("panelRect"),
+        f"{label} rectangle",
+    )
+    player_rect = validate_positive_rect(
+        geometry.get("playerRect"),
+        f"{label} player rectangle",
+    )
+    validate_positive_rect(
+        geometry.get("footRect")
+        if not baseline
+        else nested(geometry, "playerGeometry", "cssRect"),
+        f"{label} player geometry rectangle",
+    )
+    player_geometry = nested(geometry, "playerGeometry")
+    expected_player_rect = (
+        nested(player_geometry, "cssRect")
+        if baseline
+        else nested(player_geometry, "rect")
+    )
+    require_same_rect(
+        geometry.get("playerRect"),
+        validate_positive_rect(
+            expected_player_rect,
+            f"{label} recorded player geometry",
+        ),
+        f"{label} duplicated player rectangle",
+    )
+    if not baseline:
+        require_same_rect(
+            geometry.get("footRect"),
+            validate_positive_rect(
+                nested(player_geometry, "footRect"),
+                f"{label} recorded foot geometry",
+            ),
+            f"{label} duplicated foot rectangle",
+        )
+        snapshot = nested(entry, "groundCss", "snapshot")
+        canvas_rect = validate_positive_rect(
+            player_geometry.get("canvasRect"),
+            f"{label} canvas rectangle",
+        )
+        scale_x = finite_number(
+            player_geometry.get("scaleX"),
+            f"{label} scaleX",
+        )
+        scale_y = finite_number(
+            player_geometry.get("scaleY"),
+            f"{label} scaleY",
+        )
+        player_world_x = finite_number(
+            player_geometry.get("playerWorldX"),
+            f"{label} player world X",
+        )
+        player_world_y = finite_number(
+            player_geometry.get("playerWorldY"),
+            f"{label} player world Y",
+        )
+        camera_scroll_x = finite_number(
+            player_geometry.get("cameraScrollX"),
+            f"{label} camera scroll X",
+        )
+        camera_scroll_y = finite_number(
+            player_geometry.get("cameraScrollY"),
+            f"{label} camera scroll Y",
+        )
+        require(
+            scale_x > 0
+            and scale_y > 0
+            and math.isclose(
+                scale_x,
+                canvas_rect["width"] / M15_GAME_WIDTH,
+                rel_tol=0,
+                abs_tol=1e-6,
+            )
+            and math.isclose(
+                scale_y,
+                canvas_rect["height"] / M15_GAME_HEIGHT,
+                rel_tol=0,
+                abs_tol=1e-6,
+            )
+            and player_geometry.get("areaId") == entry.get("areaId")
+            and player_geometry.get("facing") == entry.get("facing")
+            and snapshot.get("area") == entry.get("areaId")
+            and snapshot.get("facing") == entry.get("facing")
+            and math.isclose(
+                player_world_x,
+                finite_number(
+                    entry.get("actualPlayerWorldX"),
+                    f"{label} sampled player world X",
+                ),
+                rel_tol=0,
+                abs_tol=2,
+            )
+            and math.isclose(
+                player_world_x,
+                finite_number(snapshot.get("playerX"), f"{label} snapshot X"),
+                rel_tol=0,
+                abs_tol=2,
+            )
+            and math.isclose(
+                player_world_y,
+                finite_number(snapshot.get("playerY"), f"{label} snapshot Y"),
+                rel_tol=0,
+                abs_tol=1e-6,
+            ),
+            f"{label}: panel player geometry is stale or off-contract.",
+        )
+        player_fixture = nested(run.state, "geometryFixture", "player")
+        frame_width = finite_number(
+            nested(player_fixture, "frameSize", "width"),
+            f"{label} fixture frame width",
+        )
+        frame_height = finite_number(
+            nested(player_fixture, "frameSize", "height"),
+            f"{label} fixture frame height",
+        )
+        runtime_scale = finite_number(
+            player_fixture.get("runtimeScale"),
+            f"{label} fixture runtime scale",
+        )
+        pivot_x = finite_number(
+            nested(player_fixture, "footPivot", "x"),
+            f"{label} fixture pivot X",
+        )
+        pivot_y = finite_number(
+            nested(player_fixture, "footPivot", "y"),
+            f"{label} fixture pivot Y",
+        )
+        fixture_player_rect = {
+            "left": canvas_rect["left"]
+            + (
+                player_world_x
+                - camera_scroll_x
+                - frame_width * runtime_scale * pivot_x
+            )
+            * scale_x,
+            "top": canvas_rect["top"]
+            + (
+                player_world_y
+                - camera_scroll_y
+                - frame_height * runtime_scale * pivot_y
+            )
+            * scale_y,
+            "width": frame_width * runtime_scale * scale_x,
+            "height": frame_height * runtime_scale * scale_y,
+        }
+        require_same_rect(
+            geometry.get("playerRect"),
+            fixture_player_rect,
+            f"{label} fixture-derived player rectangle",
+        )
+        foot_rect = validate_positive_rect(
+            geometry.get("footRect"),
+            f"{label} foot rectangle",
+        )
+        require_close(
+            foot_rect["left"] + foot_rect["width"] / 2,
+            canvas_rect["left"]
+            + (player_world_x - camera_scroll_x) * scale_x,
+            f"{label} fixture-derived foot X",
+        )
+        require_close(
+            foot_rect["top"] + foot_rect["height"] / 2,
+            canvas_rect["top"]
+            + (player_world_y - camera_scroll_y) * scale_y,
+            f"{label} fixture-derived foot Y",
+        )
+    else:
+        prompt = nested(entry, "prompt")
+        atlas_frame = nested(player_geometry, "atlasFrame")
+        player_contract = nested(run.state, "runtimeContract", "player")
+        expected_atlas = {
+            "width": player_contract.get("frameWidth"),
+            "height": player_contract.get("frameHeight"),
+            "scale": player_contract.get("scale"),
+            "originX": player_contract.get("originX"),
+            "originY": player_contract.get("originY"),
+        }
+        canvas_geometry = nested(player_geometry, "canvas")
+        canvas_rect = validate_positive_rect(
+            canvas_geometry.get("cssRect"),
+            f"{label} canvas rectangle",
+        )
+        backing_width = finite_number(
+            canvas_geometry.get("backingWidth"),
+            f"{label} canvas backing width",
+        )
+        backing_height = finite_number(
+            canvas_geometry.get("backingHeight"),
+            f"{label} canvas backing height",
+        )
+        scale_x = canvas_rect["width"] / backing_width
+        scale_y = canvas_rect["height"] / backing_height
+        require(
+            atlas_frame == expected_atlas
+            and player_geometry.get("derivation")
+            == player_contract.get("derivation")
+            and backing_width == M15_GAME_WIDTH
+            and backing_height == M15_GAME_HEIGHT
+            and canvas_geometry.get("objectFit") in {"contain", "fill"},
+            f"{label}: baseline panel atlas/canvas contract is invalid.",
+        )
+        require_close(
+            canvas_geometry.get("scaleX"),
+            scale_x,
+            f"{label} canvas scaleX",
+        )
+        require_close(
+            canvas_geometry.get("scaleY"),
+            scale_y,
+            f"{label} canvas scaleY",
+        )
+        player_x = finite_number(prompt.get("playerX"), f"{label} HUD player X")
+        player_y = finite_number(prompt.get("playerY"), f"{label} HUD player Y")
+        require_close(
+            entry.get("actualPlayerX"),
+            player_x,
+            f"{label} sampled player X",
+            abs_tol=2,
+        )
+        camera_x = finite_number(
+            prompt.get("cameraScrollX"),
+            f"{label} HUD camera scroll X",
+        )
+        foot = nested(player_geometry, "foot")
+        require_close(foot.get("worldX"), player_x, f"{label} foot world X")
+        require_close(foot.get("worldY"), player_y, f"{label} foot world Y")
+        foot_css_x = canvas_rect["left"] + (player_x - camera_x) * scale_x
+        foot_css_y = canvas_rect["top"] + player_y * scale_y
+        recorded_foot_css_x = require_close(
+            foot.get("cssX"),
+            foot_css_x,
+            f"{label} foot CSS X",
+            abs_tol=2,
+        )
+        recorded_foot_css_y = require_close(
+            foot.get("cssY"),
+            foot_css_y,
+            f"{label} foot CSS Y",
+        )
+        frame_width = finite_number(
+            atlas_frame.get("width"),
+            f"{label} atlas frame width",
+        )
+        frame_height = finite_number(
+            atlas_frame.get("height"),
+            f"{label} atlas frame height",
+        )
+        sprite_scale = finite_number(
+            atlas_frame.get("scale"),
+            f"{label} sprite scale",
+        )
+        origin_x = finite_number(
+            atlas_frame.get("originX"),
+            f"{label} atlas origin X",
+        )
+        origin_y = finite_number(
+            atlas_frame.get("originY"),
+            f"{label} atlas origin Y",
+        )
+        fixture_player_rect = {
+            "left": recorded_foot_css_x
+            - frame_width * sprite_scale * origin_x * scale_x,
+            "top": recorded_foot_css_y
+            - frame_height * sprite_scale * origin_y * scale_y,
+            "width": frame_width * sprite_scale * scale_x,
+            "height": frame_height * sprite_scale * scale_y,
+        }
+        require_same_rect(
+            geometry.get("playerRect"),
+            fixture_player_rect,
+            f"{label} runtime-derived baseline player rectangle",
+        )
+
+    intersection = rect_intersection_area(panel_rect, player_rect)
+    distance = rect_distance(panel_rect, player_rect)
+    intersection_key = (
+        "playerIntersectionArea" if baseline else "playerIntersection"
+    )
+    require_close(
+        geometry.get(intersection_key),
+        intersection,
+        f"{label} player intersection",
+    )
+    require_close(
+        geometry.get("playerDistance"),
+        distance,
+        f"{label} player distance",
+    )
+
+    viewport = nested(geometry, "viewport")
+    require(
+        viewport.get("width") == run.viewport_key[0]
+        and viewport.get("height") == run.viewport_key[1]
+        and math.isclose(
+            finite_number(
+                viewport.get("devicePixelRatio"),
+                f"{label} viewport DPR",
+            ),
+            run.viewport_key[2],
+            rel_tol=0,
+            abs_tol=0.01,
+        ),
+        f"{label}: viewport metadata differs from its run.",
+    )
+    panel_inside_viewport = (
+        panel_rect["left"] >= 0
+        and panel_rect["top"] >= 0
+        and panel_rect["left"] + panel_rect["width"] <= run.viewport_key[0]
+        and panel_rect["top"] + panel_rect["height"] <= run.viewport_key[1]
+    )
+
+    raw_obstacles = geometry.get("obstacles")
+    obstacles = geometry.get("obstacleMetrics")
+    require(
+        isinstance(raw_obstacles, list)
+        and isinstance(obstacles, list)
+        and len(raw_obstacles) == len(obstacles),
+        f"{label}: raw and measured HUD/control rectangles differ in count.",
+    )
+    selectors = {
+        metric.get("selector")
+        for metric in obstacles
+        if isinstance(metric, dict)
+    }
+    require(
+        REQUIRED_PANEL_OBSTACLE_SELECTORS.issubset(selectors)
+        and selectors.issubset(ALLOWED_PANEL_OBSTACLE_SELECTORS)
+        and len(obstacles) == len(selectors),
+        f"{label}: panel Evidence omits a required HUD/control rectangle, "
+        "duplicates a selector, or names an unbounded selector.",
+    )
+    obstacle_intersections: list[float] = []
+    for raw, metric in zip(raw_obstacles, obstacles, strict=True):
+        require(
+            isinstance(raw, dict)
+            and isinstance(metric, dict)
+            and raw.get("selector") == metric.get("selector"),
+            f"{label}: raw/measured obstacle ordering differs.",
+        )
+        for identity_key in ("id", "identity"):
+            if identity_key in raw or identity_key in metric:
+                require(
+                    raw.get(identity_key) == metric.get(identity_key),
+                    f"{label}: obstacle {identity_key} differs.",
+                )
+        raw_rect = validate_positive_rect(
+            raw.get("rect"),
+            f"{label} {metric.get('selector')} raw rectangle",
+        )
+        metric_rect = require_same_rect(
+            metric.get("rect"),
+            raw_rect,
+            f"{label} {metric.get('selector')} measured rectangle",
+        )
+        obstacle_intersection = rect_intersection_area(panel_rect, metric_rect)
+        obstacle_distance = rect_distance(panel_rect, metric_rect)
+        require_close(
+            metric.get("intersectionArea"),
+            obstacle_intersection,
+            f"{label} {metric.get('selector')} intersection",
+        )
+        require_close(
+            metric.get("distance"),
+            obstacle_distance,
+            f"{label} {metric.get('selector')} distance",
+        )
+        obstacle_intersections.append(obstacle_intersection)
+
+    touch_target_pass = (
+        panel_rect["width"] >= 44 and panel_rect["height"] >= 44
+    )
+    if baseline:
+        quality = nested(entry, "quality")
+        require(
+            quality
+            == {
+                "playerIntersectionZero": intersection == 0,
+                "playerGapAtLeast12": distance >= 12,
+                "touchTargetAtLeast44": touch_target_pass,
+                "hudIntersectionZero": all(
+                    value == 0 for value in obstacle_intersections
+                ),
+            }
+            and geometry.get("touchTargetPass") is touch_target_pass,
+            f"{label}: baseline panel quality flags are not recomputed.",
+        )
+    else:
+        dataset = nested(geometry, "dataset")
+        require_numeric_string_close(
+            dataset.get("playerIntersection"),
+            intersection,
+            f"{label} dataset player intersection",
+            abs_tol=0.001,
+        )
+        require_numeric_string_close(
+            dataset.get("playerDistance"),
+            distance,
+            f"{label} dataset player distance",
+            abs_tol=0.001,
+        )
+        require(
+            geometry.get("disabled") is False
+            and geometry.get("ariaHidden") != "true"
+            and dataset.get("obstacleIntersections") == ""
+            and isinstance(dataset.get("anchor"), str)
+            and dataset.get("anchor") not in {"", "pending"},
+            f"{label}: panel DOM state or placement dataset is invalid.",
+        )
+        require_numeric_string_close(
+            dataset.get("x"),
+            panel_rect["left"],
+            f"{label} dataset X",
+            abs_tol=0.001,
+        )
+        require_numeric_string_close(
+            dataset.get("y"),
+            panel_rect["top"],
+            f"{label} dataset Y",
+            abs_tol=0.001,
+        )
+        require(
+            intersection == 0
+            and distance >= 12
+            and touch_target_pass
+            and all(value == 0 for value in obstacle_intersections)
+            and panel_inside_viewport,
+            f"{label}: panel is overlapping, undersized, too close, "
+            "or outside the viewport.",
+        )
+    return {
+        "playerIntersection": intersection,
+        "playerDistance": distance,
+        "panelInsideViewport": float(panel_inside_viewport),
+    }
 
 
 def validate_baseline(run: Run, baseline_sha: str) -> None:
@@ -898,12 +1769,14 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
             f"{run.role}/{run.device_id}: baseline {expected_position} is "
             "not bound to its runtime spawn contract.",
         )
+        validate_baseline_measurement(run, measurement, spawn=True)
 
     fixture = nested(state, "independentVisualFixture")
     require(fixture.get("baselineCommit") == baseline_sha, f"{run.role}/{run.device_id}: baseline visual fixture SHA mismatch.")
     for area_id in AREA_IDS:
         for position in POSITIONS:
             measurement, _ = baseline_ground_entry(run, area_id, position)
+            validate_baseline_measurement(run, measurement, spawn=False)
             sample = nested(measurement, "independentVisualSample")
             actual_x = finite_number(
                 nested(measurement, "runtimeSnapshot", "playerX"),
@@ -942,7 +1815,8 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
                 entry,
                 baseline=True,
             )
-    panel_entries(run)
+    for entry, _ in panel_entries(run).values():
+        validate_panel_geometry(run, entry, baseline=True)
     same_coordinates = nested(state, "evidence", "sameCoordinateComparisons")
     require(set(same_coordinates) == set(DIRECTIONS), f"{run.role}/{run.device_id}: same-coordinate up/down capture is incomplete.")
     for direction in DIRECTIONS:
@@ -965,25 +1839,186 @@ def validate_candidate_measurement(
     *,
     spawn: bool,
 ) -> None:
+    label = (
+        f"{run.role}/{run.device_id}: "
+        f"{measurement.get('areaId')}/{measurement.get('position')}"
+    )
     area_id = measurement.get("areaId")
     require(area_id in AREA_IDS, f"{run.role}/{run.device_id}: unknown ground area {area_id}.")
     fixture = nested(run.state, "geometryFixture")
     area = nested(fixture, "areas", area_id)
-    ground_y = nested(area, "ground", "y")
+    ground_y = finite_number(
+        nested(area, "ground", "y"),
+        f"{label} fixture ground Y",
+    )
     tolerance_name = "spawnFootToGroundCssPx" if spawn else "renderedFootToGroundCssPx"
-    expected_tolerance = nested(fixture, "tolerances", tolerance_name)
+    expected_tolerance = finite_number(
+        nested(fixture, "tolerances", tolerance_name),
+        f"{label} fixture tolerance",
+    )
     require(
         measurement.get("fixtureGroundY") == ground_y,
         f"{run.role}/{run.device_id}: {area_id} ground measurement does not use its state fixture.",
     )
+    player_geometry = nested(measurement, "playerGeometry")
+    snapshot = nested(measurement, "snapshot")
+    player_rect = validate_positive_rect(
+        player_geometry.get("rect"),
+        f"{label} player rectangle",
+    )
+    foot_rect = validate_positive_rect(
+        player_geometry.get("footRect"),
+        f"{label} foot rectangle",
+    )
+    canvas_rect = validate_positive_rect(
+        player_geometry.get("canvasRect"),
+        f"{label} canvas rectangle",
+    )
+    scale_x = finite_number(player_geometry.get("scaleX"), f"{label} scaleX")
+    scale_y = finite_number(player_geometry.get("scaleY"), f"{label} scaleY")
+    require(
+        scale_x > 0
+        and scale_y > 0
+        and math.isclose(
+            scale_x,
+            canvas_rect["width"] / M15_GAME_WIDTH,
+            rel_tol=0,
+            abs_tol=1e-6,
+        )
+        and math.isclose(
+            scale_y,
+            canvas_rect["height"] / M15_GAME_HEIGHT,
+            rel_tol=0,
+            abs_tol=1e-6,
+        ),
+        f"{label}: player geometry scale does not match the rendered canvas.",
+    )
+    player_world_x = finite_number(
+        player_geometry.get("playerWorldX"),
+        f"{label} player geometry world X",
+    )
+    player_world_y = finite_number(
+        player_geometry.get("playerWorldY"),
+        f"{label} player geometry world Y",
+    )
+    snapshot_x = finite_number(snapshot.get("playerX"), f"{label} snapshot X")
+    snapshot_y = finite_number(snapshot.get("playerY"), f"{label} snapshot Y")
+    camera_scroll_x = finite_number(
+        player_geometry.get("cameraScrollX"),
+        f"{label} camera scroll X",
+    )
+    camera_scroll_y = finite_number(
+        player_geometry.get("cameraScrollY"),
+        f"{label} camera scroll Y",
+    )
+    require(
+        player_geometry.get("areaId") == area_id
+        and snapshot.get("area") == area_id
+        and player_geometry.get("facing") == snapshot.get("facing")
+        and math.isclose(player_world_x, snapshot_x, rel_tol=0, abs_tol=2)
+        and math.isclose(player_world_y, snapshot_y, rel_tol=0, abs_tol=1e-6),
+        f"{label}: stale player geometry or HUD snapshot.",
+    )
+    player_fixture = nested(fixture, "player")
+    frame_width = finite_number(
+        nested(player_fixture, "frameSize", "width"),
+        f"{label} fixture frame width",
+    )
+    frame_height = finite_number(
+        nested(player_fixture, "frameSize", "height"),
+        f"{label} fixture frame height",
+    )
+    runtime_scale = finite_number(
+        player_fixture.get("runtimeScale"),
+        f"{label} fixture runtime scale",
+    )
+    pivot_x = finite_number(
+        nested(player_fixture, "footPivot", "x"),
+        f"{label} fixture pivot X",
+    )
+    pivot_y = finite_number(
+        nested(player_fixture, "footPivot", "y"),
+        f"{label} fixture pivot Y",
+    )
+    expected_player_rect = {
+        "left": canvas_rect["left"]
+        + (
+            player_world_x
+            - camera_scroll_x
+            - frame_width * runtime_scale * pivot_x
+        )
+        * scale_x,
+        "top": canvas_rect["top"]
+        + (
+            player_world_y
+            - camera_scroll_y
+            - frame_height * runtime_scale * pivot_y
+        )
+        * scale_y,
+        "width": frame_width * runtime_scale * scale_x,
+        "height": frame_height * runtime_scale * scale_y,
+    }
+    require_same_rect(
+        player_geometry.get("rect"),
+        expected_player_rect,
+        f"{label} fixture-derived player rectangle",
+    )
+    rendered_foot_screen_y = foot_rect["top"] + foot_rect["height"] / 2
+    expected_foot_screen_x = (
+        canvas_rect["left"] + (player_world_x - camera_scroll_x) * scale_x
+    )
+    expected_foot_screen_y = (
+        canvas_rect["top"] + (player_world_y - camera_scroll_y) * scale_y
+    )
+    fixture_ground_screen_y = (
+        canvas_rect["top"] + (ground_y - camera_scroll_y) * scale_y
+    )
+    css_delta = abs(rendered_foot_screen_y - fixture_ground_screen_y)
+    world_delta = abs(snapshot_y - ground_y)
+    require_close(
+        foot_rect["left"] + foot_rect["width"] / 2,
+        expected_foot_screen_x,
+        f"{label} rendered foot X",
+    )
+    require_close(
+        rendered_foot_screen_y,
+        expected_foot_screen_y,
+        f"{label} rendered foot Y from world geometry",
+    )
+    require_close(
+        measurement.get("renderedFootScreenY"),
+        rendered_foot_screen_y,
+        f"{label} recorded rendered foot Y",
+    )
+    require_close(
+        measurement.get("fixtureGroundScreenY"),
+        fixture_ground_screen_y,
+        f"{label} recorded fixture ground CSS Y",
+    )
+    require_close(
+        measurement.get("runtimeFootY"),
+        snapshot_y,
+        f"{label} recorded runtime foot Y",
+    )
+    require_close(
+        measurement.get("worldDelta"),
+        world_delta,
+        f"{label} world foot/ground delta",
+    )
+    require_close(
+        measurement.get("cssDelta"),
+        css_delta,
+        f"{label} CSS foot/ground delta",
+    )
     require(
         measurement.get("tolerance") == expected_tolerance
-        and float(measurement.get("cssDelta", math.inf)) <= float(expected_tolerance),
+        and css_delta <= expected_tolerance,
         f"{run.role}/{run.device_id}: {area_id} foot/ground tolerance failed.",
     )
     require(
-        nested(measurement, "playerGeometry", "areaId") == area_id,
-        f"{run.role}/{run.device_id}: stale player geometry in ground measurement.",
+        player_rect["width"] > foot_rect["width"]
+        and player_rect["height"] > foot_rect["height"],
+        f"{label}: foot geometry is not a distinct point under the player.",
     )
     require(
         measurement.get("backgroundSha256") == nested(area, "assets", "backgroundSha256")
@@ -2415,6 +3450,7 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
     panel = panel_entries(run)
     for (direction, sample_name, _), (entry, _) in panel.items():
         geometry = nested(entry, "geometry")
+        validate_panel_geometry(run, entry, baseline=False)
         validate_positive_rect(
             geometry.get("panelRect"),
             f"{run.role}/{run.device_id}: panel rectangle",
