@@ -351,6 +351,21 @@ test('Evidence X11 contract rejects every identity and lifecycle tamper', () => 
   addTamper('wm-class', (value) => {
     value.x11TabControl.initialActivation.target.wmClass.instance = 'openbox';
   });
+  addTamper('arbitrary-profile-class', (value) => {
+    const wmClass = {
+      instance: 'google-chrome (/home/user/private-profile)',
+      class: 'Google-chrome',
+    };
+    const activation = value.x11TabControl.initialActivation;
+    activation.target.wmClass = wmClass;
+    activation.browserPidClientIdentities[0].wmClass = wmClass;
+    activation.activationSnapshot.wmClass = wmClass;
+    for (const snapshot of Object.values(
+      value.x11TabControl.x11Snapshots,
+    )) {
+      snapshot.wmClass = wmClass;
+    }
+  });
   addTamper('active-xid', (value) => {
     value.x11TabControl.x11Snapshots.atOpenCommand.rootActiveWindowId += 1;
   });

@@ -34,6 +34,7 @@ const INTERNAL_NEW_TAB_LOCATIONS = new Set([
   'chrome://newtab/',
   'chrome://new-tab-page/',
 ]);
+const GOOGLE_CHROME_X11_INSTANCE = /^google-chrome(?:-stable)?(?: \(\/tmp\/playwright_chromiumdev_profile-[0-9A-Za-z_-]+\))?$/i;
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -127,7 +128,7 @@ export function parseWmClassRecord(output) {
 function isGoogleChromeWmClass(wmClass) {
   return (
     wmClass
-    && /^google-chrome(?:-stable)?$/i.test(wmClass.instance)
+    && GOOGLE_CHROME_X11_INSTANCE.test(wmClass.instance)
     && /^Google-chrome$/i.test(wmClass.class)
   );
 }
@@ -135,7 +136,7 @@ function isGoogleChromeWmClass(wmClass) {
 export function parseWmClass(output) {
   const wmClass = parseWmClassRecord(output);
   invariant(
-    /^google-chrome(?:-stable)?$/i.test(wmClass.instance),
+    GOOGLE_CHROME_X11_INSTANCE.test(wmClass.instance),
     'The active X11 window is not a Google Chrome instance.',
   );
   invariant(

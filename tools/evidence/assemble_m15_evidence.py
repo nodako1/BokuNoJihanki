@@ -63,6 +63,11 @@ TRACKED_PROVENANCE = (
     Path("tools/audio/m15/provenance.json"),
     Path("public/assets/audio/m15/analysis.json"),
 )
+CHROME_X11_INSTANCE_RE = re.compile(
+    r"google-chrome(?:-stable)?"
+    r"(?: \(/tmp/playwright_chromiumdev_profile-[0-9A-Za-z_-]+\))?",
+    flags=re.IGNORECASE,
+)
 
 
 class EvidenceError(RuntimeError):
@@ -567,11 +572,7 @@ def validate_x11_tab_lifecycle_contract(
             isinstance(value, dict)
             and set(value) == {"instance", "class"}
             and isinstance(value.get("instance"), str)
-            and re.fullmatch(
-                r"google-chrome(?:-stable)?",
-                value["instance"],
-                flags=re.IGNORECASE,
-            )
+            and CHROME_X11_INSTANCE_RE.fullmatch(value["instance"])
             is not None
             and isinstance(value.get("class"), str)
             and re.fullmatch(
@@ -1084,11 +1085,7 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         if (
             set(identity_class) == {"instance", "class"}
             and isinstance(identity_class.get("instance"), str)
-            and re.fullmatch(
-                r"google-chrome(?:-stable)?",
-                identity_class["instance"],
-                flags=re.IGNORECASE,
-            )
+            and CHROME_X11_INSTANCE_RE.fullmatch(identity_class["instance"])
             is not None
             and isinstance(identity_class.get("class"), str)
             and re.fullmatch(
@@ -1108,11 +1105,7 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     require(
         set(activation_wm_class) == {"instance", "class"}
         and isinstance(activation_wm_class.get("instance"), str)
-        and re.fullmatch(
-            r"google-chrome(?:-stable)?",
-            activation_wm_class["instance"],
-            flags=re.IGNORECASE,
-        )
+        and CHROME_X11_INSTANCE_RE.fullmatch(activation_wm_class["instance"])
         is not None
         and isinstance(activation_wm_class.get("class"), str)
         and re.fullmatch(
@@ -1213,11 +1206,7 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
             isinstance(wm_class, dict)
             and set(wm_class) == {"instance", "class"}
             and isinstance(wm_class.get("instance"), str)
-            and re.fullmatch(
-                r"google-chrome(?:-stable)?",
-                wm_class["instance"],
-                flags=re.IGNORECASE,
-            )
+            and CHROME_X11_INSTANCE_RE.fullmatch(wm_class["instance"])
             is not None
             and isinstance(wm_class.get("class"), str)
             and re.fullmatch(

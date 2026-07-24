@@ -107,9 +107,27 @@ test('M1.5 X11 WM_CLASS accepts only the selected Google Chrome window', () => {
       class: 'Google-chrome',
     },
   );
+  assert.deepEqual(
+    parseWmClass(
+      'WM_CLASS(STRING) = '
+        + '"google-chrome (/tmp/playwright_chromiumdev_profile-BBFNlM)", '
+        + '"Google-chrome"\n',
+    ),
+    {
+      instance:
+        'google-chrome (/tmp/playwright_chromiumdev_profile-BBFNlM)',
+      class: 'Google-chrome',
+    },
+  );
   assert.throws(
     () => parseWmClass(
       'WM_CLASS(STRING) = "chromium", "Chromium"\n',
+    ),
+  );
+  assert.throws(
+    () => parseWmClass(
+      'WM_CLASS(STRING) = '
+        + '"google-chrome (/home/user/private-profile)", "Google-chrome"\n',
     ),
   );
 });
