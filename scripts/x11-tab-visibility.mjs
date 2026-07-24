@@ -157,16 +157,22 @@ export function selectSingleChromeX11Client(
   const browserPidClients = clientIdentities.filter(
     (identity) => identity?.wmPid === expectedBrowserPid,
   );
+  const sanitizedIdentitySummary = browserPidClients.map((identity) => ({
+    windowId: identity.windowId,
+    wmPid: identity.wmPid,
+    wmClass: identity.wmClass,
+  }));
   invariant(
     browserPidClients.every((identity) => (
       isGoogleChromeWmClass(identity.wmClass)
     )),
-    'An X11 client for the CDP browser PID has a non-Chrome WM_CLASS.',
+    'An X11 client for the CDP browser PID has a non-Chrome WM_CLASS: '
+      + `${JSON.stringify(sanitizedIdentitySummary)}.`,
   );
   invariant(
     browserPidClients.length === 1,
     'The root X11 client list must contain exactly one Google Chrome window '
-      + 'for the CDP browser PID.',
+      + `for the CDP browser PID: ${JSON.stringify(sanitizedIdentitySummary)}.`,
   );
   return Object.freeze({
     ...browserPidClients[0],

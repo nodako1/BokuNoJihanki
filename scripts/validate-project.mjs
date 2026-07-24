@@ -1309,6 +1309,7 @@ for (const marker of [
   'Preserve native Chromium hidden/visible',
   'wmPid === expectedBrowserPid',
   'browserPidClients.length === 1',
+  'sanitizedIdentitySummary',
   'browserPidClientIdentities: Object.freeze',
   'atOpenCommand: x11Snapshots.atOpenCommand',
   'atReturnCommand: x11Snapshots.atReturnCommand',

@@ -141,10 +141,13 @@ test('M1.5 X11 client selection requires one Chrome class for the CDP PID', () =
     ),
     chrome,
   );
-  assert.throws(() => selectSingleChromeX11Client(
-    [{ ...openbox, wmPid: 12_345 }],
-    12_345,
-  ));
+  assert.throws(
+    () => selectSingleChromeX11Client(
+      [{ ...openbox, wmPid: 12_345 }],
+      12_345,
+    ),
+    /"instance":"openbox","class":"Openbox"/,
+  );
   assert.throws(() => selectSingleChromeX11Client(
     [chrome, { ...chrome, windowId: 6_291_460 }],
     12_345,
