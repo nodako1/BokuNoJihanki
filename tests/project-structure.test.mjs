@@ -782,6 +782,8 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'git diff --quiet "$M15_BASELINE_SHA" -- package.json package-lock.json',
     'git archive --format=tar "$M15_BASELINE_SHA"',
     'VERCEL_GIT_COMMIT_SHA="$M15_BASELINE_SHA"',
+    'echo "BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"',
+    'test -d "$BASELINE_ROOT"',
     'Capture exact baseline in candidate browser environment',
     'node tools/evidence/capture_m15_baseline.mjs',
     'diagnostics/baseline-${{ matrix.device_id }}',
@@ -827,6 +829,20 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
   assert.ok(localSmokeStep > baselineCaptureStep);
   assert.ok(previewSmokeStep > localSmokeStep);
   assert.ok(productionSmokeStep > previewSmokeStep);
+  const prepareBaselineStepSource = browserWorkflow.slice(
+    prepareBaselineStep,
+    baselineCaptureStep,
+  );
+  for (const marker of [
+    'git archive --format=tar "$M15_BASELINE_SHA"',
+    'npm --prefix "$BASELINE_ROOT" run build',
+    'echo "BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"',
+  ]) {
+    assert.ok(
+      prepareBaselineStepSource.includes(marker),
+      `baseline preparation ${marker}`,
+    );
+  }
   const baselineStepSource = browserWorkflow.slice(
     baselineCaptureStep,
     localSmokeStep,
@@ -838,6 +854,8 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}',
     'BROWSER_TOUCH: ${{ matrix.touch }}',
     'BROWSER_TRACE: ${{ matrix.trace }}',
+    'test -d "$BASELINE_ROOT"',
+    'npm --prefix "$BASELINE_ROOT" run preview',
     'xvfb-run -a bash scripts/run-headed-browser-smoke.sh',
     'node tools/evidence/capture_m15_baseline.mjs',
   ]) {

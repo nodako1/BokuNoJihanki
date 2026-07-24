@@ -233,7 +233,7 @@ jobs:
           ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_ROOT/node_modules"
           VERCEL_GIT_COMMIT_SHA="$M15_BASELINE_SHA" \
             npm --prefix "$BASELINE_ROOT" run build
-          echo "M15_BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"
+          echo "BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"
 
       - name: Capture exact baseline in candidate browser environment
         if: github.event_name == 'pull_request'
@@ -247,6 +247,7 @@ jobs:
           BROWSER_TOUCH: ${{ matrix.touch }}
           BROWSER_TRACE: ${{ matrix.trace }}
         run: |
+          test -d "$BASELINE_ROOT"
           mkdir -p "$BROWSER_ARTIFACT_DIR"
           nohup npm --prefix "$BASELINE_ROOT" run preview -- \
             --host 127.0.0.1 --port 4174 \

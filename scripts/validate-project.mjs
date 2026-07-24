@@ -1839,6 +1839,8 @@ for (const marker of [
   'git diff --quiet "$M15_BASELINE_SHA" -- package.json package-lock.json',
   'git archive --format=tar "$M15_BASELINE_SHA"',
   'VERCEL_GIT_COMMIT_SHA="$M15_BASELINE_SHA"',
+  'echo "BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"',
+  'test -d "$BASELINE_ROOT"',
   'Capture exact baseline in candidate browser environment',
   'node tools/evidence/capture_m15_baseline.mjs',
   'diagnostics/baseline-${{ matrix.device_id }}',
@@ -1948,6 +1950,19 @@ if (
       + 'the local candidate and exact Vercel Preview.',
   );
 } else {
+  const prepareBaselineStepSource = browserWorkflow.slice(
+    prepareBaselineStep,
+    baselineCaptureStep,
+  );
+  for (const marker of [
+    'git archive --format=tar "$M15_BASELINE_SHA"',
+    'npm --prefix "$BASELINE_ROOT" run build',
+    'echo "BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"',
+  ]) {
+    if (!prepareBaselineStepSource.includes(marker)) {
+      failures.push(`Browser Smoke baseline preparation is missing ${marker}.`);
+    }
+  }
   const baselineStepSource = browserWorkflow.slice(
     baselineCaptureStep,
     localSmokeStep,
@@ -1959,6 +1974,8 @@ if (
     'BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}',
     'BROWSER_TOUCH: ${{ matrix.touch }}',
     'BROWSER_TRACE: ${{ matrix.trace }}',
+    'test -d "$BASELINE_ROOT"',
+    'npm --prefix "$BASELINE_ROOT" run preview',
     'xvfb-run -a bash scripts/run-headed-browser-smoke.sh',
     'node tools/evidence/capture_m15_baseline.mjs',
   ]) {
