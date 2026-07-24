@@ -1,8 +1,53 @@
+import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import process from 'node:process';
 
+import {
+  M15_AREA_IDS,
+  M15_GEOMETRY_FIXTURE,
+  M15_TIME_PHASES,
+} from '../src/game/areas/m15GeometryFixture.mjs';
+import {
+  AREA_PANEL_MIN_PLAYER_GAP,
+  AREA_PANEL_MIN_TOUCH_TARGET,
+  chooseAreaPanelPlacement,
+  createAreaPanelRect,
+} from '../src/ui/areaPanelPlacement.mjs';
+
 const M14_AREAS = ['home-street', 'life-road', 'upper-vending-lane'];
 const M14_PHASES = ['morning', 'day', 'evening', 'night'];
+const M15_AUDIO_FILE =
+  'public/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a';
+const M15_RUNTIME_FILES = [
+  'public/assets/audio/m15/analysis.json',
+  M15_AUDIO_FILE,
+  'public/assets/images/m15/asset-manifest.json',
+  'public/assets/images/m15/asset-manifest.sha256',
+  'public/assets/images/m15/player-atlas-c02fff1f264e.json',
+  'public/assets/images/m15/player-atlas-c02fff1f264e.webp',
+  'src/game/areas/m15GeometryFixture.mjs',
+  'src/game/areas/m15GeometryFixture.d.mts',
+  'src/game/areas/m15GeometryFixture.d.ts',
+  'src/ui/areaPanelDom.ts',
+  'src/ui/areaPanelPlacement.mjs',
+  'src/ui/areaPanelPlacement.d.mts',
+  'src/game/systems/audioEngine.ts',
+  'tests/m15-audio-contract.test.mjs',
+  'tests/m15-geometry-panel-contract.test.mjs',
+  'tests/m15-input-protection.test.mjs',
+  'tools/art/generate_m15_assets.py',
+  'tools/art/validate_m15_assets.py',
+  'tools/art/m15-source/generation.json',
+  'tools/art/m15-source/player-left-atlas-chroma.png',
+  'tools/art/m15-source/player-left-atlas-keyed.png',
+  'tools/art/m15-source/player-prompt.txt',
+  'tools/art/m15-source/upper-edit-prompt.txt',
+  'tools/art/m15-source/upper-vending-lane-master.png',
+  'tools/audio/m15/generate_m15_bgm.py',
+  'tools/audio/m15/provenance.json',
+  'tools/audio/m15/score.json',
+  'tools/audio/m15/validate_m15_bgm.py',
+];
 const M14_SCREENSHOTS = [
   '01-title.png',
   '02-home-street.png',
@@ -148,6 +193,7 @@ const requiredFiles = [...new Set([
   'docs/ROADMAP.md',
   'docs/TESTING.md',
   'docs/DEPLOYMENT.md',
+  ...M15_RUNTIME_FILES,
   ...M14_NAVIGATION_CORE_FILES,
   ...M2_ECONOMY_CORE_FILES,
   ...M13_PRESERVED_FILES,
@@ -158,6 +204,13 @@ for (const area of M14_AREAS) {
   requiredFiles.push(`public/assets/images/m14/fg-${area}.webp`);
   for (const phase of M14_PHASES) {
     requiredFiles.push(`public/assets/images/m14/bg-${area}-${phase}.webp`);
+  }
+}
+for (const areaId of M15_AREA_IDS) {
+  const fixture = M15_GEOMETRY_FIXTURE.areas[areaId];
+  requiredFiles.push(`public${fixture.assets.foregroundPath}`);
+  for (const phase of M15_TIME_PHASES) {
+    requiredFiles.push(`public${fixture.assets.backgroundPaths[phase]}`);
   }
 }
 
@@ -188,6 +241,15 @@ async function readText(file) {
   }
 }
 
+async function sha256(file) {
+  try {
+    return createHash('sha256').update(await readFile(file)).digest('hex');
+  } catch (error) {
+    failures.push(`Unable to hash ${file}: ${error.message}`);
+    return '';
+  }
+}
+
 const [
   packageJson,
   packageLock,
@@ -196,12 +258,18 @@ const [
   vercel,
   m14Manifest,
   m14Atlas,
+  m15Manifest,
+  m15Atlas,
+  m15AudioAnalysis,
+  m15AudioProvenance,
   m13Manifest,
   m13Atlas,
   m13Map,
   app,
   createGame,
   sideScrollScene,
+  sideScrollInput,
+  audioEngine,
   areaWorld,
   areaData,
   navigationAdapter,
@@ -216,6 +284,9 @@ const [
   areaArrowButton,
   gameHud,
   developerHud,
+  areaPanelDom,
+  areaPanelPlacement,
+  geometryFixtureSource,
   browserSmoke,
   browserWorkflow,
   productionSmoke,
@@ -227,12 +298,18 @@ const [
   readJson('vercel.json'),
   readJson('public/assets/images/m14/asset-manifest.json'),
   readJson('public/assets/images/m14/player-atlas.json'),
+  readJson('public/assets/images/m15/asset-manifest.json'),
+  readJson('public/assets/images/m15/player-atlas-c02fff1f264e.json'),
+  readJson('public/assets/audio/m15/analysis.json'),
+  readJson('tools/audio/m15/provenance.json'),
   readJson('public/assets/images/m13/asset-manifest.json'),
   readJson('public/assets/images/m13/player-atlas.json'),
   readJson('src/game/world/residential-m13-map.json'),
   readText('src/App.tsx'),
   readText('src/game/createGame.ts'),
   readText('src/game/scenes/SideScrollTownScene.ts'),
+  readText('src/game/systems/SideScrollInputSystem.ts'),
+  readText('src/game/systems/audioEngine.ts'),
   readText('src/game/areas/M14AreaWorld.ts'),
   readText('src/game/areas/m14AreaData.mjs'),
   readText('src/game/navigationAdapter/m14NavigationAdapter.mjs'),
@@ -247,6 +324,9 @@ const [
   readText('src/ui/AreaArrowButton.tsx'),
   readText('src/ui/GameHud.tsx'),
   readText('src/ui/DeveloperHud.tsx'),
+  readText('src/ui/areaPanelDom.ts'),
+  readText('src/ui/areaPanelPlacement.mjs'),
+  readText('src/game/areas/m15GeometryFixture.mjs'),
   readText('scripts/browser-smoke.mjs'),
   readText('.github/workflows/browser-smoke.yml'),
   readText('.github/workflows/production-smoke.yml'),
@@ -550,6 +630,279 @@ for (const marker of [
   }
 }
 
+if (
+  JSON.stringify(M15_AREA_IDS)
+  !== JSON.stringify(['home-street', 'life-road', 'upper-vending-lane'])
+) {
+  failures.push('M1.5 must use only the three official area IDs.');
+}
+if (M15_GEOMETRY_FIXTURE.schemaVersion !== 1 || M15_GEOMETRY_FIXTURE.revision !== 'M1.5') {
+  failures.push('M1.5 geometry fixture must use the approved schema and revision.');
+}
+if (
+  M15_GEOMETRY_FIXTURE.coordinateSpace?.worldHeight !== 720
+  || M15_GEOMETRY_FIXTURE.coordinateSpace?.imageToRuntimeScale !== 1
+) {
+  failures.push('M1.5 geometry fixture must use the native 720 CSS-pixel coordinate space.');
+}
+if (
+  M15_GEOMETRY_FIXTURE.tolerances?.renderedFootToGroundCssPx !== 2
+  || M15_GEOMETRY_FIXTURE.tolerances?.spawnFootToGroundCssPx !== 6
+  || M15_GEOMETRY_FIXTURE.tolerances?.entranceToTriggerCenterCssPx !== 5
+) {
+  failures.push('M1.5 geometry fixture tolerances must retain the device-quality contract.');
+}
+
+const m15FileRecords = new Map(
+  (m15Manifest.files ?? []).map((file) => [file.path, file]),
+);
+if (
+  m15Manifest.revision !== 'M1.5'
+  || m15Manifest.rights
+    !== 'Project-original BokuNoJihanki assets; no third-party game art'
+) {
+  failures.push('M1.5 asset manifest must retain its revision and project-original rights.');
+}
+if (
+  JSON.stringify(Object.keys(m15Manifest.areas ?? {}))
+  !== JSON.stringify(M15_AREA_IDS)
+) {
+  failures.push('M1.5 asset manifest must define exactly the official area IDs.');
+}
+for (const areaId of M15_AREA_IDS) {
+  const fixture = M15_GEOMETRY_FIXTURE.areas[areaId];
+  const areaManifest = m15Manifest.areas?.[areaId];
+  if (!fixture || areaManifest?.worldWidth !== fixture.worldWidth) {
+    failures.push(`M1.5 ${areaId} manifest and fixture world widths must agree.`);
+    continue;
+  }
+  if (
+    fixture.ground.samples.length !== 3
+    || fixture.ground.samples.map((sample) => sample.position).join(',')
+      !== 'left,center,right'
+    || fixture.ground.samples.some((sample) => sample.y !== fixture.ground.y)
+  ) {
+    failures.push(`M1.5 ${areaId} requires independent left/center/right ground annotations.`);
+  }
+  for (const [spawnId, spawn] of Object.entries(fixture.spawns)) {
+    if (
+      Math.abs(spawn.y - fixture.ground.y)
+      > M15_GEOMETRY_FIXTURE.tolerances.spawnFootToGroundCssPx
+    ) {
+      failures.push(`M1.5 ${areaId}/${spawnId} spawn is outside the ground tolerance.`);
+    }
+  }
+  for (const [direction, entrance] of Object.entries(fixture.branchEntrances)) {
+    if (
+      entrance.centerDeltaX
+        > M15_GEOMETRY_FIXTURE.tolerances.entranceToTriggerCenterCssPx
+      || entrance.groundY !== fixture.ground.y
+    ) {
+      failures.push(`M1.5 ${areaId}/${direction} entrance is not aligned to its trigger.`);
+    }
+  }
+
+  const foregroundPath = `public${fixture.assets.foregroundPath}`;
+  const foregroundRecord = m15FileRecords.get(foregroundPath);
+  if (foregroundRecord?.sha256 !== fixture.assets.foregroundSha256) {
+    failures.push(`M1.5 ${areaId} foreground hash is not bound to the geometry fixture.`);
+  }
+  for (const phase of M15_TIME_PHASES) {
+    const backgroundPath = `public${fixture.assets.backgroundPaths[phase]}`;
+    const backgroundRecord = m15FileRecords.get(backgroundPath);
+    if (backgroundRecord?.sha256 !== fixture.assets.backgroundSha256[phase]) {
+      failures.push(`M1.5 ${areaId}/${phase} background hash is not bound to the geometry fixture.`);
+    }
+  }
+}
+if (
+  m15Manifest.player?.idleFramesPerDirection !== 4
+  || m15Manifest.player?.walkFramesPerDirection !== 8
+  || m15Manifest.player?.shadowBakedIntoFrames !== false
+  || JSON.stringify(m15Manifest.player?.footPivot)
+    !== JSON.stringify(M15_GEOMETRY_FIXTURE.player.footPivot)
+) {
+  failures.push('M1.5 player manifest must retain 24 frames, measured foot pivot, and runtime shadow.');
+}
+if (Object.keys(m15Atlas.frames ?? {}).length !== 24) {
+  failures.push('M1.5 player atlas must contain exactly 24 completed side-view frames.');
+}
+for (const direction of ['left', 'right']) {
+  for (let frame = 0; frame < 4; frame += 1) {
+    if (!m15Atlas.frames?.[`idle-${direction}-${frame}`]) {
+      failures.push(`M1.5 player atlas is missing idle-${direction}-${frame}.`);
+    }
+  }
+  for (let frame = 0; frame < 8; frame += 1) {
+    if (!m15Atlas.frames?.[`walk-${direction}-${frame}`]) {
+      failures.push(`M1.5 player atlas is missing walk-${direction}-${frame}.`);
+    }
+  }
+}
+for (const file of m15Manifest.files ?? []) {
+  if (await sha256(file.path) !== file.sha256) {
+    failures.push(`M1.5 manifest hash does not match ${file.path}.`);
+  }
+}
+const expectedM15ManifestDigest = (await readText(
+  'public/assets/images/m15/asset-manifest.sha256',
+)).trim().split(/\s+/)[0];
+if (
+  expectedM15ManifestDigest
+  !== await sha256('public/assets/images/m15/asset-manifest.json')
+) {
+  failures.push('M1.5 asset manifest sidecar SHA-256 is invalid.');
+}
+
+if (
+  m15AudioAnalysis.runtimeFile !== M15_AUDIO_FILE
+  || m15AudioAnalysis.sha256 !== await sha256(M15_AUDIO_FILE)
+  || m15AudioAnalysis.format?.codec !== 'aac'
+  || m15AudioAnalysis.format?.profile !== 'LC'
+  || m15AudioAnalysis.format?.sampleRateHz !== 48000
+  || m15AudioAnalysis.format?.channels !== 2
+  || m15AudioAnalysis.format?.channelLayout !== 'stereo'
+  || !(m15AudioAnalysis.format?.durationSeconds > 0)
+) {
+  failures.push('M1.5 BGM static codec, source sample rate, stereo, duration, or SHA contract failed.');
+}
+if (
+  m15AudioAnalysis.signal?.truePeakOversampleFactor < 4
+  || m15AudioAnalysis.signal?.truePeakDbtp > -1
+  || m15AudioAnalysis.signal?.clippingSampleCount !== 0
+  || Math.max(
+    ...(m15AudioAnalysis.signal?.dcOffset ?? [1]).map((value) => Math.abs(value)),
+  ) >= 0.001
+  || m15AudioAnalysis.signal?.longestSilenceSeconds >= 0.1
+  || m15AudioAnalysis.loop?.boundaryToP99StepRatio >= 1
+  || m15AudioAnalysis.allChecksPassed !== true
+) {
+  failures.push('M1.5 BGM true-peak, clipping, DC, silence, or loop contract failed.');
+}
+if (
+  m15AudioProvenance.externalSamples !== false
+  || m15AudioProvenance.thirdPartyMelody !== false
+  || m15AudioProvenance.generativeAudioService !== false
+  || !/Project-original/.test(m15AudioProvenance.license ?? '')
+) {
+  failures.push('M1.5 BGM provenance and project-original rights must remain explicit.');
+}
+for (const marker of [
+  "BGM_ASSET_URL = '/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a'",
+  'bgmBusGain',
+  'ambienceBusGain',
+  'decodeAudioData',
+  'source.loop = true',
+  'context.currentTime - this.bgmAnchorContextTime',
+  "'visibilitychange'",
+  "'freeze'",
+  "'resume'",
+  "'pageshow'",
+  "'interrupted'",
+  '__BOKU_M15_AUDIO__',
+]) {
+  if (!audioEngine.includes(marker)) {
+    failures.push(`M1.5 audio runtime is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  'read(allowedTraversal',
+  'requestedTraversal === allowedTraversal',
+  "allowedTraversal === 'up'",
+  "allowedTraversal === 'down'",
+  "'visibilitychange'",
+  "'freeze'",
+  "'resume'",
+  "'pagehide'",
+  "'pageshow'",
+]) {
+  if (!sideScrollInput.includes(marker)) {
+    failures.push(`M1.5 input gate is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  'readAreaPanelObstacles',
+  'getBoundingClientRect',
+  'getComputedStyle',
+]) {
+  if (!areaPanelDom.includes(marker)) {
+    failures.push(`M1.5 panel DOM integration is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  'AREA_PANEL_MIN_PLAYER_GAP',
+  'AREA_PANEL_MIN_TOUCH_TARGET',
+  'chooseAreaPanelPlacement',
+  'areaPanelIntersectionArea',
+  'areaPanelRectDistance',
+]) {
+  if (!areaPanelPlacement.includes(marker)) {
+    failures.push(`M1.5 panel placement core is missing ${marker}.`);
+  }
+}
+if (AREA_PANEL_MIN_PLAYER_GAP !== 12 || AREA_PANEL_MIN_TOUCH_TARGET !== 44) {
+  failures.push('M1.5 panel constants must preserve 12px clearance and 44px touch targets.');
+}
+for (const viewport of [
+  { width: 1280, height: 720 },
+  { width: 844, height: 390 },
+  { width: 932, height: 430 },
+]) {
+  for (const direction of ['up', 'down']) {
+    for (const facing of ['left', 'right']) {
+      const placement = chooseAreaPanelPlacement({
+        viewport,
+        panel: { width: 260, height: 89 },
+        player: createAreaPanelRect(
+          viewport.width / 2 - 28,
+          viewport.height * 0.55,
+          56,
+          100,
+        ),
+        direction,
+        facing,
+        safeArea: { top: 12, right: 12, bottom: 12, left: 12 },
+        obstacles: [
+          {
+            id: 'clock',
+            rect: createAreaPanelRect(12, 12, 180, 72),
+          },
+          {
+            id: 'audio',
+            rect: createAreaPanelRect(viewport.width - 112, 12, 100, 52),
+          },
+          {
+            id: 'joystick',
+            rect: createAreaPanelRect(12, viewport.height - 150, 138, 138),
+          },
+        ],
+      });
+      if (
+        !placement.valid
+        || placement.playerIntersectionArea !== 0
+        || placement.playerDistance < AREA_PANEL_MIN_PLAYER_GAP
+        || placement.obstacleIntersections.length !== 0
+        || placement.rect.width < AREA_PANEL_MIN_TOUCH_TARGET
+        || placement.rect.height < AREA_PANEL_MIN_TOUCH_TARGET
+      ) {
+        failures.push(
+          `M1.5 panel placement failed ${viewport.width}x${viewport.height} `
+          + `${direction}/${facing}.`,
+        );
+      }
+    }
+  }
+}
+if (
+  [
+    areaData,
+    geometryFixtureSource,
+    m15Manifest,
+  ].some((source) => JSON.stringify(source).includes('home-yard'))
+) {
+  failures.push('M1.5 must not introduce home-yard; use home-street.');
+}
+
 if (m14Manifest.revision !== 'M1.4') {
   failures.push('M1.4 asset manifest revision must be M1.4.');
 }
@@ -704,6 +1057,7 @@ if (failures.length) {
 } else {
   console.log(
     `Project validation passed (${requiredFiles.length} required files, `
-    + `${M14_AREAS.length} M1.4 areas, 28 player frames, M1.3 preserved).`,
+    + `${M14_AREAS.length} official areas, 28 M1.4 and 24 M1.5 player frames, `
+    + 'M1.3/M1.4 assets preserved, M2 disconnected).',
   );
 }
