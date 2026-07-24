@@ -1,4 +1,6 @@
 import { execFile as execFileCallback } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { readFile, realpath } from 'node:fs/promises';
 import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCallback);
@@ -17,13 +19,19 @@ export const M15_CHROMIUM_X11_ARGS = Object.freeze([
   '--ozone-platform=x11',
 ]);
 
+export const M15_GOOGLE_CHROME_VERSION = '150.0.7871.186';
+export const M15_GOOGLE_CHROME_PACKAGE_VERSION = '150.0.7871.186-1';
+export const M15_GOOGLE_CHROME_ELF_BYTES = 280_960_248;
+export const M15_GOOGLE_CHROME_ELF_SHA256 =
+  '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e';
+
 export const M15_BROWSER_LIFECYCLE_LAUNCH = Object.freeze({
   ignoredPlaywrightDefaultArgs: Object.freeze([
     ...M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
   ]),
   chromiumArgs: Object.freeze([...M15_CHROMIUM_X11_ARGS]),
   reason:
-    'Preserve native Chromium hidden/visible behavior and use the real X11 tab-selection path.',
+    'Preserve native Chromium hidden/visible behavior, remove Playwright forced-active focus emulation, and use the real X11 tab-selection path.',
 });
 
 const X11_ID_MAX = 0xffff_ffff;
@@ -38,6 +46,52 @@ const GOOGLE_CHROME_X11_INSTANCE = /^google-chrome(?:-stable)?(?: \(\/tmp\/playw
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+export function createM15BrowserLifecycleLaunch(
+  playwrightNativeVisibility,
+) {
+  const expectedKeys = new Set([
+    'schemaVersion',
+    'status',
+    'playwrightVersion',
+    'targetRelativePath',
+    'originalSha256',
+    'patchedSha256',
+    'observedSha256',
+    'replacementCount',
+    'focusEmulationEnabled',
+    'method',
+  ]);
+  invariant(
+    playwrightNativeVisibility
+      && typeof playwrightNativeVisibility === 'object'
+      && Object.keys(playwrightNativeVisibility).length === expectedKeys.size
+      && Object.keys(playwrightNativeVisibility).every(
+        (key) => expectedKeys.has(key),
+      )
+      && playwrightNativeVisibility.schemaVersion === 1
+      && playwrightNativeVisibility.status === 'already-patched'
+      && playwrightNativeVisibility.playwrightVersion === '1.56.1'
+      && playwrightNativeVisibility.targetRelativePath
+        === 'node_modules/playwright-core/lib/server/chromium/crPage.js'
+      && playwrightNativeVisibility.originalSha256
+        === '79a25e4eac0d0fa97dcc6eae4edce83436bcdb4bb1322731f65610adaa8e150f'
+      && playwrightNativeVisibility.patchedSha256
+        === 'e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea'
+      && playwrightNativeVisibility.observedSha256
+        === playwrightNativeVisibility.patchedSha256
+      && playwrightNativeVisibility.replacementCount === 1
+      && playwrightNativeVisibility.focusEmulationEnabled === false
+      && playwrightNativeVisibility.method === 'exact-hash-source-patch',
+    'The runtime Playwright native-visibility policy is invalid.',
+  );
+  return Object.freeze({
+    ...M15_BROWSER_LIFECYCLE_LAUNCH,
+    playwrightNativeVisibility: Object.freeze({
+      ...playwrightNativeVisibility,
+    }),
+  });
 }
 
 function boundedPositiveInteger(value, label, maximum = Number.MAX_SAFE_INTEGER) {
@@ -408,6 +462,29 @@ async function readBrowserPid(browserCdpSession) {
   );
 }
 
+export async function readBrowserProcessIdentity(browserCdpSession) {
+  const pid = await readBrowserPid(browserCdpSession);
+  const executablePath = await realpath(`/proc/${pid}/exe`);
+  invariant(
+    executablePath.startsWith('/'),
+    'The CDP browser process executable path must be absolute.',
+  );
+  const executable = await readFile(executablePath);
+  const executableSha256 = createHash('sha256')
+    .update(executable)
+    .digest('hex');
+  invariant(
+    /^[0-9a-f]{64}$/.test(executableSha256),
+    'The CDP browser process executable SHA-256 is invalid.',
+  );
+  return Object.freeze({
+    pid,
+    executablePath,
+    executableBytes: executable.length,
+    executableSha256,
+  });
+}
+
 async function readPageTarget(page, context, browserCdpSession) {
   const pageSession = await context.newCDPSession(page);
   try {
@@ -610,7 +687,8 @@ export async function captureX11TabVisibilityLifecycle({
   );
   const visibilityTimeoutMs = normalizeTimeout(timeoutMs);
 
-  const browserPid = await readBrowserPid(browserCdpSession);
+  const browserProcess = await readBrowserProcessIdentity(browserCdpSession);
+  const browserPid = browserProcess.pid;
   const tool = Object.freeze({
     name: 'xdotool',
     version: await readXdotoolVersion(),
@@ -930,6 +1008,7 @@ export async function captureX11TabVisibilityLifecycle({
     x11TabControl: {
       tool,
       browserPid,
+      browserProcess,
       candidateTarget,
       foregroundTarget,
       initialActivation: initialActivationEvidence,

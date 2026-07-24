@@ -1,12 +1,21 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import {
-  M15_BROWSER_LIFECYCLE_LAUNCH,
   M15_CHROMIUM_X11_ARGS,
+  M15_GOOGLE_CHROME_ELF_BYTES,
+  M15_GOOGLE_CHROME_ELF_SHA256,
+  M15_GOOGLE_CHROME_PACKAGE_VERSION,
+  M15_GOOGLE_CHROME_VERSION,
   M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
   captureX11TabVisibilityLifecycle,
+  createM15BrowserLifecycleLaunch,
 } from '../../scripts/x11-tab-visibility.mjs';
+import {
+  resolveInstalledPlaywrightCoreRoot,
+  verifyPlaywrightNativeVisibility,
+} from '../../scripts/prepare-playwright-native-visibility.mjs';
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -40,6 +49,12 @@ function booleanFromEnvironment(name, fallback) {
   if (/^(1|true|yes|on)$/i.test(rawValue)) return true;
   if (/^(0|false|no|off)$/i.test(rawValue)) return false;
   throw new Error(`${name} must be true or false.`);
+}
+
+function fileSha256(filename) {
+  return createHash('sha256')
+    .update(fs.readFileSync(filename))
+    .digest('hex');
 }
 
 function sanitizeFailureMessage(value) {
@@ -106,6 +121,8 @@ async function main() {
   let viewport;
   let deviceScaleFactor;
   let touchEnabled;
+  let browserLifecycleLaunch;
+  let browserBinaryContract;
 
   try {
     const browserExecutablePath = (
@@ -116,6 +133,38 @@ async function main() {
         && fs.statSync(browserExecutablePath).isFile(),
       'BROWSER_EXECUTABLE_PATH must identify the selected Google Chrome binary.',
     );
+    const googleChromePackageVersion = (
+      process.env.M15_GOOGLE_CHROME_PACKAGE_VERSION ?? ''
+    ).trim();
+    invariant(
+      googleChromePackageVersion === M15_GOOGLE_CHROME_PACKAGE_VERSION,
+      `M15_GOOGLE_CHROME_PACKAGE_VERSION must equal `
+        + `${M15_GOOGLE_CHROME_PACKAGE_VERSION}.`,
+    );
+    const browserExecutableBytes = fs.statSync(browserExecutablePath).size;
+    const browserExecutableSha256 = fileSha256(browserExecutablePath);
+    invariant(
+      browserExecutableBytes === M15_GOOGLE_CHROME_ELF_BYTES
+        && process.env.BROWSER_EXECUTABLE_SHA256?.trim()
+          === M15_GOOGLE_CHROME_ELF_SHA256
+        && browserExecutableSha256 === M15_GOOGLE_CHROME_ELF_SHA256,
+      'The selected Google Chrome ELF does not match its pinned size and SHA-256.',
+    );
+    const playwrightNativeVisibility =
+      await verifyPlaywrightNativeVisibility({
+        packageRoot: resolveInstalledPlaywrightCoreRoot(import.meta.url),
+      });
+    browserLifecycleLaunch = createM15BrowserLifecycleLaunch(
+      playwrightNativeVisibility,
+    );
+    browserBinaryContract = Object.freeze({
+      packageName: 'google-chrome-stable',
+      packageVersion: googleChromePackageVersion,
+      expectedBrowserVersion: M15_GOOGLE_CHROME_VERSION,
+      executablePath: browserExecutablePath,
+      executableBytes: browserExecutableBytes,
+      executableSha256: browserExecutableSha256,
+    });
     invariant(
       booleanFromEnvironment('BROWSER_HEADLESS', false) === false,
       'The native X11 visibility preflight must run headed.',
@@ -145,6 +194,11 @@ async function main() {
       args: [...M15_CHROMIUM_X11_ARGS],
     });
     browserVersion = browser.version();
+    invariant(
+      browserVersion === M15_GOOGLE_CHROME_VERSION,
+      `Google Chrome version ${browserVersion} does not match `
+        + `${M15_GOOGLE_CHROME_VERSION}.`,
+    );
     const browserCdpSession = await browser.newBrowserCDPSession();
     context = await browser.newContext({
       viewport,
@@ -216,6 +270,15 @@ async function main() {
         }
       },
     });
+    invariant(
+      lifecycle.x11TabControl.browserProcess.executablePath
+        === browserBinaryContract.executablePath
+        && lifecycle.x11TabControl.browserProcess.executableBytes
+          === browserBinaryContract.executableBytes
+        && lifecycle.x11TabControl.browserProcess.executableSha256
+          === browserBinaryContract.executableSha256,
+      'The CDP browser PID is not running the pinned Google Chrome ELF.',
+    );
     const initialVisibility = lifecycle.beforeOpenResult.initialVisibility;
     const events = lifecycle.visibleReadyResult.lifecycleEvents;
     const eventOrder = validateLifecycleEvents(events);
@@ -228,7 +291,8 @@ async function main() {
       deviceScaleFactor,
       touchEnabled,
       headed: true,
-      browserLifecycleLaunch: M15_BROWSER_LIFECYCLE_LAUNCH,
+      browserLifecycleLaunch,
+      browserBinaryContract,
       x11TabControl: lifecycle.x11TabControl,
       initialVisibility,
       hiddenSettledState: lifecycle.hiddenSettledState,
@@ -266,7 +330,8 @@ async function main() {
       deviceScaleFactor: deviceScaleFactor ?? null,
       touchEnabled: touchEnabled ?? null,
       headed: true,
-      browserLifecycleLaunch: M15_BROWSER_LIFECYCLE_LAUNCH,
+      browserLifecycleLaunch: browserLifecycleLaunch ?? null,
+      browserBinaryContract: browserBinaryContract ?? null,
       failure: {
         name: failure.name || 'Error',
         message: sanitizeFailureMessage(failure.message),

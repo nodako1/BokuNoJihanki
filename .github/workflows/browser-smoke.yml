@@ -16,6 +16,7 @@ on:
       - 'package-lock.json'
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
+      - 'scripts/prepare-playwright-native-visibility.mjs'
       - 'scripts/run-headed-browser-smoke.sh'
       - 'scripts/x11-tab-visibility.mjs'
       - 'src/**'
@@ -37,6 +38,7 @@ on:
       - 'package-lock.json'
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
+      - 'scripts/prepare-playwright-native-visibility.mjs'
       - 'scripts/run-headed-browser-smoke.sh'
       - 'scripts/x11-tab-visibility.mjs'
       - 'src/**'
@@ -87,6 +89,13 @@ jobs:
       M15_PREVIEW_URL: https://boku-no-jihanki-git-fix-m1-5-r-8c699e-rutantan88-7611s-projects.vercel.app
       M15_BASELINE_SHA: 29223ee31fd4fc4fbca21a37b01fe89277279647
       M15_RUNNER_OS_IMAGE: ubuntu-24.04
+      M15_GOOGLE_CHROME_VERSION: 150.0.7871.186
+      M15_GOOGLE_CHROME_PACKAGE_VERSION: 150.0.7871.186-1
+      M15_GOOGLE_CHROME_DEB_URL: https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_150.0.7871.186-1_amd64.deb
+      M15_GOOGLE_CHROME_DEB_BYTES: '133561688'
+      M15_GOOGLE_CHROME_DEB_SHA256: 4193e00b6d5d5969ee63f7a69596868f546aa0e8cb077b3e0bf9cc1e2c719d00
+      M15_GOOGLE_CHROME_ELF_BYTES: '280960248'
+      M15_GOOGLE_CHROME_ELF_SHA256: 47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e
       BROWSER_HEADLESS: 'false'
 
     steps:
@@ -118,14 +127,46 @@ jobs:
             tee -a "$SETUP_ARTIFACT_DIR/render-environment-setup.log"
           ) 2>&1
           npm install --no-save --no-package-lock playwright@1.56.1
-          npx playwright install --with-deps chromium
+          node scripts/prepare-playwright-native-visibility.mjs \
+            --artifact \
+            "$SETUP_ARTIFACT_DIR/playwright-native-visibility-install.json"
+          test -x node_modules/.bin/playwright
+          ./node_modules/.bin/playwright install --with-deps chromium
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
+          CHROME_DEB_PATH="$RUNNER_TEMP/google-chrome-stable.deb"
+          curl --fail --location --silent --show-error \
+            --proto '=https' \
+            --tlsv1.2 \
+            --retry 3 \
+            --retry-all-errors \
+            --output "$CHROME_DEB_PATH" \
+            "$M15_GOOGLE_CHROME_DEB_URL"
+          test "$(stat -c '%s' "$CHROME_DEB_PATH")" = \
+            "$M15_GOOGLE_CHROME_DEB_BYTES"
+          printf '%s  %s\n' \
+            "$M15_GOOGLE_CHROME_DEB_SHA256" \
+            "$CHROME_DEB_PATH" \
+            | sha256sum --check --strict -
+          test "$(dpkg-deb --field "$CHROME_DEB_PATH" Package)" = \
+            "google-chrome-stable"
+          test "$(dpkg-deb --field "$CHROME_DEB_PATH" Version)" = \
+            "$M15_GOOGLE_CHROME_PACKAGE_VERSION"
+          test "$(dpkg-deb --field "$CHROME_DEB_PATH" Architecture)" = \
+            "amd64"
+          printf 'Chrome package URL: %s\nPackage SHA-256: %s\n' \
+            "$M15_GOOGLE_CHROME_DEB_URL" \
+            "$M15_GOOGLE_CHROME_DEB_SHA256"
+          sudo apt-get install --yes --allow-downgrades \
+            --no-install-recommends \
             fontconfig \
             fonts-noto-cjk \
+            "$CHROME_DEB_PATH" \
             openbox \
             xdotool \
             x11-utils
+          test "$(
+            dpkg-query --show --showformat='${Version}' google-chrome-stable
+          )" = "$M15_GOOGLE_CHROME_PACKAGE_VERSION"
           M15_FONTCONFIG_FILE="$(
             realpath .github/fontconfig/m15-noto-cjk.conf
           )"
@@ -218,10 +259,36 @@ jobs:
 
       - name: Select headed Google Chrome with AAC support
         run: |
-          CHROME_PATH="$(command -v google-chrome)"
+          mapfile -t CHROME_PATHS < <(
+            dpkg-query -L google-chrome-stable \
+              | grep -Fx '/opt/google/chrome/chrome'
+          )
+          test "${#CHROME_PATHS[@]}" -eq 1
+          CHROME_PATH="${CHROME_PATHS[0]}"
           test -x "$CHROME_PATH"
+          test "$(readlink -f "$CHROME_PATH")" = "$CHROME_PATH"
+          test "$(
+            dpkg-query --show --showformat='${Version}' google-chrome-stable
+          )" = "$M15_GOOGLE_CHROME_PACKAGE_VERSION"
+          CHROME_VERSION="$(
+            "$CHROME_PATH" --version | sed -E 's/[[:space:]]+$//'
+          )"
+          test "$CHROME_VERSION" = \
+            "Google Chrome $M15_GOOGLE_CHROME_VERSION"
+          test "$(stat -c '%s' "$CHROME_PATH")" = \
+            "$M15_GOOGLE_CHROME_ELF_BYTES"
+          printf '%s  %s\n' \
+            "$M15_GOOGLE_CHROME_ELF_SHA256" \
+            "$CHROME_PATH" \
+            | sha256sum --check --strict -
+          CHROME_SHA256="$M15_GOOGLE_CHROME_ELF_SHA256"
           echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
-          "$CHROME_PATH" --version
+          echo "BROWSER_EXECUTABLE_SHA256=$CHROME_SHA256" >> "$GITHUB_ENV"
+          printf 'Browser: %s\nPackage: %s\nELF: %s\nSHA-256: %s\n' \
+            "$CHROME_VERSION" \
+            "$M15_GOOGLE_CHROME_PACKAGE_VERSION" \
+            "$CHROME_PATH" \
+            "$CHROME_SHA256"
 
       - name: Preflight native X11 tab visibility
         env:

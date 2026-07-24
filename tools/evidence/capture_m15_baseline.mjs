@@ -6,6 +6,20 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
 import {
+  M15_CHROMIUM_X11_ARGS,
+  M15_GOOGLE_CHROME_ELF_BYTES,
+  M15_GOOGLE_CHROME_ELF_SHA256,
+  M15_GOOGLE_CHROME_PACKAGE_VERSION,
+  M15_GOOGLE_CHROME_VERSION,
+  M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
+  createM15BrowserLifecycleLaunch,
+  readBrowserProcessIdentity,
+} from '../../scripts/x11-tab-visibility.mjs';
+import {
+  resolveInstalledPlaywrightCoreRoot,
+  verifyPlaywrightNativeVisibility,
+} from '../../scripts/prepare-playwright-native-visibility.mjs';
+import {
   M15_BASELINE_GEOMETRY_FIXTURE,
   getM15BaselineGeometryArea,
 } from './m15BaselineGeometryFixture.mjs';
@@ -391,6 +405,50 @@ const browserArtifactRoot = path.resolve(
 );
 const browserExecutablePath =
   process.env.BROWSER_EXECUTABLE_PATH?.trim() || undefined;
+assert(
+  browserExecutablePath
+    && path.isAbsolute(browserExecutablePath)
+    && fs.statSync(browserExecutablePath).isFile(),
+  'BROWSER_EXECUTABLE_PATH must identify the pinned Google Chrome ELF.',
+);
+const googleChromePackageVersion = requiredEnvironment(
+  'M15_GOOGLE_CHROME_PACKAGE_VERSION',
+);
+assert.equal(
+  googleChromePackageVersion,
+  M15_GOOGLE_CHROME_PACKAGE_VERSION,
+  'M15_GOOGLE_CHROME_PACKAGE_VERSION is not the pinned package.',
+);
+const browserExecutableSha256 = fileSha256(browserExecutablePath);
+assert.equal(
+  fs.statSync(browserExecutablePath).size,
+  M15_GOOGLE_CHROME_ELF_BYTES,
+  'The pinned Google Chrome ELF byte length is incorrect.',
+);
+assert.equal(
+  requiredEnvironment('BROWSER_EXECUTABLE_SHA256'),
+  M15_GOOGLE_CHROME_ELF_SHA256,
+  'BROWSER_EXECUTABLE_SHA256 is not the pinned Google Chrome ELF hash.',
+);
+assert.equal(
+  browserExecutableSha256,
+  M15_GOOGLE_CHROME_ELF_SHA256,
+  'The selected Google Chrome ELF SHA-256 is incorrect.',
+);
+const playwrightNativeVisibility = await verifyPlaywrightNativeVisibility({
+  packageRoot: resolveInstalledPlaywrightCoreRoot(import.meta.url),
+});
+const browserLifecycleLaunch = createM15BrowserLifecycleLaunch(
+  playwrightNativeVisibility,
+);
+const browserBinaryContract = Object.freeze({
+  packageName: 'google-chrome-stable',
+  packageVersion: googleChromePackageVersion,
+  expectedBrowserVersion: M15_GOOGLE_CHROME_VERSION,
+  executablePath: browserExecutablePath,
+  executableBytes: M15_GOOGLE_CHROME_ELF_BYTES,
+  executableSha256: browserExecutableSha256,
+});
 const viewport = Object.freeze({
   width: positiveIntegerFromEnvironment('BROWSER_VIEWPORT_WIDTH', 1280),
   height: positiveIntegerFromEnvironment('BROWSER_VIEWPORT_HEIGHT', 720),
@@ -465,6 +523,7 @@ const evidence = {
 const defects = [];
 let baselineContract;
 let browser;
+let browserProcess;
 let context;
 let page;
 let cdpSession;
@@ -478,6 +537,8 @@ let statePayload = {
   expectedCommit,
   browserHeadless,
   traceEnabled,
+  browserLifecycleLaunch,
+  browserBinaryContract,
   hostEnvironment,
   fontEnvironment,
   outputDirectory,
@@ -1510,13 +1571,33 @@ try {
   browser = await chromium.launch({
     headless: browserHeadless,
     executablePath: browserExecutablePath,
-    args: [
-      '--use-gl=swiftshader',
-      '--enable-webgl',
-      '--enable-unsafe-swiftshader',
-      '--ignore-gpu-blocklist',
+    ignoreDefaultArgs: [
+      ...M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
     ],
+    args: [...M15_CHROMIUM_X11_ARGS],
   });
+  assert.equal(
+    browser.version(),
+    M15_GOOGLE_CHROME_VERSION,
+    'Google Chrome runtime version does not match the pinned browser.',
+  );
+  const browserCdpSession = await browser.newBrowserCDPSession();
+  browserProcess = await readBrowserProcessIdentity(browserCdpSession);
+  assert.equal(
+    browserProcess.executablePath,
+    browserExecutablePath,
+    'The CDP browser PID is not running the pinned Google Chrome ELF.',
+  );
+  assert.equal(
+    browserProcess.executableBytes,
+    M15_GOOGLE_CHROME_ELF_BYTES,
+    'The running Chrome ELF byte length differs from the pinned executable.',
+  );
+  assert.equal(
+    browserProcess.executableSha256,
+    browserExecutableSha256,
+    'The running Chrome ELF hash differs from the pinned executable.',
+  );
   context = await browser.newContext({
     viewport,
     deviceScaleFactor,
@@ -1722,6 +1803,8 @@ try {
     touchEnabled,
     browserHeadless,
     traceEnabled,
+    browserLifecycleLaunch,
+    browserBinaryContract,
     hostEnvironment,
     fontEnvironment,
     inputEvidence: {
@@ -1737,6 +1820,11 @@ try {
       nodeVersion: process.version,
       browserVersion: browser.version(),
       browserExecutablePath,
+      browserExecutableBytes: M15_GOOGLE_CHROME_ELF_BYTES,
+      browserExecutableSha256,
+      browserPackageName: browserBinaryContract.packageName,
+      browserPackageVersion: browserBinaryContract.packageVersion,
+      browserProcess,
       baselineRoot,
       baselineSourceCommit: baselineContract.sourceCommit,
       baselineVerifiedTreeSha: baselineContract.verifiedTreeSha,
@@ -1800,6 +1888,8 @@ try {
     touchEnabled,
     browserHeadless,
     traceEnabled,
+    browserLifecycleLaunch,
+    browserBinaryContract,
     hostEnvironment,
     fontEnvironment,
     outputDirectory,

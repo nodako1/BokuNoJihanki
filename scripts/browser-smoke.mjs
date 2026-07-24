@@ -16,11 +16,19 @@ import {
   createAreaPanelRect,
 } from '../src/ui/areaPanelPlacement.mjs';
 import {
-  M15_BROWSER_LIFECYCLE_LAUNCH,
   M15_CHROMIUM_X11_ARGS,
+  M15_GOOGLE_CHROME_ELF_BYTES,
+  M15_GOOGLE_CHROME_ELF_SHA256,
+  M15_GOOGLE_CHROME_PACKAGE_VERSION,
+  M15_GOOGLE_CHROME_VERSION,
   M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
   captureX11TabVisibilityLifecycle,
+  createM15BrowserLifecycleLaunch,
 } from './x11-tab-visibility.mjs';
+import {
+  resolveInstalledPlaywrightCoreRoot,
+  verifyPlaywrightNativeVisibility,
+} from './prepare-playwright-native-visibility.mjs';
 
 function positiveIntegerFromEnv(name, fallback) {
   const rawValue = process.env[name];
@@ -69,6 +77,52 @@ const vercelAutomationBypassSecret = (
 ).trim();
 const browserExecutablePath =
   process.env.BROWSER_EXECUTABLE_PATH?.trim() || undefined;
+if (
+  !browserExecutablePath
+  || !path.isAbsolute(browserExecutablePath)
+  || !fs.statSync(browserExecutablePath).isFile()
+) {
+  throw new Error(
+    'BROWSER_EXECUTABLE_PATH must identify the pinned Google Chrome ELF.',
+  );
+}
+const googleChromePackageVersion = (
+  process.env.M15_GOOGLE_CHROME_PACKAGE_VERSION ?? ''
+).trim();
+if (googleChromePackageVersion !== M15_GOOGLE_CHROME_PACKAGE_VERSION) {
+  throw new Error(
+    `M15_GOOGLE_CHROME_PACKAGE_VERSION must equal `
+      + `${M15_GOOGLE_CHROME_PACKAGE_VERSION}.`,
+  );
+}
+const expectedBrowserExecutableSha256 = (
+  process.env.BROWSER_EXECUTABLE_SHA256 ?? ''
+).trim();
+const browserExecutableBytes = fs.statSync(browserExecutablePath).size;
+const browserExecutableSha256 = fileSha256(browserExecutablePath);
+if (
+  browserExecutableBytes !== M15_GOOGLE_CHROME_ELF_BYTES
+  || expectedBrowserExecutableSha256 !== M15_GOOGLE_CHROME_ELF_SHA256
+  || browserExecutableSha256 !== M15_GOOGLE_CHROME_ELF_SHA256
+) {
+  throw new Error(
+    'The selected Google Chrome ELF does not match its pinned size and SHA-256.',
+  );
+}
+const playwrightNativeVisibility = await verifyPlaywrightNativeVisibility({
+  packageRoot: resolveInstalledPlaywrightCoreRoot(import.meta.url),
+});
+const browserLifecycleLaunch = createM15BrowserLifecycleLaunch(
+  playwrightNativeVisibility,
+);
+const browserBinaryContract = Object.freeze({
+  packageName: 'google-chrome-stable',
+  packageVersion: googleChromePackageVersion,
+  expectedBrowserVersion: M15_GOOGLE_CHROME_VERSION,
+  executablePath: browserExecutablePath,
+  executableBytes: browserExecutableBytes,
+  executableSha256: browserExecutableSha256,
+});
 const configuredOutputDir =
   process.env.BROWSER_ARTIFACT_DIR ?? 'diagnostics/browser-smoke';
 const productionWaitMs = positiveIntegerFromEnv(
@@ -87,7 +141,6 @@ const touchEnabled = booleanFromEnv('BROWSER_TOUCH', false);
 const requestedTraceEnabled = booleanFromEnv('BROWSER_TRACE', true);
 let traceEnabled = requestedTraceEnabled;
 const browserHeadless = booleanFromEnv('BROWSER_HEADLESS', true);
-const browserLifecycleLaunch = M15_BROWSER_LIFECYCLE_LAUNCH;
 const hostEnvironment = Object.freeze({
   runnerOsImage: (process.env.M15_RUNNER_OS_IMAGE ?? '').trim(),
   platform: process.platform,
@@ -198,6 +251,7 @@ let statePayload = {
   traceEnabled,
   browserHeadless,
   browserLifecycleLaunch,
+  browserBinaryContract,
   hostEnvironment,
   fontEnvironment,
   outputDir,
@@ -1618,6 +1672,15 @@ async function verifyVisibilityAndFreezeRecovery() {
       };
     },
   });
+  assert(
+    tabLifecycle.x11TabControl.browserProcess.executablePath
+      === browserBinaryContract.executablePath
+      && tabLifecycle.x11TabControl.browserProcess.executableBytes
+        === browserBinaryContract.executableBytes
+      && tabLifecycle.x11TabControl.browserProcess.executableSha256
+        === browserBinaryContract.executableSha256,
+    'The CDP browser PID is not running the pinned Google Chrome ELF.',
+  );
   const hiddenState = tabLifecycle.hiddenReadyResult;
   const visibleState = tabLifecycle.visibleReadyResult;
   const hiddenAudio = tabLifecycle.whileHiddenResult?.hidden;
@@ -1922,6 +1985,11 @@ try {
     ],
     args: [...M15_CHROMIUM_X11_ARGS],
   });
+  assert(
+    browser.version() === M15_GOOGLE_CHROME_VERSION,
+    `Google Chrome version ${browser.version()} does not match `
+      + `${M15_GOOGLE_CHROME_VERSION}.`,
+  );
   browserCdpSession = await browser.newBrowserCDPSession();
   context = await browser.newContext({
     viewport,
@@ -2430,6 +2498,7 @@ try {
       requestedTraceEnabled && !traceEnabled,
     browserHeadless,
     browserLifecycleLaunch,
+    browserBinaryContract,
     hostEnvironment,
     fontEnvironment,
     outputDir,
@@ -2438,6 +2507,12 @@ try {
       nodeVersion: process.version,
       browserVersion: browser.version(),
       browserExecutablePath,
+      browserExecutableBytes,
+      browserExecutableSha256,
+      browserPackageName: browserBinaryContract.packageName,
+      browserPackageVersion: browserBinaryContract.packageVersion,
+      browserProcess:
+        evidence.lifecycle.hiddenVisible.x11TabControl.browserProcess,
       actualBrowserViewport,
       developerHudRect,
       initial,
@@ -2493,6 +2568,7 @@ try {
       requestedTraceEnabled && !traceEnabled,
     browserHeadless,
     browserLifecycleLaunch,
+    browserBinaryContract,
     hostEnvironment,
     fontEnvironment,
     outputDir,

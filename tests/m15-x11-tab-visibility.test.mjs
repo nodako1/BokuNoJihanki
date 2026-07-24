@@ -5,7 +5,12 @@ import test from 'node:test';
 import {
   M15_BROWSER_LIFECYCLE_LAUNCH,
   M15_CHROMIUM_X11_ARGS,
+  M15_GOOGLE_CHROME_ELF_BYTES,
+  M15_GOOGLE_CHROME_ELF_SHA256,
+  M15_GOOGLE_CHROME_PACKAGE_VERSION,
+  M15_GOOGLE_CHROME_VERSION,
   M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
+  createM15BrowserLifecycleLaunch,
   parseWmClass,
   parseWmClassRecord,
   parseWmPid,
@@ -35,6 +40,39 @@ test('M1.5 X11 launch policy restores native backgrounding and pins X11', () => 
     M15_BROWSER_LIFECYCLE_LAUNCH.chromiumArgs,
     M15_CHROMIUM_X11_ARGS,
   );
+  assert.equal(M15_GOOGLE_CHROME_VERSION, '150.0.7871.186');
+  assert.equal(
+    M15_GOOGLE_CHROME_PACKAGE_VERSION,
+    '150.0.7871.186-1',
+  );
+  assert.equal(M15_GOOGLE_CHROME_ELF_BYTES, 280_960_248);
+  assert.equal(
+    M15_GOOGLE_CHROME_ELF_SHA256,
+    '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e',
+  );
+  const nativeVisibility = {
+    schemaVersion: 1,
+    status: 'already-patched',
+    playwrightVersion: '1.56.1',
+    targetRelativePath:
+      'node_modules/playwright-core/lib/server/chromium/crPage.js',
+    originalSha256:
+      '79a25e4eac0d0fa97dcc6eae4edce83436bcdb4bb1322731f65610adaa8e150f',
+    patchedSha256:
+      'e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea',
+    observedSha256:
+      'e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea',
+    replacementCount: 1,
+    focusEmulationEnabled: false,
+    method: 'exact-hash-source-patch',
+  };
+  const runtimeLaunch = createM15BrowserLifecycleLaunch(nativeVisibility);
+  assert.deepEqual(runtimeLaunch.playwrightNativeVisibility, nativeVisibility);
+  assert.ok(Object.isFrozen(runtimeLaunch));
+  assert.throws(() => createM15BrowserLifecycleLaunch({
+    ...nativeVisibility,
+    focusEmulationEnabled: true,
+  }));
   assert.ok(Object.isFrozen(M15_BROWSER_LIFECYCLE_LAUNCH));
 });
 
@@ -186,6 +224,9 @@ test('M1.5 native visibility helper forbids synthetic or minimize paths', async 
   assert.match(source, /'windowactivate',\s*'--sync'/);
   assert.match(source, /browserPidClients\.length === 1/);
   assert.match(source, /browserPidClientIdentities: Object\.freeze/);
+  assert.match(source, /readBrowserProcessIdentity/);
+  assert.match(source, /`\/proc\/\$\{pid\}\/exe`/);
+  assert.match(source, /browserProcess,/);
   assert.match(source, /atOpenCommand: x11Snapshots\.atOpenCommand/);
   assert.match(source, /atReturnCommand: x11Snapshots\.atReturnCommand/);
   assert.match(source, /sendXdotoolChord\('ctrl\+t'\)/);

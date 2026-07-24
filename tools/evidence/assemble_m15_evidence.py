@@ -68,6 +68,19 @@ CHROME_X11_INSTANCE_RE = re.compile(
     r"(?: \(/tmp/playwright_chromiumdev_profile-[0-9A-Za-z_-]+\))?",
     flags=re.IGNORECASE,
 )
+M15_GOOGLE_CHROME_VERSION = "150.0.7871.186"
+M15_GOOGLE_CHROME_PACKAGE_VERSION = "150.0.7871.186-1"
+M15_GOOGLE_CHROME_ELF_BYTES = 280_960_248
+M15_GOOGLE_CHROME_ELF_SHA256 = (
+    "47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e"
+)
+M15_PLAYWRIGHT_VERSION = "1.56.1"
+M15_PLAYWRIGHT_ORIGINAL_SHA256 = (
+    "79a25e4eac0d0fa97dcc6eae4edce83436bcdb4bb1322731f65610adaa8e150f"
+)
+M15_PLAYWRIGHT_PATCHED_SHA256 = (
+    "e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea"
+)
 
 
 class EvidenceError(RuntimeError):
@@ -291,11 +304,89 @@ def require_boolean_map(mapping: Any, context: str) -> None:
     require(not failed, f"{context} contains failed checks: {failed}")
 
 
+def validate_playwright_native_visibility_policy(
+    value: Any,
+    context: str,
+) -> dict[str, Any]:
+    expected_keys = {
+        "schemaVersion",
+        "status",
+        "playwrightVersion",
+        "targetRelativePath",
+        "originalSha256",
+        "patchedSha256",
+        "observedSha256",
+        "replacementCount",
+        "focusEmulationEnabled",
+        "method",
+    }
+    require(
+        isinstance(value, dict)
+        and set(value) == expected_keys
+        and value.get("schemaVersion") == 1
+        and value.get("status") == "already-patched"
+        and value.get("playwrightVersion") == M15_PLAYWRIGHT_VERSION
+        and value.get("targetRelativePath")
+        == "node_modules/playwright-core/lib/server/chromium/crPage.js"
+        and value.get("originalSha256") == M15_PLAYWRIGHT_ORIGINAL_SHA256
+        and value.get("patchedSha256") == M15_PLAYWRIGHT_PATCHED_SHA256
+        and value.get("observedSha256") == M15_PLAYWRIGHT_PATCHED_SHA256
+        and isinstance(value.get("replacementCount"), int)
+        and not isinstance(value.get("replacementCount"), bool)
+        and value["replacementCount"] == 1
+        and value.get("focusEmulationEnabled") is False
+        and value.get("method") == "exact-hash-source-patch",
+        f"{context}: Playwright native-visibility policy is invalid.",
+    )
+    return value
+
+
+def validate_browser_lifecycle_launch_policy(
+    value: Any,
+    context: str,
+) -> dict[str, Any]:
+    require(
+        isinstance(value, dict)
+        and set(value)
+        == {
+            "ignoredPlaywrightDefaultArgs",
+            "chromiumArgs",
+            "reason",
+            "playwrightNativeVisibility",
+        }
+        and value.get("ignoredPlaywrightDefaultArgs")
+        == [
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+        ]
+        and value.get("chromiumArgs")
+        == [
+            "--use-gl=swiftshader",
+            "--enable-webgl",
+            "--enable-unsafe-swiftshader",
+            "--ignore-gpu-blocklist",
+            "--ozone-platform=x11",
+        ]
+        and isinstance(value.get("reason"), str)
+        and "native Chromium hidden/visible" in value["reason"]
+        and "Playwright forced-active focus emulation" in value["reason"],
+        f"{context}: browser lifecycle launch policy is invalid.",
+    )
+    validate_playwright_native_visibility_policy(
+        value["playwrightNativeVisibility"],
+        context,
+    )
+    return value
+
+
 def render_environment_fingerprint(run: Run) -> dict[str, Any]:
     state = run.state
     runtime = state.get("runtime")
     host = state.get("hostEnvironment")
     font = state.get("fontEnvironment")
+    lifecycle_launch = state.get("browserLifecycleLaunch")
+    browser_binary = state.get("browserBinaryContract")
     require(
         isinstance(runtime, dict)
         and isinstance(host, dict)
@@ -305,6 +396,11 @@ def render_environment_fingerprint(run: Run) -> dict[str, Any]:
     node_version = runtime.get("nodeVersion")
     browser_version = runtime.get("browserVersion")
     browser_executable = runtime.get("browserExecutablePath")
+    browser_executable_bytes = runtime.get("browserExecutableBytes")
+    browser_executable_sha256 = runtime.get("browserExecutableSha256")
+    browser_package_name = runtime.get("browserPackageName")
+    browser_package_version = runtime.get("browserPackageVersion")
+    browser_process = runtime.get("browserProcess")
     runner_os_image = host.get("runnerOsImage")
     platform_name = host.get("platform")
     architecture = host.get("architecture")
@@ -317,13 +413,57 @@ def render_environment_fingerprint(run: Run) -> dict[str, Any]:
         f"{run.role}/{run.device_id}: exact Node 22 version is missing.",
     )
     require(
-        isinstance(browser_version, str) and bool(browser_version.strip()),
-        f"{run.role}/{run.device_id}: exact browser version is missing.",
+        browser_version == M15_GOOGLE_CHROME_VERSION,
+        f"{run.role}/{run.device_id}: exact pinned browser version is missing.",
     )
     require(
         isinstance(browser_executable, str)
         and Path(browser_executable).is_absolute(),
         f"{run.role}/{run.device_id}: browser executable path is invalid.",
+    )
+    require(
+        isinstance(browser_executable_sha256, str)
+        and isinstance(browser_executable_bytes, int)
+        and not isinstance(browser_executable_bytes, bool)
+        and browser_executable_bytes == M15_GOOGLE_CHROME_ELF_BYTES
+        and browser_executable_sha256 == M15_GOOGLE_CHROME_ELF_SHA256
+        and browser_package_name == "google-chrome-stable"
+        and browser_package_version == M15_GOOGLE_CHROME_PACKAGE_VERSION
+        and isinstance(browser_process, dict)
+        and isinstance(browser_process.get("pid"), int)
+        and not isinstance(browser_process.get("pid"), bool)
+        and browser_process["pid"] > 0
+        and browser_process.get("executablePath") == browser_executable
+        and isinstance(browser_process.get("executableBytes"), int)
+        and not isinstance(browser_process.get("executableBytes"), bool)
+        and browser_process.get("executableBytes") == browser_executable_bytes
+        and browser_process.get("executableSha256") == browser_executable_sha256,
+        f"{run.role}/{run.device_id}: pinned browser package/process identity is invalid.",
+    )
+    require(
+        isinstance(browser_binary, dict)
+        and set(browser_binary)
+        == {
+            "packageName",
+            "packageVersion",
+            "expectedBrowserVersion",
+            "executablePath",
+            "executableBytes",
+            "executableSha256",
+        }
+        and browser_binary.get("packageName") == browser_package_name
+        and browser_binary.get("packageVersion") == browser_package_version
+        and browser_binary.get("expectedBrowserVersion") == browser_version
+        and browser_binary.get("executablePath") == browser_executable
+        and isinstance(browser_binary.get("executableBytes"), int)
+        and not isinstance(browser_binary.get("executableBytes"), bool)
+        and browser_binary.get("executableBytes") == browser_executable_bytes
+        and browser_binary.get("executableSha256") == browser_executable_sha256,
+        f"{run.role}/{run.device_id}: browser binary contract is invalid.",
+    )
+    lifecycle_launch = validate_browser_lifecycle_launch_policy(
+        lifecycle_launch,
+        f"{run.role}/{run.device_id}",
     )
     require(
         runner_os_image == "ubuntu-24.04"
@@ -353,6 +493,15 @@ def render_environment_fingerprint(run: Run) -> dict[str, Any]:
         "nodeVersion": node_version,
         "browserVersion": browser_version,
         "browserExecutablePath": browser_executable,
+        "browserExecutableBytes": browser_executable_bytes,
+        "browserExecutableSha256": browser_executable_sha256,
+        "browserPackageName": browser_package_name,
+        "browserPackageVersion": browser_package_version,
+        "browserProcessExecutablePath": browser_process["executablePath"],
+        "browserProcessExecutableBytes": browser_process["executableBytes"],
+        "browserProcessExecutableSha256": browser_process["executableSha256"],
+        "browserBinaryContract": browser_binary,
+        "browserLifecycleLaunch": lifecycle_launch,
         "hostEnvironment": host,
         "fontEnvironment": font,
     }
@@ -591,11 +740,24 @@ def validate_x11_tab_lifecycle_contract(
     )
     tab_control = nested(hidden_visible, "x11TabControl")
     browser_pid = tab_control.get("browserPid")
+    browser_process = nested(tab_control, "browserProcess")
+    runtime_browser_process = nested(run.state, "runtime", "browserProcess")
     tool = nested(tab_control, "tool")
     require(
         isinstance(browser_pid, int)
         and not isinstance(browser_pid, bool)
         and browser_pid > 0
+        and isinstance(browser_process.get("pid"), int)
+        and not isinstance(browser_process.get("pid"), bool)
+        and browser_process.get("pid") == browser_pid
+        and isinstance(browser_process.get("executablePath"), str)
+        and Path(browser_process["executablePath"]).is_absolute()
+        and isinstance(browser_process.get("executableBytes"), int)
+        and not isinstance(browser_process.get("executableBytes"), bool)
+        and browser_process.get("executableBytes") == M15_GOOGLE_CHROME_ELF_BYTES
+        and isinstance(browser_process.get("executableSha256"), str)
+        and browser_process["executableSha256"] == M15_GOOGLE_CHROME_ELF_SHA256
+        and browser_process == runtime_browser_process
         and tool.get("name") == "xdotool"
         and isinstance(tool.get("version"), str)
         and bool(tool["version"].strip()),
@@ -947,7 +1109,10 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
             f"{run.role}/{run.device_id}: {expected_reason} actual gain did not settle.",
         )
     lifecycle = nested(run.state, "evidence", "lifecycle")
-    lifecycle_launch = nested(run.state, "browserLifecycleLaunch")
+    lifecycle_launch = validate_browser_lifecycle_launch_policy(
+        nested(run.state, "browserLifecycleLaunch"),
+        f"{run.role}/{run.device_id}",
+    )
     require(
         lifecycle_launch.get("ignoredPlaywrightDefaultArgs")
         == [

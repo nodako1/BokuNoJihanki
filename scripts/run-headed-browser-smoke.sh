@@ -15,6 +15,57 @@ artifact_root="${BROWSER_ARTIFACT_DIR:-diagnostics/browser-smoke}"
 mkdir -p "$artifact_root"
 window_manager_log="$artifact_root/window-manager.log"
 environment_log="$artifact_root/window-manager-environment.txt"
+native_visibility_policy="$artifact_root/playwright-native-visibility.json"
+
+node scripts/prepare-playwright-native-visibility.mjs \
+  --artifact "$native_visibility_policy"
+
+if [[ "${M15_GOOGLE_CHROME_VERSION:-}" != "150.0.7871.186" ]]; then
+  echo "M15_GOOGLE_CHROME_VERSION must identify pinned Chrome 150.0.7871.186." >&2
+  exit 1
+fi
+if [[ "${M15_GOOGLE_CHROME_PACKAGE_VERSION:-}" != "150.0.7871.186-1" ]]; then
+  echo "M15_GOOGLE_CHROME_PACKAGE_VERSION must identify the pinned package." >&2
+  exit 1
+fi
+if [[ "${M15_GOOGLE_CHROME_ELF_BYTES:-}" != "280960248" ]]; then
+  echo "M15_GOOGLE_CHROME_ELF_BYTES must identify the pinned Chrome ELF." >&2
+  exit 1
+fi
+if [[ "${M15_GOOGLE_CHROME_ELF_SHA256:-}" != \
+  "47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e" ]]; then
+  echo "M15_GOOGLE_CHROME_ELF_SHA256 must identify the pinned Chrome ELF." >&2
+  exit 1
+fi
+if [[ ! -x "${BROWSER_EXECUTABLE_PATH:-}" ]]; then
+  echo "BROWSER_EXECUTABLE_PATH must identify the pinned Google Chrome ELF." >&2
+  exit 1
+fi
+actual_browser_sha256="$(
+  sha256sum "$BROWSER_EXECUTABLE_PATH" | cut -d ' ' -f 1
+)"
+actual_browser_bytes="$(stat -c '%s' "$BROWSER_EXECUTABLE_PATH")"
+if [[ "$actual_browser_bytes" != "$M15_GOOGLE_CHROME_ELF_BYTES" ]] \
+  || [[ "${BROWSER_EXECUTABLE_SHA256:-}" != \
+    "$M15_GOOGLE_CHROME_ELF_SHA256" ]] \
+  || [[ "$actual_browser_sha256" != "$M15_GOOGLE_CHROME_ELF_SHA256" ]]; then
+  echo "BROWSER_EXECUTABLE_SHA256 does not match the Google Chrome ELF." >&2
+  exit 1
+fi
+actual_browser_version="$(
+  "$BROWSER_EXECUTABLE_PATH" --version | sed -E 's/[[:space:]]+$//'
+)"
+if [[ "$actual_browser_version" != \
+  "Google Chrome $M15_GOOGLE_CHROME_VERSION" ]]; then
+  echo "The selected Google Chrome version is not pinned." >&2
+  exit 1
+fi
+if [[ "$(
+  dpkg-query --show --showformat='${Version}' google-chrome-stable
+)" != "$M15_GOOGLE_CHROME_PACKAGE_VERSION" ]]; then
+  echo "The installed Google Chrome package version is not pinned." >&2
+  exit 1
+fi
 
 {
   printf 'display=%s\n' "$DISPLAY"
@@ -24,6 +75,14 @@ environment_log="$artifact_root/window-manager-environment.txt"
   printf 'japaneseFontPackageVersion=%s\n' \
     "${M15_JAPANESE_FONT_PACKAGE_VERSION:-}"
   printf 'japaneseFontSha256=%s\n' "${M15_JAPANESE_FONT_SHA256:-}"
+  printf 'googleChromeVersion=%s\n' "$M15_GOOGLE_CHROME_VERSION"
+  printf 'googleChromePackageVersion=%s\n' \
+    "$M15_GOOGLE_CHROME_PACKAGE_VERSION"
+  printf 'browserExecutablePath=%s\n' "$BROWSER_EXECUTABLE_PATH"
+  printf 'browserExecutableBytes=%s\n' "$actual_browser_bytes"
+  printf 'browserExecutableSha256=%s\n' "$BROWSER_EXECUTABLE_SHA256"
+  printf 'playwrightNativeVisibilityPolicy=%s\n' \
+    "$native_visibility_policy"
   printf 'xdotoolPath=%s\n' "$(command -v xdotool)"
   xdotool version
   if [[ -r /etc/os-release ]]; then

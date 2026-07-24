@@ -88,8 +88,43 @@ fi
 `,
   );
   await executable(
+    path.join(binaryDirectory, 'google-chrome'),
+    `#!/usr/bin/env bash
+if [[ "\${1:-}" == "--version" ]]; then
+  echo "Google Chrome 150.0.7871.186"
+fi
+`,
+  );
+  await executable(
+    path.join(binaryDirectory, 'sha256sum'),
+    `#!/usr/bin/env bash
+printf '%s  %s\\n' \
+  '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e' \
+  "\${1:-}"
+`,
+  );
+  await executable(
+    path.join(binaryDirectory, 'stat'),
+    `#!/usr/bin/env bash
+echo '280960248'
+`,
+  );
+  await executable(
+    path.join(binaryDirectory, 'dpkg-query'),
+    `#!/usr/bin/env bash
+if [[ "$*" == *"google-chrome-stable"* ]]; then
+  printf '150.0.7871.186-1'
+fi
+`,
+  );
+  await executable(
     path.join(binaryDirectory, 'node'),
     `#!/usr/bin/env bash
+if [[ "\${1:-}" == "scripts/prepare-playwright-native-visibility.mjs" ]]; then
+  test "\${2:-}" = "--artifact"
+  printf '{}\\n' > "\${3:?missing native visibility artifact}"
+  exit 0
+fi
 printf '%s' "$*" > "$M15_FAKE_NODE_MARKER"
 exit "\${M15_FAKE_NODE_STATUS:-0}"
 `,
@@ -121,6 +156,15 @@ async function withFakeEnvironment(run) {
       M15_JAPANESE_FONT_PACKAGE_VERSION: '1:20230817+repack1-3',
       M15_JAPANESE_FONT_SHA256: 'a'.repeat(64),
       M15_RUNNER_OS_IMAGE: 'ubuntu-24.04',
+      M15_GOOGLE_CHROME_VERSION: '150.0.7871.186',
+      M15_GOOGLE_CHROME_PACKAGE_VERSION: '150.0.7871.186-1',
+      M15_GOOGLE_CHROME_ELF_BYTES: '280960248',
+      M15_GOOGLE_CHROME_ELF_SHA256:
+        '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e',
+      BROWSER_EXECUTABLE_PATH:
+        path.join(binaryDirectory, 'google-chrome'),
+      BROWSER_EXECUTABLE_SHA256:
+        '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e',
       PATH: `${binaryDirectory}:${process.env.PATH}`,
     };
     await run({ directory, environment, paths });

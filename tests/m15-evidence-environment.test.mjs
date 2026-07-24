@@ -70,7 +70,7 @@ run = module.Run(
     role="candidate-local",
     source=Path("/tmp"),
     state_path=Path("/tmp/state.json"),
-    state={},
+    state=payload["state"],
     viewport_key=(1280, 720, 1.0, False),
     device_id="desktop-1280x720",
 )
@@ -97,11 +97,67 @@ print(json.dumps(rejected))
 `;
 
 function renderState() {
+  const browserBytes = 280_960_248;
+  const browserSha256 =
+    '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e';
+  const playwrightNativeVisibility = {
+    schemaVersion: 1,
+    status: 'already-patched',
+    playwrightVersion: '1.56.1',
+    targetRelativePath:
+      'node_modules/playwright-core/lib/server/chromium/crPage.js',
+    originalSha256:
+      '79a25e4eac0d0fa97dcc6eae4edce83436bcdb4bb1322731f65610adaa8e150f',
+    patchedSha256:
+      'e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea',
+    observedSha256:
+      'e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea',
+    replacementCount: 1,
+    focusEmulationEnabled: false,
+    method: 'exact-hash-source-patch',
+  };
   return {
     runtime: {
       nodeVersion: 'v22.18.0',
-      browserVersion: 'Google Chrome 140.0.7339.80',
-      browserExecutablePath: '/usr/bin/google-chrome',
+      browserVersion: '150.0.7871.186',
+      browserExecutablePath: '/opt/google/chrome/chrome',
+      browserExecutableBytes: browserBytes,
+      browserExecutableSha256: browserSha256,
+      browserPackageName: 'google-chrome-stable',
+      browserPackageVersion: '150.0.7871.186-1',
+      browserProcess: {
+        pid: 12_345,
+        executablePath: '/opt/google/chrome/chrome',
+        executableBytes: browserBytes,
+        executableSha256: browserSha256,
+      },
+    },
+    browserBinaryContract: {
+      packageName: 'google-chrome-stable',
+      packageVersion: '150.0.7871.186-1',
+      expectedBrowserVersion: '150.0.7871.186',
+      executablePath: '/opt/google/chrome/chrome',
+      executableBytes: browserBytes,
+      executableSha256: browserSha256,
+    },
+    browserLifecycleLaunch: {
+      ignoredPlaywrightDefaultArgs: [
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+      ],
+      chromiumArgs: [
+        '--use-gl=swiftshader',
+        '--enable-webgl',
+        '--enable-unsafe-swiftshader',
+        '--ignore-gpu-blocklist',
+        '--ozone-platform=x11',
+      ],
+      reason:
+        'Preserve native Chromium hidden/visible behavior, remove Playwright '
+        + 'forced-active focus emulation, and use the real X11 tab-selection '
+        + 'path.',
+      playwrightNativeVisibility,
     },
     hostEnvironment: {
       runnerOsImage: 'ubuntu-24.04',
@@ -191,6 +247,13 @@ function x11Contract() {
         version: '3.20160805.1',
       },
       browserPid,
+      browserProcess: {
+        pid: browserPid,
+        executablePath: '/opt/google/chrome/chrome',
+        executableBytes: 280_960_248,
+        executableSha256:
+          '47e00a55c9e412ccb3b5a128fdf3b34378faecb0190b293829ddee28c6d8659e',
+      },
       candidateTarget: {
         targetId: 'a1',
         browserWindowId: 7,
@@ -318,12 +381,58 @@ test('Evidence rejects tofu fonts and cross-run environment drift', () => {
   assert.equal(result.status, 2);
   assert.match(result.stderr, /did not resolve to Noto Sans CJK JP/);
 
+  const wrongPackage = renderState();
+  wrongPackage.runtime.browserPackageVersion = '150.0.7871.128-1';
+  result = probe([wrongPackage]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /pinned browser package\/process identity/);
+
+  const wrongBrowserVersion = renderState();
+  wrongBrowserVersion.runtime.browserVersion = '150.0.7871.128';
+  result = probe([wrongBrowserVersion]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /exact pinned browser version is missing/);
+
+  const wrongProcess = renderState();
+  wrongProcess.runtime.browserProcess.executableSha256 = 'd'.repeat(64);
+  result = probe([wrongProcess]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /pinned browser package\/process identity/);
+
+  const wrongElf = renderState();
+  const wrongElfSha = 'd'.repeat(64);
+  wrongElf.runtime.browserExecutableSha256 = wrongElfSha;
+  wrongElf.runtime.browserProcess.executableSha256 = wrongElfSha;
+  wrongElf.browserBinaryContract.executableSha256 = wrongElfSha;
+  result = probe([wrongElf]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /pinned browser package\/process identity/);
+
+  const wrongElfBytes = renderState();
+  wrongElfBytes.runtime.browserExecutableBytes -= 1;
+  wrongElfBytes.runtime.browserProcess.executableBytes -= 1;
+  wrongElfBytes.browserBinaryContract.executableBytes -= 1;
+  result = probe([wrongElfBytes]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /pinned browser package\/process identity/);
+
+  const forcedFocus = renderState();
+  forcedFocus.browserLifecycleLaunch
+    .playwrightNativeVisibility.focusEmulationEnabled = true;
+  result = probe([forcedFocus]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Playwright native-visibility policy is invalid/);
+
+  const wrongLaunchPolicy = renderState();
+  wrongLaunchPolicy.browserLifecycleLaunch.chromiumArgs[0] =
+    '--use-gl=not-the-pinned-renderer';
+  result = probe([wrongLaunchPolicy]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /browser lifecycle launch policy is invalid/);
+
   for (const mutate of [
     (state) => {
       state.runtime.nodeVersion = 'v22.19.0';
-    },
-    (state) => {
-      state.runtime.browserVersion = 'Google Chrome 141.0.0.0';
     },
     (state) => {
       state.fontEnvironment.japaneseFontSha256 = 'b'.repeat(64);
@@ -347,6 +456,12 @@ test('Evidence X11 contract rejects every identity and lifecycle tamper', () => 
   };
   addTamper('browser-pid', (value) => {
     value.x11TabControl.browserPid += 1;
+  });
+  addTamper('browser-process-hash', (value) => {
+    value.x11TabControl.browserProcess.executableSha256 = 'd'.repeat(64);
+  });
+  addTamper('browser-process-bytes', (value) => {
+    value.x11TabControl.browserProcess.executableBytes -= 1;
   });
   addTamper('wm-class', (value) => {
     value.x11TabControl.initialActivation.target.wmClass.instance = 'openbox';
@@ -414,7 +529,11 @@ test('Evidence X11 contract rejects every identity and lifecycle tamper', () => 
       .browserPidClientIdentities[0].wmPid = 12_345.0;
   });
 
-  const result = probeX11Contract({ valid, invalid });
+  const result = probeX11Contract({
+    valid,
+    invalid,
+    state: renderState(),
+  });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), invalid.map(({ name }) => name));
 });
