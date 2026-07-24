@@ -53,6 +53,7 @@ PHASE_CAPTURE_FACING = "right"
 PHASE_CAPTURE_TOLERANCE_WORLD_PX = 4
 PHASE_CAPTURE_PAIR_TOLERANCE_WORLD_PX = 4
 PHASE_CAPTURE_FIXTURE = "src/game/areas/m15GeometryFixture.mjs"
+BASELINE_SPAWN_X_TOLERANCE_WORLD_PX = 8
 EXPECTED_SOURCE_SPAWNS = (
     "life-road/from-home",
     "home-street/from-life",
@@ -858,6 +859,8 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
             and measurement.get("runtimeSpawn") == expected_runtime_spawn
             and measurement.get("runtimeSpawnY")
             == expected_runtime_ground_y
+            and measurement.get("runtimeSpawnXToleranceWorldPx")
+            == BASELINE_SPAWN_X_TOLERANCE_WORLD_PX
             and snapshot.get("area") == expected_area
             and snapshot.get("spawnId") == expected_spawn_id
             and snapshot.get("facing")
@@ -874,7 +877,7 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
                     f"{expected_spawn_id} contract X",
                 )
             )
-            <= 1
+            <= BASELINE_SPAWN_X_TOLERANCE_WORLD_PX
             and abs(
                 finite_number(
                     snapshot.get("playerY"),

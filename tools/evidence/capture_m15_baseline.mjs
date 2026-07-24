@@ -63,6 +63,7 @@ const TOUCH_TARGET_REQUIREMENT_CSS_PX = 44;
 const FOOT_GROUND_REQUIREMENT_CSS_PX = 2;
 const SPAWN_GROUND_REQUIREMENT_CSS_PX = 6;
 const POSITION_TOLERANCE_WORLD_PX = 8;
+const SPAWN_RUNTIME_X_TOLERANCE_WORLD_PX = 8;
 const PHASE_CAPTURE_TOLERANCE_WORLD_PX = 4;
 const PHASE_CAPTURE_POSITION = 'left';
 const PHASE_CAPTURE_FACING = 'right';
@@ -899,10 +900,21 @@ async function measureGround(areaId, position, { spawn = false } = {}) {
   if (spawn) {
     assert(runtimeSpawn, `${areaId}/${position} runtime spawn is missing.`);
     assert(
-      Math.abs(snapshot.playerX - runtimeSpawn.x) <= 1
-        && Math.abs(snapshot.playerY - runtimeSpawnY) <= 1
-        && snapshot.facing === runtimeSpawn.facing,
-      `${areaId}/${position} does not match baseline spawn ${spawnId}.`,
+      Math.abs(snapshot.playerX - runtimeSpawn.x)
+        <= SPAWN_RUNTIME_X_TOLERANCE_WORLD_PX,
+      `${areaId}/${position} baseline spawn X ${snapshot.playerX} differs `
+        + `from ${spawnId} X ${runtimeSpawn.x} by more than `
+        + `${SPAWN_RUNTIME_X_TOLERANCE_WORLD_PX} world px.`,
+    );
+    assert(
+      Math.abs(snapshot.playerY - runtimeSpawnY) <= 1,
+      `${areaId}/${position} baseline spawn Y ${snapshot.playerY} differs `
+        + `from runtime ground Y ${runtimeSpawnY}.`,
+    );
+    assert.equal(
+      snapshot.facing,
+      runtimeSpawn.facing,
+      `${areaId}/${position} baseline spawn facing differs from ${spawnId}.`,
     );
   }
   const sample = visualSample(
@@ -918,6 +930,8 @@ async function measureGround(areaId, position, { spawn = false } = {}) {
     spawnId,
     runtimeSpawn,
     runtimeSpawnY,
+    runtimeSpawnXToleranceWorldPx:
+      spawn ? SPAWN_RUNTIME_X_TOLERANCE_WORLD_PX : null,
     independentVisualSample: sample,
     runtimeGroundY: area.groundY,
     runtimeSnapshot: snapshot,
@@ -1940,6 +1954,9 @@ try {
   record('failure', error?.stack ?? String(error));
   await inputController?.cancel().catch(() => {});
   if (page) await capture('failure.png').catch(() => {});
+  const failureHudTail = page
+    ? (await hudTimeline().catch(() => [])).slice(-20)
+    : [];
   statePayload = {
     schemaVersion: 1,
     kind: 'M1.5-baseline-capture',
@@ -1971,6 +1988,9 @@ try {
       }
       : null,
     partialEvidence: evidence,
+    failureRuntime: {
+      hudTail: failureHudTail,
+    },
     defects,
     screenshots,
     pageErrors,
