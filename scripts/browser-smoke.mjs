@@ -1889,11 +1889,19 @@ async function verifyVisibilityAndFreezeRecovery() {
     { state: 'active' },
   );
   await page.bringToFront();
+  const afterActiveCommandHeartbeat = await page.evaluate(() => {
+    const heartbeat = globalThis.__m15CandidateSmoke.heartbeat;
+    return {
+      ...heartbeat,
+      recentGapsMs: [...heartbeat.recentGapsMs],
+      callbackWallMs: [...heartbeat.callbackWallMs],
+    };
+  });
   await page.waitForFunction(
     (minimumTicks) => (
       globalThis.__m15CandidateSmoke?.heartbeat?.ticks >= minimumTicks
     ),
-    beforeFreezeHeartbeat.ticks + 2,
+    afterActiveCommandHeartbeat.ticks + 1,
     { timeout: 5_000, polling: 40 },
   );
   const afterFreezeHeartbeat = await page.evaluate(() => {
@@ -1925,6 +1933,9 @@ async function verifyVisibilityAndFreezeRecovery() {
       callbackWallMs > activeRequestedAt + browserClockOffsetMs
     ),
   );
+  const resumedTickDelta = (
+    afterFreezeHeartbeat.ticks - afterActiveCommandHeartbeat.ticks
+  );
   const minimumSuspensionGapMs = minimumM15SuspensionGapMs({
     frozenWallDurationMs,
     foregroundMaximumGapMs: calibration.maximumObservedGapMs,
@@ -1933,6 +1944,7 @@ async function verifyVisibilityAndFreezeRecovery() {
     calibration,
     browserClockOffsetMs,
     beforeFreeze: beforeFreezeHeartbeat,
+    afterActiveCommand: afterActiveCommandHeartbeat,
     afterResume: afterFreezeHeartbeat,
     frozenAcceptedAt,
     activeRequestedAt,
@@ -1943,10 +1955,12 @@ async function verifyVisibilityAndFreezeRecovery() {
     innerFrozenBrowserWindow,
     innerFrozenCallbacks,
     postActiveCallbacks,
+    resumedTickDelta,
     minimumSuspensionGapMs,
     verified:
       innerFrozenCallbacks.length === 0
       && postActiveCallbacks.length >= 1
+      && resumedTickDelta >= 1
       && afterFreezeHeartbeat.maxGapMs >= minimumSuspensionGapMs,
   };
   evidence.lifecycle.frozenActive = {
@@ -1972,7 +1986,7 @@ async function verifyVisibilityAndFreezeRecovery() {
       + 'callbacks inside the measured suspension window.',
   );
   assert(
-    postActiveCallbacks.length >= 1,
+    resumedTickDelta >= 1,
     'The page heartbeat did not restart after CDP active.',
   );
   assert(

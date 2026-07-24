@@ -327,6 +327,11 @@ function x11Contract({
           targetWindowId: windowId,
           succeeded: true,
         },
+        selectCandidate: {
+          gesture: 'Ctrl+1',
+          required: initialHidden,
+          succeeded: initialHidden,
+        },
         openTab: {
           gesture: 'Ctrl+T',
           succeeded: true,
@@ -336,6 +341,20 @@ function x11Contract({
           succeeded: true,
         },
       },
+      candidateSelection: initialHidden
+        ? {
+          beforeVisibility: {
+            documentHidden: true,
+            visibilityState: 'hidden',
+          },
+          afterVisibility: {
+            documentHidden: false,
+            visibilityState: 'visible',
+          },
+          beforeSnapshot: snapshot(),
+          afterSnapshot: snapshot(),
+        }
+        : null,
       x11Snapshots: Object.fromEntries([
         'beforeOpen',
         'atOpenCommand',

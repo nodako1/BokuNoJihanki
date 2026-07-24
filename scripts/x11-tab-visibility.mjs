@@ -748,14 +748,13 @@ export async function captureX11TabVisibilityLifecycle({
       ...activationCandidateVisibility,
     }),
   });
-  const beforeOpenResult = beforeOpen
-    ? await beforeOpen({
-      candidatePage,
-      activationCandidateVisibility,
-    })
-    : undefined;
   const commands = {
     activateWindow: initialActivation.command,
+    selectCandidate: {
+      gesture: 'Ctrl+1',
+      required: false,
+      succeeded: false,
+    },
     openTab: {
       gesture: 'Ctrl+T',
       succeeded: false,
@@ -765,6 +764,55 @@ export async function captureX11TabVisibilityLifecycle({
       succeeded: false,
     },
   };
+  let candidateSelection = null;
+  let selectedCandidateVisibility = activationCandidateVisibility;
+  if (
+    allowInitialHidden
+    && activationCandidateVisibility.documentHidden === true
+  ) {
+    commands.selectCandidate.required = true;
+    const beforeSelection = await waitForActiveX11Snapshot(
+      browserPid,
+      visibilityTimeoutMs,
+      'Before Ctrl+1 candidate selection',
+    );
+    assertSameActiveWindow(initialActivation.activeSnapshot, {
+      beforeSelection,
+    });
+    await sendXdotoolChord('ctrl+1');
+    commands.selectCandidate.succeeded = true;
+    selectedCandidateVisibility = await waitForPageVisibility(
+      candidatePage,
+      false,
+      visibilityTimeoutMs,
+      'Candidate after Ctrl+1 selection',
+    );
+    const afterSelection = await waitForActiveX11Snapshot(
+      browserPid,
+      visibilityTimeoutMs,
+      'After Ctrl+1 candidate selection',
+    );
+    assertSameActiveWindow(initialActivation.activeSnapshot, {
+      afterSelection,
+    });
+    candidateSelection = Object.freeze({
+      beforeVisibility: Object.freeze({
+        ...activationCandidateVisibility,
+      }),
+      afterVisibility: Object.freeze({
+        ...selectedCandidateVisibility,
+      }),
+      beforeSnapshot: beforeSelection,
+      afterSnapshot: afterSelection,
+    });
+  }
+  const beforeOpenResult = beforeOpen
+    ? await beforeOpen({
+      candidatePage,
+      activationCandidateVisibility,
+      selectedCandidateVisibility,
+    })
+    : undefined;
   const x11Snapshots = {
     beforeOpen: await waitForActiveX11Snapshot(
       browserPid,
@@ -1029,9 +1077,11 @@ export async function captureX11TabVisibilityLifecycle({
       pageCounts: Object.freeze({ ...pageCounts }),
       commands: {
         activateWindow: commands.activateWindow,
+        selectCandidate: Object.freeze({ ...commands.selectCandidate }),
         openTab: Object.freeze({ ...commands.openTab }),
         returnTab: Object.freeze({ ...commands.returnTab }),
       },
+      candidateSelection,
       x11Snapshots: {
         beforeOpen: x11Snapshots.beforeOpen,
         atOpenCommand: x11Snapshots.atOpenCommand,

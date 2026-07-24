@@ -231,6 +231,7 @@ test('M1.5 native visibility helper forbids synthetic or minimize paths', async 
   assert.match(source, /atReturnCommand: x11Snapshots\.atReturnCommand/);
   assert.match(source, /sendXdotoolChord\('ctrl\+t'\)/);
   assert.match(source, /sendXdotoolChord\('ctrl\+shift\+Tab'\)/);
+  assert.match(source, /sendXdotoolChord\('ctrl\+1'\)/);
   assert.match(source, /context\.waitForEvent\('page'/);
   assert.match(source, /foregroundPage\.goto\('about:blank'/);
   assert.match(source, /allowInitialHidden = false/);
@@ -255,8 +256,19 @@ test('M1.5 native visibility helper forbids synthetic or minimize paths', async 
   );
   assert.equal(
     (source.match(/sendXdotoolChord\(/g) ?? []).length,
-    3,
-    'Only the helper definition and two success-path tab gestures are allowed.',
+    4,
+    'Only the helper definition and three bounded tab gestures are allowed.',
+  );
+  const selectionOrder = [
+    'commands.selectCandidate.required = true',
+    "sendXdotoolChord('ctrl+1')",
+    'selectedCandidateVisibility = await waitForPageVisibility',
+    'candidateSelection = Object.freeze',
+  ].map((marker) => source.indexOf(marker));
+  assert.ok(selectionOrder.every((index) => index >= 0));
+  assert.deepEqual(
+    selectionOrder,
+    [...selectionOrder].sort((left, right) => left - right),
   );
   const cleanupSource = source.slice(
     source.indexOf('if (primaryError) {'),

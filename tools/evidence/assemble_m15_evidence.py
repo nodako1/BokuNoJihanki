@@ -2193,6 +2193,11 @@ def validate_x11_tab_lifecycle_contract(
     commands = nested(tab_control, "commands")
     activation_command = nested(commands, "activateWindow")
     activation_command_attempt_count = activation_command.get("attemptCount")
+    select_candidate = nested(commands, "selectCandidate")
+    selection_required = (
+        allow_initial_hidden
+        and activation_visibility.get("documentHidden") is True
+    )
     require(
         isinstance(activation_command, dict)
         and set(activation_command)
@@ -2212,6 +2217,42 @@ def validate_x11_tab_lifecycle_contract(
         and nested(commands, "returnTab", "succeeded") is True,
         f"{label}: X11 activation or tab gestures are invalid.",
     )
+    require(
+        isinstance(select_candidate, dict)
+        and set(select_candidate) == {"gesture", "required", "succeeded"}
+        and select_candidate.get("gesture") == "Ctrl+1"
+        and select_candidate.get("required") is selection_required
+        and select_candidate.get("succeeded") is selection_required,
+        f"{label}: hidden candidate selection gesture is invalid.",
+    )
+    candidate_selection = tab_control.get("candidateSelection")
+    if selection_required:
+        require(
+            isinstance(candidate_selection, dict)
+            and set(candidate_selection)
+            == {
+                "beforeVisibility",
+                "afterVisibility",
+                "beforeSnapshot",
+                "afterSnapshot",
+            }
+            and candidate_selection.get("beforeVisibility")
+            == {
+                "documentHidden": True,
+                "visibilityState": "hidden",
+            }
+            and candidate_selection.get("afterVisibility")
+            == {
+                "documentHidden": False,
+                "visibilityState": "visible",
+            },
+            f"{label}: hidden candidate was not visibly re-selected.",
+        )
+    else:
+        require(
+            candidate_selection is None,
+            f"{label}: unexpected candidate re-selection Evidence.",
+        )
 
     snapshots = nested(tab_control, "x11Snapshots")
     snapshot_names = {
@@ -2242,6 +2283,22 @@ def validate_x11_tab_lifecycle_contract(
             and chrome_wm_class(snapshot.get("wmClass")),
             f"{label}: {snapshot_name} does not identify the activated Chrome window.",
         )
+    if selection_required:
+        for snapshot_name in ("beforeSnapshot", "afterSnapshot"):
+            snapshot = nested(candidate_selection, snapshot_name)
+            require(
+                isinstance(snapshot.get("xdotoolActiveWindowId"), int)
+                and not isinstance(snapshot.get("xdotoolActiveWindowId"), bool)
+                and snapshot["xdotoolActiveWindowId"] == target_window_id
+                and isinstance(snapshot.get("rootActiveWindowId"), int)
+                and not isinstance(snapshot.get("rootActiveWindowId"), bool)
+                and snapshot["rootActiveWindowId"] == target_window_id
+                and isinstance(snapshot.get("wmPid"), int)
+                and not isinstance(snapshot.get("wmPid"), bool)
+                and snapshot["wmPid"] == browser_pid
+                and chrome_wm_class(snapshot.get("wmClass")),
+                f"{label}: candidate selection changed the active Chrome window.",
+            )
     require(
         tab_control.get("foregroundClosed") is True
         and tab_control.get("cleanupComplete") is True,
@@ -3079,6 +3136,8 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     after_heartbeat = nested(heartbeat, "afterResume")
     callback_values = after_heartbeat.get("callbackWallMs")
     before_heartbeat = nested(heartbeat, "beforeFreeze")
+    after_active_command = nested(heartbeat, "afterActiveCommand")
+    resumed_tick_delta = heartbeat.get("resumedTickDelta")
     host_window = nested(heartbeat, "innerFrozenHostWindow")
     inner_browser_window = nested(heartbeat, "innerFrozenBrowserWindow")
     require(
@@ -3213,9 +3272,22 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         and len(recomputed_post_active) >= 1,
         f"{run.role}/{run.device_id}: page heartbeat did not resume after active.",
     )
+    require(
+        isinstance(after_active_command.get("ticks"), int)
+        and not isinstance(after_active_command.get("ticks"), bool)
+        and isinstance(after_heartbeat.get("ticks"), int)
+        and not isinstance(after_heartbeat.get("ticks"), bool)
+        and isinstance(resumed_tick_delta, int)
+        and not isinstance(resumed_tick_delta, bool)
+        and resumed_tick_delta
+        == after_heartbeat["ticks"] - after_active_command["ticks"]
+        and resumed_tick_delta >= 1,
+        f"{run.role}/{run.device_id}: post-command heartbeat tick proof is invalid.",
+    )
     recomputed_verified = (
         not recomputed_inner_callbacks
         and bool(recomputed_post_active)
+        and resumed_tick_delta >= 1
         and math.isclose(measured_max_gap, recomputed_max_gap, abs_tol=1)
         and recomputed_max_gap >= minimum_gap
     )
