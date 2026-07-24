@@ -6,6 +6,7 @@
   "installCommand": "npm ci --no-audit --no-fund",
   "git": {
     "deploymentEnabled": {
+      "fix/m1-5-real-device-polish-rebuild": true,
       "feat/**": false,
       "feature/**": false,
       "fix/**": false,

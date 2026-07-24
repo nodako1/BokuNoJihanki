@@ -1,12 +1,15 @@
 import Phaser from 'phaser';
 import {
+  COLLISION_DEBUG_EVENT,
   GAME_STARTED_EVENT,
   TIME_PREVIEW_EVENT,
   clearAreaTraversalRequest,
   isAudioMuted,
+  isCollisionDebugEnabled,
   isGameStarted,
   publishAreaPrompt,
   publishHudSnapshot,
+  publishPlayerScreenGeometry,
   readPreviewTime,
   type InputSource,
   type M14AreaId,
@@ -17,6 +20,10 @@ import {
   getM14AreaDefinition,
   getM14SpawnPoint,
 } from '../areas/m14AreaData.mjs';
+import {
+  M15_GEOMETRY_FIXTURE,
+  getM15GeometryArea,
+} from '../areas/m15GeometryFixture.mjs';
 import {
   M14_PLAYER_ATLAS_KEY,
   M14AreaWorld,
@@ -44,12 +51,14 @@ import {
 } from '../systems/timeOfDay';
 import { AtmosphereLayer } from '../world/AtmosphereLayer';
 
-const PLAYER_SCALE = 0.68;
-const PLAYER_HALF_WIDTH = 36;
+const PLAYER_SCALE = M15_GEOMETRY_FIXTURE.player.runtimeScale;
+const PLAYER_ORIGIN_X = M15_GEOMETRY_FIXTURE.player.footPivot.x;
+const PLAYER_ORIGIN_Y = M15_GEOMETRY_FIXTURE.player.footPivot.y;
+const PLAYER_HALF_WIDTH = 37;
 const HUD_INTERVAL = 120;
 const ATMOSPHERE_INTERVAL = 90;
 const CAMERA_LERP = 0.09;
-const CONTACT_FRAMES = new Set(['2', '7']);
+const CONTACT_FRAMES = new Set(['0', '4']);
 const TRANSITION_FADE_MS = 300;
 
 type Facing = 'left' | 'right';
@@ -64,6 +73,8 @@ export class SideScrollTownScene extends Phaser.Scene {
   private curtain!: Phaser.GameObjects.Rectangle;
   private loadingLabel!: Phaser.GameObjects.Text;
   private areaTitle!: Phaser.GameObjects.Text;
+  private geometryDebug!: Phaser.GameObjects.Graphics;
+  private geometryDebugLabel!: Phaser.GameObjects.Text;
   private transitionState: M14TransitionState = createM14TransitionState();
   private facing: Facing = 'right';
   private velocityX = 0;
@@ -77,6 +88,7 @@ export class SideScrollTownScene extends Phaser.Scene {
   private atmosphereElapsed = 0;
   private previousBranchDirection: TraversalDirection | null = null;
   private blocked = false;
+  private collisionDebugEnabled = false;
   private cleanedUp = false;
 
   private readonly handleTimePreview = (event: Event): void => {
@@ -88,6 +100,11 @@ export class SideScrollTownScene extends Phaser.Scene {
   private readonly handleGameStarted = (): void => {
     this.started = true;
     this.revealAreaTitle();
+  };
+
+  private readonly handleCollisionDebug = (event: Event): void => {
+    this.collisionDebugEnabled = (event as CustomEvent<boolean>).detail;
+    this.drawGeometryDebug();
   };
 
   constructor() {
@@ -105,6 +122,7 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.velocityX = 0;
     this.previousBranchDirection = null;
     this.blocked = false;
+    this.collisionDebugEnabled = isCollisionDebugEnabled();
     const initialArea = getM14AreaDefinition(this.areaId);
     const spawn = getM14SpawnPoint(this.areaId, 'start');
     this.targetMinutes = readPreviewTime();
@@ -127,14 +145,32 @@ export class SideScrollTownScene extends Phaser.Scene {
 
     this.facing = spawn.facing;
     this.playerShadow = this.add
-      .ellipse(spawn.x, initialArea.groundY + 2, 48, 14, 0x102630, 0.24)
+      .ellipse(spawn.x, spawn.y + 2, 44, 12, 0x102630, 0.24)
       .setDepth(20);
     this.player = this.add
-      .sprite(spawn.x, initialArea.groundY, M14_PLAYER_ATLAS_KEY, `idle-${this.facing}-0`)
-      .setOrigin(0.5, 1)
+      .sprite(spawn.x, spawn.y, M14_PLAYER_ATLAS_KEY, `idle-${this.facing}-0`)
+      .setOrigin(PLAYER_ORIGIN_X, PLAYER_ORIGIN_Y)
       .setScale(PLAYER_SCALE)
       .setDepth(30);
     this.playIdleAnimation();
+
+    this.geometryDebug = this.add
+      .graphics()
+      .setDepth(999_920)
+      .setVisible(this.collisionDebugEnabled);
+    this.geometryDebugLabel = this.add
+      .text(14, 106, '', {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        fontSize: '12px',
+        color: '#f6ffef',
+        backgroundColor: '#07131de8',
+        padding: { x: 10, y: 8 },
+        stroke: '#07131d',
+        strokeThickness: 2,
+      })
+      .setScrollFactor(0)
+      .setDepth(999_921)
+      .setVisible(this.collisionDebugEnabled);
 
     this.curtain = this.add
       .rectangle(640, 360, 1280, 720, 0x07131d, 1)
@@ -173,9 +209,11 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.updateCamera(true);
     audioEngine.setArea(this.areaId);
     publishAreaPrompt({ visible: false, direction: null, label: '', areaId: null });
+    this.drawGeometryDebug();
 
     window.addEventListener(TIME_PREVIEW_EVENT, this.handleTimePreview);
     window.addEventListener(GAME_STARTED_EVENT, this.handleGameStarted);
+    window.addEventListener(COLLISION_DEBUG_EVENT, this.handleCollisionDebug);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.shutdown());
     this.events.once(Phaser.Scenes.Events.DESTROY, () => this.shutdown());
   }
@@ -187,8 +225,11 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.displayedMinutes += (this.targetMinutes - this.displayedMinutes) * timeSmoothing;
 
     const locked = isM14InputLocked(this.transitionState);
+    const availableBeforeMove = !locked && this.started
+      ? (getAvailableBranchDirections(this.areaId, this.player.x)[0] ?? null)
+      : null;
     const input = this.started && !locked
-      ? this.inputSystem.read()
+      ? this.inputSystem.read(availableBeforeMove)
       : { horizontal: 0, source: 'none' as const, traversal: null };
     if (this.inputSystem.consumeHardStop()) this.velocityX = 0;
     this.lastInputSource = input.source;
@@ -216,9 +257,13 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.updateCamera(false);
     this.world.updateClosedEdgeHint(this.player.x);
 
-    const branchDirections = getAvailableBranchDirections(this.areaId, this.player.x);
+    const branchDirections = this.started
+      ? getAvailableBranchDirections(this.areaId, this.player.x)
+      : [];
     const branchDirection = (branchDirections[0] ?? null) as TraversalDirection | null;
     this.updateBranchPrompt(branchDirection, locked);
+    if (branchDirection && !locked) this.publishPanelGeometry();
+    this.drawGeometryDebug();
 
     if (!locked && input.traversal && branchDirection === input.traversal) {
       const transition = resolveAreaExit(this.areaId, input.traversal, this.player.x, this.transitionState);
@@ -242,6 +287,7 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.hudElapsed += safeDelta;
     if (this.hudElapsed >= HUD_INTERVAL) {
       this.hudElapsed = 0;
+      if (!branchDirection || locked) this.publishPanelGeometry();
       this.publishHud(branchDirection, movement.moving);
     }
   }
@@ -264,7 +310,7 @@ export class SideScrollTownScene extends Phaser.Scene {
       if (!this.anims.exists(walkKey)) {
         this.anims.create({
           key: walkKey,
-          frames: Array.from({ length: 10 }, (_, index) => ({
+          frames: Array.from({ length: 8 }, (_, index) => ({
             key: M14_PLAYER_ATLAS_KEY,
             frame: `walk-${direction}-${index}`,
           })),
@@ -307,6 +353,129 @@ export class SideScrollTownScene extends Phaser.Scene {
     audioEngine.playFootstep('asphalt');
   }
 
+  private publishPanelGeometry(): void {
+    const canvasRect = this.game.canvas.getBoundingClientRect();
+    if (canvasRect.width <= 0 || canvasRect.height <= 0) return;
+
+    const camera = this.cameras.main;
+    const playerBounds = this.player.getBounds();
+    const scaleX = canvasRect.width / this.game.canvas.width;
+    const scaleY = canvasRect.height / this.game.canvas.height;
+    const footX = canvasRect.left + (this.player.x - camera.scrollX) * scaleX;
+    const footY = canvasRect.top + (this.player.y - camera.scrollY) * scaleY;
+    publishPlayerScreenGeometry({
+      rect: {
+        left: canvasRect.left + (playerBounds.x - camera.scrollX) * scaleX,
+        top: canvasRect.top + (playerBounds.y - camera.scrollY) * scaleY,
+        width: playerBounds.width * scaleX,
+        height: playerBounds.height * scaleY,
+      },
+      footRect: {
+        left: footX - 1,
+        top: footY - 1,
+        width: 2,
+        height: 2,
+      },
+      facing: this.facing,
+      areaId: this.areaId,
+      playerWorldX: this.player.x,
+      playerWorldY: this.player.y,
+      cameraScrollX: camera.scrollX,
+      cameraScrollY: camera.scrollY,
+      canvasRect: {
+        left: canvasRect.left,
+        top: canvasRect.top,
+        width: canvasRect.width,
+        height: canvasRect.height,
+      },
+      scaleX,
+      scaleY,
+    });
+  }
+
+  private drawGeometryDebug(): void {
+    if (!this.geometryDebug || !this.geometryDebugLabel) return;
+    this.geometryDebug
+      .setVisible(this.collisionDebugEnabled)
+      .clear();
+    this.geometryDebugLabel.setVisible(this.collisionDebugEnabled);
+    if (!this.collisionDebugEnabled || !this.player) return;
+
+    const geometry = getM15GeometryArea(this.areaId);
+    const graphics = this.geometryDebug;
+    const groundY = geometry.ground.y;
+
+    graphics.lineStyle(3, 0x4eff88, 0.96);
+    graphics.lineBetween(0, groundY, geometry.worldWidth, groundY);
+    graphics.fillStyle(0x4eff88, 1);
+    for (const sample of geometry.ground.samples) {
+      graphics.fillCircle(sample.x, sample.y, 5);
+    }
+
+    const entranceLines: string[] = [];
+    for (const direction of ['up', 'down'] as const) {
+      const entrance = geometry.branchEntrances[direction];
+      if (!entrance) continue;
+      const bandTop = groundY - 76;
+      graphics.fillStyle(0x42c8ff, 0.15);
+      graphics.fillRect(
+        entrance.backgroundRange.minX,
+        bandTop,
+        entrance.backgroundRange.maxX - entrance.backgroundRange.minX,
+        92,
+      );
+      graphics.lineStyle(3, 0x42c8ff, 0.96);
+      graphics.lineBetween(
+        entrance.backgroundCenterX,
+        bandTop - 14,
+        entrance.backgroundCenterX,
+        groundY + 20,
+      );
+      graphics.lineStyle(3, 0xff9e46, 0.98);
+      graphics.strokeRect(
+        entrance.triggerRange.minX,
+        bandTop,
+        entrance.triggerRange.maxX - entrance.triggerRange.minX,
+        92,
+      );
+      graphics.lineBetween(
+        entrance.triggerCenterX,
+        bandTop - 8,
+        entrance.triggerCenterX,
+        groundY + 14,
+      );
+      entranceLines.push(
+        `${direction.toUpperCase()} bg=${entrance.backgroundCenterX} trigger=${entrance.triggerCenterX} Δ=${entrance.centerDeltaX}`,
+      );
+    }
+
+    graphics.lineStyle(2, 0xffe56a, 0.95);
+    graphics.fillStyle(0xffe56a, 0.95);
+    for (const spawn of Object.values(geometry.spawns)) {
+      graphics.strokeCircle(spawn.x, spawn.y, 9);
+      graphics.fillCircle(spawn.x, spawn.y, 3);
+    }
+
+    graphics.lineStyle(3, 0xff4f75, 1);
+    graphics.lineBetween(this.player.x - 12, this.player.y, this.player.x + 12, this.player.y);
+    graphics.lineBetween(this.player.x, this.player.y - 12, this.player.x, this.player.y + 12);
+    graphics.strokeCircle(this.player.x, this.player.y, 7);
+
+    const phase = getTimePhase(this.displayedMinutes);
+    const spawnLines = Object.entries(geometry.spawns)
+      .map(([id, spawn]) => `${id}@${spawn.x},${spawn.y}`)
+      .join(' | ');
+    this.geometryDebugLabel.setText([
+      `M1.5 GEOMETRY ${this.areaId} / ${phase}`,
+      `BG_SHA ${geometry.assets.backgroundSha256[phase].slice(0, 16)}…`,
+      `GROUND y=${groundY}  FOOT=(${this.player.x.toFixed(1)},${this.player.y.toFixed(1)}) Δ=${Math.abs(this.player.y - groundY).toFixed(2)}`,
+      `PIVOT (${PLAYER_ORIGIN_X},${PLAYER_ORIGIN_Y}) scale=${PLAYER_SCALE}`,
+      `SPAWN ${spawnLines}`,
+      ...entranceLines,
+      'COLOR ground/sample=green bg-entry=blue trigger=orange spawn=yellow foot=red',
+    ]);
+  }
+
   private updateCamera(immediate: boolean): void {
     const camera = this.cameras.main;
     const targetX = getM14CameraScrollX(
@@ -346,6 +515,7 @@ export class SideScrollTownScene extends Phaser.Scene {
     };
     try {
       this.transitionState = reduceM14Transition(this.transitionState, { type: 'start', transition });
+      this.inputSystem.clearForTransition();
       this.velocityX = 0;
       clearAreaTraversalRequest();
       this.updateBranchPrompt(null, true);
@@ -371,7 +541,7 @@ export class SideScrollTownScene extends Phaser.Scene {
         || readyState.currentAreaId !== transition.targetAreaId
         || readyState.currentSpawnId !== transition.targetSpawnId
       ) {
-        throw new Error('Navigation core could not resolve the requested M1.4 spawn.');
+        throw new Error('Navigation core could not resolve the requested M1.5 spawn.');
       }
       this.transitionState = readyState;
       this.areaId = transition.targetAreaId;
@@ -427,7 +597,7 @@ export class SideScrollTownScene extends Phaser.Scene {
       } catch {
         this.scene.restart();
       }
-      console.warn('M1.4 area transition recovered after an unexpected error.', error);
+      console.warn('M1.5 area transition recovered after an unexpected error.', error);
     }
   }
 
@@ -476,7 +646,7 @@ export class SideScrollTownScene extends Phaser.Scene {
       loadingChunk: this.transitionState.pendingTransition?.targetAreaId ?? null,
       lastUnloadedChunk: null,
       inputSource: this.lastInputSource,
-      collisionDebug: false,
+      collisionDebug: this.collisionDebugEnabled,
       sectionLabel: area.displayName,
       facing: this.facing,
       animation: moving ? `walk-${this.facing}` : `idle-${this.facing}`,
@@ -526,9 +696,12 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.cleanedUp = true;
     window.removeEventListener(TIME_PREVIEW_EVENT, this.handleTimePreview);
     window.removeEventListener(GAME_STARTED_EVENT, this.handleGameStarted);
+    window.removeEventListener(COLLISION_DEBUG_EVENT, this.handleCollisionDebug);
     publishAreaPrompt({ visible: false, direction: null, label: '', areaId: null });
     this.inputSystem?.destroy();
     this.world?.destroy();
     this.atmosphereLayer?.destroy();
+    this.geometryDebug?.destroy();
+    this.geometryDebugLabel?.destroy();
   }
 }

@@ -158,3 +158,133 @@ npm run check
 - 公開URLでbuild `147f770`、左右タッチ移動、停止、時刻操作、mute操作を確認
 
 run URL、Artifact digest、目視確認を含む確定証跡は[M1.4 Production Evidence](evidence/M1_4_PRODUCTION_EVIDENCE.md)を正とする。
+
+## M1.5 実機品質修正版（必須・再構築中）
+
+M1.4の107件成功、Browser Smoke、Artifact、Production Evidenceは配信履歴として保持するが、M1.5 candidateの合格証跡には流用しない。過去の未push commit `04c6d0879fc4283d94d0a6d515a1916a0999406b`に対して報告された件数、画像、hash、座標、音声値も再利用しない。M1.5の件数と測定値は、現在のcandidateから実行して報告する。
+
+### 実行環境
+
+- Node.js 22系
+- repositoryの既存lockfile
+- npm cache権限で失敗する場合だけ、専用の一時cacheを使いtracked fileを変更しない
+- local production buildと、remote PR headと同じ完全SHAのVercel Preview
+
+```bash
+npm ci
+npm run validate
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm run check
+git diff --check
+```
+
+既存testを削除、skip、弱体化しない。最終test数はbaselineを下回らないことを確認し、baseline件数、追加件数、総数を実行結果から記録する。件数合わせ自体を目的にしない。
+
+### 独立geometry contract
+
+背景ground、spawn、背景入口、triggerは`src/game/areas/m15GeometryFixture.mjs`を唯一の出典とする。fixtureは対象背景のSHA-256へ結び付ける。runtime、test、debug overlay、Evidence scriptはfixtureをimportし、期待座標をそれぞれへ複製しない。
+
+- 正式area ID `home-street`、`life-road`、`upper-vending-lane`の独立ground
+- atlas実測foot pivotとrender scale
+- 左・中央・右、左右歩行、停止、spawn直後、上下遷移直後のfoot-ground差2 CSS px以内
+- spawnと独立groundの差6 CSS px以内
+- 背景入口中心とtrigger中心の差5 px以内
+- debug表示で背景入口、ground、trigger、spawn、player、foot pivotを同時確認
+- 背景SHAが変わった場合にground、spawn、入口を再注釈し、古いfixtureを拒否
+
+runtimeの`groundY`をtestの期待値として読み返す自己参照を禁止する。
+
+### 上下導線・遷移パネル・touch
+
+- 背景上の上り／下り入口と対応triggerが一致する
+- 案内表示中だけkeyboard／touchの上下遷移入力が有効になる
+- trigger外、誤方向、transition lock中の入力が無効になる
+- `sourceSpawnId`のclone、reset、往復遷移が退行しない
+- playerとpanelの交差面積0
+- playerとpanelの最短距離12 CSS px以上
+- joystick、時計、音声UIとpanelの交差0
+- panel touch領域44×44 CSS px以上
+- touch joystickの右drag、左drag、release停止
+- 上／下panelの実tap
+
+各viewportで上／下それぞれについて、trigger開始・中央・終端×facing左・右、計12状態を測定する。player、panel、HUDの実矩形、交差面積、最短距離をEvidenceへ保存する。
+
+### BGM静的解析とruntime復帰
+
+静的解析では`public/assets/audio/m15/analysis.json`と実音源を照合する。
+
+- codec、container、48 kHz source sample rate、stereo、duration、decode
+- true peakを4倍以上のoversamplingで解析し、-1 dBTP以下
+- clipping 0、過大DCなし、長い無音なし
+- loop境界のsample差、energy差、波形、spectrogram
+- 音源、source、provenance、analysisのSHA-256
+
+ブラウザの正常なresampleはdecode失敗にしない。runtimeではdecode、stereo、durationを検証する。
+
+- mute／unmuteと再生位置
+- area遷移後の同一状態
+- hidden→visible
+- Chromium frozen→active
+- iOS interrupted→復帰
+- BGM busと環境音busの分離
+- AudioContextの経過時間から算出した診断offsetの前進
+- loop直前／直後のoffset関係と同一source継続
+
+loop testは固定sleepや厳しすぎる経過秒判定へ依存せず、境界前後をpollする。objective解析の成功だけで聴感をPASSにしない。
+
+`frozen→active`はCDP commandの成功応答だけでは合格にしない。AAC-LCを実decodeできるheaded Google ChromeをXvfb上で実行し、foregroundで校正した40 ms heartbeatについて、900 msのfrozen区間の両端100 msを除いた内側でcallback 0件、active後のcallback再開、同一audio source、mute保持、offset前進を同時に確認する。headless Chromiumでtimerが継続する場合や、AAC codecを持たないテスト用Chromiumでdecodeが失敗する場合は正しくFAILとし、実ブラウザのdecode成功へ読み替えない。
+
+### Browser Smoke matrix
+
+| viewport | device条件 | 入力 |
+| --- | --- | --- |
+| 1280×720 | desktop | keyboardとpointer |
+| 844×390 | touch有効 | joystick dragとpanel tap |
+| 932×430 | DPR 3、touch有効 | joystick dragとpanel tap |
+
+mobile 2サイズではkeyboard操作で代用しない。各viewportで次を確認する。
+
+buildの可視badgeは7桁表示でも、DOMの`data-build-commit`へ完全40桁SHAを埋める。Smokeは完全SHA一致を待った後にruntime failure収集を有効化して同じcandidateを再loadし、そのloadを含む`pageerror`／failed requestを判定する。
+
+1. 3エリアそれぞれの左・中央・右
+2. 左右歩行、停止、spawn接地
+3. 上下往復と既存の全遷移
+4. 背景入口、矢印、triggerの一致
+5. panelの12状態matrix
+6. 3エリア×朝・昼・夕方・夜
+7. mute=true／falseの遷移保持
+8. BGM開始、中間、loop直前、loop直後、lifecycle復帰後のoffset前進
+9. `pageerror` 0、failed request 0
+
+localとPreviewの全画面を人間が目視する。主人公の完成度、背景との馴染み、foot位置、足滑り、透過縁、frame飛び、水平路と石段、矢印、panel、HUD、touch操作、BGMの旋律／和音／rhythm／loopに違和感が残る場合は、数値が通っていてもBLOCKEDとする。
+
+### Evidence
+
+baseline `29223ee31fd4fc4fbca21a37b01fe89277279647`と現在のcandidateを、同じviewport、area、時間帯、world座標でbuildして採取する。
+
+- before／after画像と両方の完全SHA
+- fixture由来のground注釈、foot／ground、spawn、背景入口／trigger
+- player／panel／HUD矩形、交差面積、最短距離
+- 3 viewportのtouch／panel matrix
+- 3エリア×4時間帯
+- `pageerror`／failed request
+- BGM解析JSON、波形、spectrogram、loop境界
+- 画像、音声、fixture、metricsのSHA-256
+- 素材の権利とprovenance
+- 実行command、Node／browser version
+
+途中で失敗したSmoke、別candidate、M1.4 Evidenceを最終Evidenceへ混在させない。
+
+### 承認gate
+
+1. local Quality／Browser Smoke／Evidence
+2. 同じPR head SHAのVercel Preview Smoke
+3. 同じSHAのCI、自動review、くーちゃんcandidate QA、リダ君Evidence監査
+4. ユーザーによる同じPreview SHAの実iPhone明示承認
+5. main merge
+6. merge SHAと一致するVercel Production、Production Smoke、Production Browser Smoke
+
+実iPhone承認前はmainとProductionを変更しない。codeまたはassetを変更したら、新SHAでCI、Preview Smoke、candidate QA、Evidence監査を再実行する。承認後の変更は以前の承認を無効にする。

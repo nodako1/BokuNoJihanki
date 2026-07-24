@@ -1,0 +1,419 @@
+{
+  "version": "0.1.5",
+  "revision": "M1.5",
+  "pipelineVersion": "m15-art-v1",
+  "generatedAt": "2026-07-23",
+  "style": "project-original painterly side-scroll Japanese summer town",
+  "rights": "Project-original BokuNoJihanki assets; no third-party game art",
+  "generator": {
+    "imageGeneration": "OpenAI built-in image generator",
+    "deterministicPostProcess": "python3 tools/art/generate_m15_assets.py",
+    "generationRecord": "tools/art/m15-source/generation.json"
+  },
+  "areas": {
+    "home-street": {
+      "worldWidth": 2400,
+      "source": "tools/art/m14-source/home-street-master.png",
+      "sourceSha256": "ffd941607bd373314116dacf3882066dc5e9adb4b9dcdb134b840965578d95d7",
+      "backgrounds": {
+        "morning": "bg-home-street-ffd941607bd3-morning.webp",
+        "day": "bg-home-street-ffd941607bd3-day.webp",
+        "evening": "bg-home-street-ffd941607bd3-evening.webp",
+        "night": "bg-home-street-ffd941607bd3-night.webp"
+      },
+      "foreground": "fg-home-street-ffd941607bd3.webp"
+    },
+    "life-road": {
+      "worldWidth": 2680,
+      "source": "tools/art/m14-source/life-road-master.png",
+      "sourceSha256": "bd033f51dd4882986358cd6fd89732fd438bd2e190050ac3dae7ee1e227a9056",
+      "backgrounds": {
+        "morning": "bg-life-road-bd033f51dd48-morning.webp",
+        "day": "bg-life-road-bd033f51dd48-day.webp",
+        "evening": "bg-life-road-bd033f51dd48-evening.webp",
+        "night": "bg-life-road-bd033f51dd48-night.webp"
+      },
+      "foreground": "fg-life-road-bd033f51dd48.webp"
+    },
+    "upper-vending-lane": {
+      "worldWidth": 2320,
+      "source": "tools/art/m15-source/upper-vending-lane-master.png",
+      "sourceSha256": "58218a55afc28f13d8b9f4d4a7b4988bac74d3727cc6550115c46dd1306882c6",
+      "backgrounds": {
+        "morning": "bg-upper-vending-lane-58218a55afc2-morning.webp",
+        "day": "bg-upper-vending-lane-58218a55afc2-day.webp",
+        "evening": "bg-upper-vending-lane-58218a55afc2-evening.webp",
+        "night": "bg-upper-vending-lane-58218a55afc2-night.webp"
+      },
+      "foreground": "fg-upper-vending-lane-58218a55afc2.webp"
+    }
+  },
+  "player": {
+    "directions": [
+      "left",
+      "right"
+    ],
+    "idleFramesPerDirection": 4,
+    "walkFramesPerDirection": 8,
+    "contactFrames": [
+      0,
+      4
+    ],
+    "frameSize": {
+      "width": 256,
+      "height": 384
+    },
+    "footPivot": {
+      "x": 0.5,
+      "y": 0.9609375,
+      "pixelX": 128.0,
+      "pixelY": 369
+    },
+    "runtimeScale": 0.38,
+    "shadowBakedIntoFrames": false,
+    "frameBounds": {
+      "idle-left-0": {
+        "left": 83,
+        "top": 18,
+        "rightExclusive": 172,
+        "bottomExclusive": 370
+      },
+      "idle-left-1": {
+        "left": 84,
+        "top": 18,
+        "rightExclusive": 172,
+        "bottomExclusive": 370
+      },
+      "idle-left-2": {
+        "left": 83,
+        "top": 18,
+        "rightExclusive": 172,
+        "bottomExclusive": 370
+      },
+      "idle-left-3": {
+        "left": 66,
+        "top": 18,
+        "rightExclusive": 189,
+        "bottomExclusive": 370
+      },
+      "walk-left-0": {
+        "left": 31,
+        "top": 18,
+        "rightExclusive": 224,
+        "bottomExclusive": 370
+      },
+      "walk-left-1": {
+        "left": 46,
+        "top": 18,
+        "rightExclusive": 210,
+        "bottomExclusive": 370
+      },
+      "walk-left-2": {
+        "left": 52,
+        "top": 18,
+        "rightExclusive": 204,
+        "bottomExclusive": 370
+      },
+      "walk-left-3": {
+        "left": 79,
+        "top": 18,
+        "rightExclusive": 176,
+        "bottomExclusive": 370
+      },
+      "walk-left-4": {
+        "left": 75,
+        "top": 18,
+        "rightExclusive": 181,
+        "bottomExclusive": 370
+      },
+      "walk-left-5": {
+        "left": 58,
+        "top": 18,
+        "rightExclusive": 197,
+        "bottomExclusive": 370
+      },
+      "walk-left-6": {
+        "left": 37,
+        "top": 18,
+        "rightExclusive": 219,
+        "bottomExclusive": 370
+      },
+      "walk-left-7": {
+        "left": 32,
+        "top": 18,
+        "rightExclusive": 224,
+        "bottomExclusive": 370
+      },
+      "idle-right-0": {
+        "left": 84,
+        "top": 18,
+        "rightExclusive": 173,
+        "bottomExclusive": 370
+      },
+      "idle-right-1": {
+        "left": 84,
+        "top": 18,
+        "rightExclusive": 172,
+        "bottomExclusive": 370
+      },
+      "idle-right-2": {
+        "left": 84,
+        "top": 18,
+        "rightExclusive": 173,
+        "bottomExclusive": 370
+      },
+      "idle-right-3": {
+        "left": 67,
+        "top": 18,
+        "rightExclusive": 190,
+        "bottomExclusive": 370
+      },
+      "walk-right-0": {
+        "left": 32,
+        "top": 18,
+        "rightExclusive": 225,
+        "bottomExclusive": 370
+      },
+      "walk-right-1": {
+        "left": 46,
+        "top": 18,
+        "rightExclusive": 210,
+        "bottomExclusive": 370
+      },
+      "walk-right-2": {
+        "left": 52,
+        "top": 18,
+        "rightExclusive": 204,
+        "bottomExclusive": 370
+      },
+      "walk-right-3": {
+        "left": 80,
+        "top": 18,
+        "rightExclusive": 177,
+        "bottomExclusive": 370
+      },
+      "walk-right-4": {
+        "left": 75,
+        "top": 18,
+        "rightExclusive": 181,
+        "bottomExclusive": 370
+      },
+      "walk-right-5": {
+        "left": 59,
+        "top": 18,
+        "rightExclusive": 198,
+        "bottomExclusive": 370
+      },
+      "walk-right-6": {
+        "left": 37,
+        "top": 18,
+        "rightExclusive": 219,
+        "bottomExclusive": 370
+      },
+      "walk-right-7": {
+        "left": 32,
+        "top": 18,
+        "rightExclusive": 224,
+        "bottomExclusive": 370
+      }
+    },
+    "image": "player-atlas-c02fff1f264e.webp",
+    "atlas": "player-atlas-c02fff1f264e.json",
+    "chromaSource": "tools/art/m15-source/player-left-atlas-chroma.png",
+    "chromaSourceSha256": "c02fff1f264e44b21c4d2590db82e0cfe57122490db5dca73e6ef1716c0e8919",
+    "keyedSource": "tools/art/m15-source/player-left-atlas-keyed.png",
+    "keyedSourceSha256": "c4b053053d34988a3e174eb128165d427cb50d84c3a5b64036e19d850c9956ce"
+  },
+  "sources": [
+    {
+      "path": "tools/art/m14-source/home-street-master.png",
+      "bytes": 2881373,
+      "sha256": "ffd941607bd373314116dacf3882066dc5e9adb4b9dcdb134b840965578d95d7",
+      "width": 1672,
+      "height": 941,
+      "mode": "RGB"
+    },
+    {
+      "path": "tools/art/m14-source/life-road-master.png",
+      "bytes": 2659903,
+      "sha256": "bd033f51dd4882986358cd6fd89732fd438bd2e190050ac3dae7ee1e227a9056",
+      "width": 1672,
+      "height": 941,
+      "mode": "RGB"
+    },
+    {
+      "path": "tools/art/m15-source/upper-vending-lane-master.png",
+      "bytes": 2448410,
+      "sha256": "58218a55afc28f13d8b9f4d4a7b4988bac74d3727cc6550115c46dd1306882c6",
+      "width": 1672,
+      "height": 941,
+      "mode": "RGB"
+    },
+    {
+      "path": "tools/art/m15-source/player-left-atlas-chroma.png",
+      "bytes": 1505940,
+      "sha256": "c02fff1f264e44b21c4d2590db82e0cfe57122490db5dca73e6ef1716c0e8919",
+      "width": 1659,
+      "height": 948,
+      "mode": "RGB"
+    },
+    {
+      "path": "tools/art/m15-source/player-left-atlas-keyed.png",
+      "bytes": 728020,
+      "sha256": "c4b053053d34988a3e174eb128165d427cb50d84c3a5b64036e19d850c9956ce",
+      "width": 1659,
+      "height": 948,
+      "mode": "RGBA"
+    },
+    {
+      "path": "tools/art/m15-source/generation.json",
+      "bytes": 1302,
+      "sha256": "f04f2eda0b641c72caefb82a7720f73e97913b3aa3abcb64e74aef9745d0d9e2"
+    },
+    {
+      "path": "tools/art/m15-source/player-prompt.txt",
+      "bytes": 2502,
+      "sha256": "a42bfb332ba7ae33bf499065251bc44c7fabb56e161fc097443058e8d2b0734f"
+    },
+    {
+      "path": "tools/art/m15-source/upper-edit-prompt.txt",
+      "bytes": 1590,
+      "sha256": "f2b02807cae5141667355b758fa81fa8b92beec49f39cf887c88df14838e0b41"
+    }
+  ],
+  "files": [
+    {
+      "path": "public/assets/images/m15/bg-home-street-ffd941607bd3-day.webp",
+      "bytes": 571616,
+      "sha256": "da954c4a4978633e6674e928e7db87724b23380ece3f2abdace10818cde7ccd4",
+      "width": 2400,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-home-street-ffd941607bd3-evening.webp",
+      "bytes": 393232,
+      "sha256": "9b763027835568845ef5b2f3b7ede934bca8eda4cf6ebe8f6bc3e145ae2b22e2",
+      "width": 2400,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-home-street-ffd941607bd3-morning.webp",
+      "bytes": 530704,
+      "sha256": "939713113f709a86a10cd142ea35fbd88917fd61640862f7a7406c4780f1a29d",
+      "width": 2400,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-home-street-ffd941607bd3-night.webp",
+      "bytes": 152960,
+      "sha256": "64b95f47cb5c86dda9deb5237686fe80f671b00d7b2a7dd651b4717e86a44cd4",
+      "width": 2400,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-life-road-bd033f51dd48-day.webp",
+      "bytes": 593166,
+      "sha256": "9bc2fbff19140cd35851dd043a1111282422f25f97767ff1b8386f16fd430573",
+      "width": 2680,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-life-road-bd033f51dd48-evening.webp",
+      "bytes": 412042,
+      "sha256": "bf04dc7a68470dbcde2212b8b6230a48eea3cc21f45824631eaf1c37c926237f",
+      "width": 2680,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-life-road-bd033f51dd48-morning.webp",
+      "bytes": 552842,
+      "sha256": "340d4c5fe4acb920384ae1ddcf671ce92d20f31bf433283914d25a79a26100a9",
+      "width": 2680,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-life-road-bd033f51dd48-night.webp",
+      "bytes": 178138,
+      "sha256": "3f0792a19ebfa66fb4cc8479b2be3f2d8fae2df06cc8c11f784f6e9099d35dee",
+      "width": 2680,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-upper-vending-lane-58218a55afc2-day.webp",
+      "bytes": 410800,
+      "sha256": "6055cc308fb3796ed6fdf1a20729657777b3455c7072b0e3a4a8704d2a76dbe9",
+      "width": 2320,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-upper-vending-lane-58218a55afc2-evening.webp",
+      "bytes": 271324,
+      "sha256": "e29518020eb7fac052312484d9ccb36c7334c6d7125f26e3e167498361f13ed4",
+      "width": 2320,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-upper-vending-lane-58218a55afc2-morning.webp",
+      "bytes": 376032,
+      "sha256": "f39da4d603f531ce33ab6533719ee913f86bb69ae3b781a9418c892502adb6a3",
+      "width": 2320,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/bg-upper-vending-lane-58218a55afc2-night.webp",
+      "bytes": 98600,
+      "sha256": "4de5bdbc38212b0a4718402e9b89c880cff8db497986cf7b6ff439d0010e8127",
+      "width": 2320,
+      "height": 720,
+      "mode": "RGB"
+    },
+    {
+      "path": "public/assets/images/m15/fg-home-street-ffd941607bd3.webp",
+      "bytes": 5186,
+      "sha256": "b955e02c5f11fb34180da06d83376d0dcc6d78f2592122a98255211b02a0bb73",
+      "width": 2400,
+      "height": 720,
+      "mode": "RGBA"
+    },
+    {
+      "path": "public/assets/images/m15/fg-life-road-bd033f51dd48.webp",
+      "bytes": 7636,
+      "sha256": "3266fab0fd7e0361ceefe2f00fe7eea7c552b33e947a9bfbbdd242d9e058dcd4",
+      "width": 2680,
+      "height": 720,
+      "mode": "RGBA"
+    },
+    {
+      "path": "public/assets/images/m15/fg-upper-vending-lane-58218a55afc2.webp",
+      "bytes": 5644,
+      "sha256": "5318e24590c33561f8456444675e8e16fd1ae202944e48cd6ed1dc6eae58b396",
+      "width": 2320,
+      "height": 720,
+      "mode": "RGBA"
+    },
+    {
+      "path": "public/assets/images/m15/player-atlas-c02fff1f264e.json",
+      "bytes": 8486,
+      "sha256": "fc0f7e4a495dbdf40a7e08b1305d68c57ec15b8b43f87bdcb3710a15c8458f0e"
+    },
+    {
+      "path": "public/assets/images/m15/player-atlas-c02fff1f264e.webp",
+      "bytes": 1014890,
+      "sha256": "acf3cf78c2dba0c30ed078de5e6b0ee6fe32b7f0cf8dd8f15fc52a8dd41d46b0",
+      "width": 1536,
+      "height": 1536,
+      "mode": "RGBA"
+    }
+  ]
+}

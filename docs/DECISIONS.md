@@ -10,7 +10,7 @@
 
 ## ADR-003：本番環境で継続確認
 
-恒久的な開発環境は作らない。作業ブランチと一時Previewを使い、品質チェック後に`main`へマージしてVercel本番URLを更新する。
+恒久的な開発環境は作らない。作業ブランチと一時Previewを使い、品質チェック後に`main`へマージしてVercel本番URLを更新する。M1.5ではcandidateと同一完全SHAのPreview、独立QA、Evidence監査、ユーザー実iPhone承認をmain前の必須gateとし、承認後にコードまたは素材が変わった場合は新SHAで再承認する。
 
 ## ADR-004：時間は行動で15分進む
 

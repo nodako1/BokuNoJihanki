@@ -1,6 +1,6 @@
 # デプロイ
 
-Production Branchは`main`。Featureブランチの通常Vercel Previewは停止する。
+Production Branchは`main`。Featureブランチの通常Vercel Previewは停止する。ただしM1.5は、main前の実iPhone承認に使用するcandidate同一SHAのPreviewを例外として用意する。
 
 ## M1.3完了フロー
 
@@ -30,7 +30,7 @@ Production Branchは引き続き`main`とし、M1.4のFeatureブランチは`fea
 6. PR Artifactのconsole、state JSON、trace、スクリーンショットを確認する
 7. PR実画面で接地、足滑り、camera、構図、スマートフォン横画面を確認する
 8. navigation adapter境界と統合の自動レビューを行い、指摘を解消する
-9. ユーザーの手動操作待ちで止めず、全gate成功後にmainへマージする
+9. M1.4当時はユーザーの手動操作待ちで止めず、全gate成功後にmainへマージする
 10. Vercel Productionが対象main commitを配信したことをSHAで照合する
 11. Production Smokeを実行する
 12. 実際のProduction URLに対してProduction Browser Smokeを実行する
@@ -75,3 +75,14 @@ M1.4はこの条件をすべて満たした。
 公開URLではbuild `147f770`、左右タッチ移動、停止、時刻操作、mute操作を確認した。3エリア、上下矢印、5遷移、4時間帯はProduction Browser Artifactの15画面とstate JSONで確認した。
 
 run URL、Artifact digest、公開画面確認を含む確定証跡は[M1.4 Production Evidence](evidence/M1_4_PRODUCTION_EVIDENCE.md)を正とする。
+
+## M1.5 必須Preview承認フロー
+
+1. local candidateでQuality、Browser Smoke、Visual Review、音声解析、Evidenceを完了する
+2. remote PR headと同じ完全SHAのVercel PreviewでBrowser Smokeを完了する
+3. 同じSHAでCI、くーちゃんcandidate QA、リダ君Evidence監査を完了する
+4. ユーザーが同じPreviewを実iPhoneで5項目承認する
+5. 承認対象SHAとPR headの一致を再確認してmainへマージする
+6. merge SHAと一致するVercel ProductionでSmoke、Browser Smoke、画面・音を再確認する
+
+承認後にコードまたは素材が変わった場合は、新SHAで手順2〜4をやり直す。実iPhone承認前にmain／Productionを変更せず、Production確認までM2 Scene統合とopen PR #31を変更・マージしない。仕様は[M1.5 実機品質修正版](specs/M1_5_POLISH.md)を正とする。

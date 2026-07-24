@@ -2,6 +2,8 @@
 
 作成: 2026-07-23 クロード（Claude）。ロードマップM2と README「未実装」を基に作成したドラフトです。数値は仮案で、Koichiさんの承認とチャッピーの意見で確定します。
 
+> 現在停止中: M1.4のProduction成功履歴は保持する一方、M1全体は実機品質問題により再オープンした。current milestoneは必須M1.5である。同一SHA PreviewのCI・candidate QA・Evidence監査・ユーザー実iPhone承認、mainマージ、Production再確認が終わるまで、M2 Scene統合とopen PR #31を変更・マージしない。
+
 ## 完了条件（ロードマップより）
 
 「自販機を見つけ、調べ、結果を確認し、15分と所持金が動き、再読み込み後も復元できる」一連の中心体験がProductionの実ブラウザーで動作すること。

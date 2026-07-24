@@ -29,7 +29,7 @@ export function createGame(parent: HTMLElement): Phaser.Game {
     input: {
       activePointers: 4,
     },
-    // M1.4 is the Production route. M1.3 stays registered as a fallback and
+    // M1.5 is the candidate route. M1.3 stays registered as a fallback and
     // design-history scene, but is not auto-started.
     scene: [SideScrollTownScene, ResidentialScene],
   };

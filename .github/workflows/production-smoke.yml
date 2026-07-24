@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   smoke:
-    name: Verify Vercel Production contains M1.4
+    name: Verify Vercel Production contains approved M1.5
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
@@ -33,10 +33,10 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
             -f state='pending' \
             -f context='Production Smoke' \
-            -f description='Waiting for Vercel Production and M1.4 bundle verification' \
+            -f description='Waiting for Vercel Production and approved M1.5 bundle' \
             -f target_url="${PRODUCTION_URL}"
 
-      - name: Verify Vercel Production and M1.4 bundle
+      - name: Verify Vercel Production and approved M1.5 bundle
         id: smoke
         continue-on-error: true
         shell: bash
@@ -60,7 +60,7 @@ jobs:
             sleep 10
           done
 
-          CACHE_BUSTER="commit=${GITHUB_SHA}&m14-smoke=$(date +%s)"
+          CACHE_BUSTER="commit=${GITHUB_SHA}&m15-smoke=$(date +%s)"
           curl --fail --silent --show-error --location \
             --retry 10 --retry-all-errors --retry-delay 5 \
             "${PRODUCTION_URL}/?${CACHE_BUSTER}" -o /tmp/index.html
@@ -79,9 +79,10 @@ jobs:
               "${PRODUCTION_URL}${script}?${CACHE_BUSTER}" >> /tmp/production-bundle.js
           done
 
-          grep -q 'M1.4 SIDE-SCROLL HUD' /tmp/production-bundle.js
-          grep -q '/assets/images/m14' /tmp/production-bundle.js
-          grep -q 'm14-bg-' /tmp/production-bundle.js
+          grep -q 'M1.5 SIDE-SCROLL HUD' /tmp/production-bundle.js
+          grep -q '/assets/images/m15' /tmp/production-bundle.js
+          grep -q '/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a' /tmp/production-bundle.js
+          grep -Fq "${GITHUB_SHA}" /tmp/production-bundle.js
           grep -q 'home-street' /tmp/production-bundle.js
           grep -q 'life-road' /tmp/production-bundle.js
           grep -q 'upper-vending-lane' /tmp/production-bundle.js
@@ -91,18 +92,22 @@ jobs:
 
           for asset in \
             asset-manifest.json \
-            bg-home-street-morning.webp \
-            bg-life-road-day.webp \
-            bg-upper-vending-lane-night.webp \
-            player-atlas.webp \
-            player-atlas.json
+            bg-home-street-ffd941607bd3-morning.webp \
+            bg-life-road-bd033f51dd48-day.webp \
+            bg-upper-vending-lane-58218a55afc2-night.webp \
+            player-atlas-c02fff1f264e.webp \
+            player-atlas-c02fff1f264e.json
           do
             curl --fail --silent --show-error --location \
               --retry 8 --retry-all-errors --retry-delay 3 \
-              "${PRODUCTION_URL}/assets/images/m14/${asset}?${CACHE_BUSTER}" -o /dev/null
+              "${PRODUCTION_URL}/assets/images/m15/${asset}?${CACHE_BUSTER}" -o /dev/null
           done
+          curl --fail --silent --show-error --location \
+            --retry 8 --retry-all-errors --retry-delay 3 \
+            "${PRODUCTION_URL}/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a?${CACHE_BUSTER}" \
+            -o /dev/null
 
-          echo "Production contains the M1.4 three-area side-scroll bundle and assets."
+          echo "Production contains the approved M1.5 three-area bundle, assets and BGM."
 
       - name: Publish production smoke status
         if: always()
@@ -110,10 +115,10 @@ jobs:
         run: |
           if [[ "${{ steps.smoke.outcome }}" == "success" ]]; then
             STATE='success'
-            DESCRIPTION='Vercel Production contains the M1.4 side-scroll town'
+            DESCRIPTION='Vercel Production contains the approved M1.5 build'
           else
             STATE='failure'
-            DESCRIPTION='Vercel Production did not pass the M1.4 bundle verification'
+            DESCRIPTION='Vercel Production did not pass the M1.5 verification'
           fi
 
           gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \

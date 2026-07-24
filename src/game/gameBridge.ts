@@ -4,6 +4,7 @@ export const COLLISION_DEBUG_EVENT = 'boku-no-jihanki:collision-debug';
 export const HUD_SNAPSHOT_EVENT = 'boku-no-jihanki:hud-snapshot';
 export const AREA_PROMPT_EVENT = 'boku-no-jihanki:area-prompt';
 export const AREA_TRAVERSAL_REQUEST_EVENT = 'boku-no-jihanki:area-traversal-request';
+export const PLAYER_SCREEN_GEOMETRY_EVENT = 'boku-no-jihanki:player-screen-geometry';
 
 export type InputSource = 'keyboard' | 'touch' | 'none';
 export type M14AreaId = 'home-street' | 'life-road' | 'upper-vending-lane';
@@ -54,6 +55,27 @@ export interface AreaPromptState {
   direction: TraversalDirection | null;
   label: string;
   areaId: M14AreaId | null;
+}
+
+export interface ScreenRectSnapshot {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export interface PlayerScreenGeometry {
+  rect: ScreenRectSnapshot;
+  footRect: ScreenRectSnapshot;
+  facing: 'left' | 'right' | 'up' | 'down';
+  areaId: M14AreaId;
+  playerWorldX: number;
+  playerWorldY: number;
+  cameraScrollX: number;
+  cameraScrollY: number;
+  canvasRect: ScreenRectSnapshot;
+  scaleX: number;
+  scaleY: number;
 }
 
 let virtualInput: VirtualInputState = { x: 0, y: 0, active: false };
@@ -135,6 +157,14 @@ export function publishAreaPrompt(next: AreaPromptState): void {
 
 export function readAreaPrompt(): AreaPromptState {
   return areaPrompt;
+}
+
+export function publishPlayerScreenGeometry(geometry: PlayerScreenGeometry): void {
+  window.dispatchEvent(
+    new CustomEvent<PlayerScreenGeometry>(PLAYER_SCREEN_GEOMETRY_EVENT, {
+      detail: geometry,
+    }),
+  );
 }
 
 export function requestAreaTraversal(direction: TraversalDirection): void {

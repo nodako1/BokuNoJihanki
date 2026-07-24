@@ -1,12 +1,19 @@
-const VIEWPORT_HEIGHT = 720;
-const EDGE_TRIGGER_WIDTH = 64;
+import {
+  M15_AREA_IDS,
+  M15_GEOMETRY_FIXTURE,
+  getM15GeometryArea,
+} from './m15GeometryFixture.mjs';
 
-function range(minX, maxX) {
-  return Object.freeze({ minX, maxX });
-}
+const VIEWPORT_HEIGHT =
+  M15_GEOMETRY_FIXTURE.coordinateSpace.worldHeight;
 
-function spawn(id, x, facing) {
-  return Object.freeze({ id, x, facing });
+function spawn(id, annotation) {
+  return Object.freeze({
+    id,
+    x: annotation.x,
+    y: annotation.y,
+    facing: annotation.facing,
+  });
 }
 
 function connectedExit(
@@ -65,13 +72,8 @@ function areaMetadata(ambientProfile) {
   });
 }
 
-function areaAssets(areaId) {
-  return Object.freeze({
-    backgroundAssetId: `m14-bg-${areaId}`,
-    foregroundAssetId: `m14-fg-${areaId}`,
-    backgroundPathPattern: `/assets/images/m14/bg-${areaId}-{phase}.webp`,
-    foregroundPath: `/assets/images/m14/fg-${areaId}.webp`,
-  });
+function areaAssets(geometry) {
+  return geometry.assets;
 }
 
 function freezeArea(area) {
@@ -93,46 +95,47 @@ function freezeArea(area) {
   });
 }
 
-export const M14_AREA_IDS = Object.freeze([
-  'home-street',
-  'life-road',
-  'upper-vending-lane',
-]);
+export const M14_AREA_IDS = M15_AREA_IDS;
 
 export const M14_INITIAL_LOCATION = Object.freeze({
   areaId: 'home-street',
   spawnId: 'start',
 });
 
-const homeStreetWidth = 2400;
-const lifeRoadWidth = 2680;
-const upperVendingLaneWidth = 2320;
+const homeGeometry = getM15GeometryArea('home-street');
+const lifeGeometry = getM15GeometryArea('life-road');
+const upperGeometry = getM15GeometryArea('upper-vending-lane');
 
 export const M14_AREA_DEFINITIONS = Object.freeze({
   'home-street': freezeArea({
     areaId: 'home-street',
     displayName: '自宅前',
     sceneKey: 'M14SideScrollScene',
-    backgroundAssetId: 'm14-bg-home-street',
-    worldWidth: homeStreetWidth,
-    groundY: 525,
-    cameraBounds: { x: 0, y: 0, width: homeStreetWidth, height: VIEWPORT_HEIGHT },
+    backgroundAssetId: homeGeometry.assets.backgroundAssetId,
+    worldWidth: homeGeometry.worldWidth,
+    groundY: homeGeometry.ground.y,
+    cameraBounds: {
+      x: 0,
+      y: 0,
+      width: homeGeometry.worldWidth,
+      height: VIEWPORT_HEIGHT,
+    },
     spawnPoints: {
-      start: spawn('start', 360, 'right'),
-      'from-life': spawn('from-life', 2180, 'left'),
+      start: spawn('start', homeGeometry.spawns.start),
+      'from-life': spawn('from-life', homeGeometry.spawns['from-life']),
     },
     leftExit: closedExit(
       'home-left-closed',
       'left',
       'boundary',
-      range(0, EDGE_TRIGGER_WIDTH),
+      homeGeometry.edgeTriggers.left,
       'この先は、まだ工事中です',
     ),
     rightExit: connectedExit(
       'home-to-life',
       'right',
       'boundary',
-      range(homeStreetWidth - EDGE_TRIGGER_WIDTH, homeStreetWidth),
+      homeGeometry.edgeTriggers.right,
       'life-road',
       'from-home',
       'right',
@@ -140,7 +143,7 @@ export const M14_AREA_DEFINITIONS = Object.freeze({
     upExit: closedExit('home-up-closed', 'up', 'branch', null, ''),
     downExit: closedExit('home-down-closed', 'down', 'branch', null, ''),
     arrowRanges: {},
-    assets: areaAssets('home-street'),
+    assets: areaAssets(homeGeometry),
     metadata: areaMetadata('quiet-residential'),
   }),
 
@@ -148,19 +151,24 @@ export const M14_AREA_DEFINITIONS = Object.freeze({
     areaId: 'life-road',
     displayName: '生活道路',
     sceneKey: 'M14SideScrollScene',
-    backgroundAssetId: 'm14-bg-life-road',
-    worldWidth: lifeRoadWidth,
-    groundY: 614,
-    cameraBounds: { x: 0, y: 0, width: lifeRoadWidth, height: VIEWPORT_HEIGHT },
+    backgroundAssetId: lifeGeometry.assets.backgroundAssetId,
+    worldWidth: lifeGeometry.worldWidth,
+    groundY: lifeGeometry.ground.y,
+    cameraBounds: {
+      x: 0,
+      y: 0,
+      width: lifeGeometry.worldWidth,
+      height: VIEWPORT_HEIGHT,
+    },
     spawnPoints: {
-      'from-home': spawn('from-home', 150, 'right'),
-      'from-upper': spawn('from-upper', 1340, 'left'),
+      'from-home': spawn('from-home', lifeGeometry.spawns['from-home']),
+      'from-upper': spawn('from-upper', lifeGeometry.spawns['from-upper']),
     },
     leftExit: connectedExit(
       'life-to-home',
       'left',
       'boundary',
-      range(0, EDGE_TRIGGER_WIDTH),
+      lifeGeometry.edgeTriggers.left,
       'home-street',
       'from-life',
       'left',
@@ -169,23 +177,23 @@ export const M14_AREA_DEFINITIONS = Object.freeze({
       'life-right-closed',
       'right',
       'boundary',
-      range(lifeRoadWidth - EDGE_TRIGGER_WIDTH, lifeRoadWidth),
+      lifeGeometry.edgeTriggers.right,
       'この先は、次の街エリアで開通します',
     ),
     upExit: connectedExit(
       'life-to-upper',
       'up',
       'branch',
-      range(1220, 1480),
+      lifeGeometry.branchEntrances.up.triggerRange,
       'upper-vending-lane',
       'from-life',
       'right',
     ),
     downExit: closedExit('life-down-closed', 'down', 'branch', null, ''),
     arrowRanges: {
-      up: range(1220, 1480),
+      up: lifeGeometry.branchEntrances.up.triggerRange,
     },
-    assets: areaAssets('life-road'),
+    assets: areaAssets(lifeGeometry),
     metadata: areaMetadata('neighborhood-road'),
   }),
 
@@ -193,30 +201,30 @@ export const M14_AREA_DEFINITIONS = Object.freeze({
     areaId: 'upper-vending-lane',
     displayName: '自販機路地',
     sceneKey: 'M14SideScrollScene',
-    backgroundAssetId: 'm14-bg-upper-vending-lane',
-    worldWidth: upperVendingLaneWidth,
-    groundY: 535,
+    backgroundAssetId: upperGeometry.assets.backgroundAssetId,
+    worldWidth: upperGeometry.worldWidth,
+    groundY: upperGeometry.ground.y,
     cameraBounds: {
       x: 0,
       y: 0,
-      width: upperVendingLaneWidth,
+      width: upperGeometry.worldWidth,
       height: VIEWPORT_HEIGHT,
     },
     spawnPoints: {
-      'from-life': spawn('from-life', 1160, 'right'),
+      'from-life': spawn('from-life', upperGeometry.spawns['from-life']),
     },
     leftExit: closedExit(
       'upper-left-closed',
       'left',
       'boundary',
-      range(0, EDGE_TRIGGER_WIDTH),
+      upperGeometry.edgeTriggers.left,
       'この先は、まだ工事中です',
     ),
     rightExit: closedExit(
       'upper-right-closed',
       'right',
       'boundary',
-      range(upperVendingLaneWidth - EDGE_TRIGGER_WIDTH, upperVendingLaneWidth),
+      upperGeometry.edgeTriggers.right,
       'この先は、まだ工事中です',
     ),
     upExit: closedExit('upper-up-closed', 'up', 'branch', null, ''),
@@ -224,15 +232,15 @@ export const M14_AREA_DEFINITIONS = Object.freeze({
       'upper-to-life',
       'down',
       'branch',
-      range(1040, 1320),
+      upperGeometry.branchEntrances.down.triggerRange,
       'life-road',
       'from-upper',
       'left',
     ),
     arrowRanges: {
-      down: range(1040, 1320),
+      down: upperGeometry.branchEntrances.down.triggerRange,
     },
-    assets: areaAssets('upper-vending-lane'),
+    assets: areaAssets(upperGeometry),
     metadata: areaMetadata('shaded-vending-alley'),
   }),
 });
@@ -244,7 +252,7 @@ export function isM14AreaId(value) {
 export function getM14AreaDefinition(areaId) {
   const area = M14_AREA_DEFINITIONS[areaId];
   if (!area) {
-    throw new RangeError(`Unknown M1.4 area: ${String(areaId)}`);
+    throw new RangeError(`Unknown M1.5 area: ${String(areaId)}`);
   }
   return area;
 }
@@ -253,7 +261,7 @@ export function getM14SpawnPoint(areaId, spawnId) {
   const area = getM14AreaDefinition(areaId);
   const spawnPoint = area.spawnPoints[spawnId];
   if (!spawnPoint) {
-    throw new RangeError(`Unknown M1.4 spawn: ${areaId}/${String(spawnId)}`);
+    throw new RangeError(`Unknown M1.5 spawn: ${areaId}/${String(spawnId)}`);
   }
   return spawnPoint;
 }
