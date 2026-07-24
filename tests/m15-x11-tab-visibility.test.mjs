@@ -233,6 +233,11 @@ test('M1.5 native visibility helper forbids synthetic or minimize paths', async 
   assert.match(source, /sendXdotoolChord\('ctrl\+shift\+Tab'\)/);
   assert.match(source, /context\.waitForEvent\('page'/);
   assert.match(source, /foregroundPage\.goto\('about:blank'/);
+  assert.match(source, /allowInitialHidden = false/);
+  assert.match(
+    source,
+    /allowInitialHidden\s*\?\s*await readVisibility/,
+  );
   assert.doesNotMatch(source, /foregroundPage\.setContent/);
   assert.doesNotMatch(source, /Browser\.setWindowBounds/);
   assert.doesNotMatch(source, /bringToFront/);

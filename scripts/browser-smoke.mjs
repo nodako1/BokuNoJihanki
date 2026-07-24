@@ -1973,26 +1973,124 @@ async function verifyVisibilityAndFreezeRecovery() {
     `CDP frozen state did not suspend the page heartbeat: `
       + `${afterFreezeHeartbeat.maxGapMs}ms < ${minimumSuspensionGapMs}ms.`,
   );
-  await waitForAudioAdvance(beforeFreeze);
-  const afterResume = await pollFromHost(
-    'the actual master gain and BGM position to recover after CDP active',
-    audioDiagnostics,
-    (snapshot) => (
-      snapshot?.sourceId === beforeFreeze.sourceId
-      && snapshot.muted === beforeFreeze.muted
-      && snapshot.lastRecoveryError === null
-      && snapshot.masterGainAutomation?.target > 0
-      && Math.abs(
-        snapshot.masterGain - snapshot.masterGainAutomation.target,
-      ) <= 0.02
+  const afterActive = await waitForAudioAdvance(beforeFreeze);
+  assert(
+    afterActive.sourceId === beforeFreeze.sourceId
+      && afterActive.contextState === 'running'
+      && afterActive.muted === beforeFreeze.muted
+      && afterActive.lastRecoveryError === null
       && cyclicOffsetDelta(
         beforeFreeze.offset,
-        snapshot.offset,
+        afterActive.offset,
         beforeFreeze.duration,
-      ) > 0
-    ),
-    12_000,
+      ) > 0,
+    'CDP active did not resume the same running BGM source.',
   );
+
+  // Page.setWebLifecycleState('active') resumes callbacks and WebAudio, but
+  // Chromium may intentionally leave Page Visibility hidden. Re-select the
+  // only candidate tab through the same real X11 Ctrl+T / Ctrl+Shift+Tab path
+  // used by the hidden-visible proof before requiring audible output gain.
+  const activeTabLifecycle = await captureX11TabVisibilityLifecycle({
+    browser,
+    browserCdpSession,
+    context,
+    candidatePage: page,
+    allowInitialHidden: true,
+    timeoutMs: 12_000,
+    beforeOpen: async ({
+      candidatePage,
+      activationCandidateVisibility,
+    }) => ({
+      activationCandidateVisibility,
+      beforeHidden: await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      ),
+    }),
+    hiddenReady: async ({ candidatePage, settledState }) => {
+      const audio = await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      );
+      if (
+        audio?.sourceId !== beforeFreeze.sourceId
+        || audio?.muted !== beforeFreeze.muted
+        || audio?.documentHidden !== true
+        || audio?.masterGainAutomation?.target !== 0
+        || !Number.isFinite(audio?.masterGain)
+        || audio.masterGain > 0.01
+      ) {
+        return null;
+      }
+      return {
+        candidate: {
+          ...settledState.candidate,
+          audio,
+        },
+        foreground: settledState.foreground,
+      };
+    },
+    whileHidden: async ({ candidatePage }) => (
+      candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      )
+    ),
+    visibleReady: async ({ candidatePage, settledState }) => {
+      const audio = await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      );
+      const target = audio?.masterGainAutomation?.target;
+      if (
+        audio?.sourceId !== beforeFreeze.sourceId
+        || audio?.muted !== beforeFreeze.muted
+        || audio?.documentHidden !== false
+        || audio?.lastRecoveryError !== null
+        || audio?.masterGainAutomation?.reason !== 'visibility-visible'
+        || !Number.isFinite(audio?.masterGain)
+        || !Number.isFinite(target)
+        || !(target > 0)
+        || Math.abs(audio.masterGain - target) > 0.02
+      ) {
+        return null;
+      }
+      return {
+        candidate: {
+          ...settledState.candidate,
+          audio,
+        },
+        foreground: settledState.foreground,
+      };
+    },
+    afterVisible: async ({ readyResult }) => {
+      const visibleBaseline = readyResult?.candidate?.audio;
+      assert(
+        visibleBaseline?.documentHidden === false,
+        'Post-active native visibility baseline is missing.',
+      );
+      const visible = await waitForAudioAdvance(visibleBaseline);
+      return {
+        visible,
+        visibleRecoveryDelta: cyclicOffsetDelta(
+          visibleBaseline.offset,
+          visible.offset,
+          visibleBaseline.duration,
+        ),
+      };
+    },
+  });
+  const activeVisibilityRecovery = {
+    method: 'x11-xdotool-tab-switch',
+    x11TabControl: activeTabLifecycle.x11TabControl,
+    activationCandidateVisibility:
+      activeTabLifecycle.beforeOpenResult.activationCandidateVisibility,
+    beforeHidden: activeTabLifecycle.beforeOpenResult.beforeHidden,
+    hiddenSettledState: activeTabLifecycle.hiddenSettledState,
+    hidden: activeTabLifecycle.whileHiddenResult,
+    visibleSettledState: activeTabLifecycle.visibleSettledState,
+    visible: activeTabLifecycle.afterVisibleResult.visible,
+    visibleRecoveryDelta:
+      activeTabLifecycle.afterVisibleResult.visibleRecoveryDelta,
+  };
+  const afterResume = activeVisibilityRecovery.visible;
   assert(
     afterResume.sourceId === beforeFreeze.sourceId,
     'frozen-active recovery replaced the BGM source.',
@@ -2042,12 +2140,14 @@ async function verifyVisibilityAndFreezeRecovery() {
       heartbeatSuspension: {
         ...frozenMeasurement,
       },
+      afterActive,
+      visibilityRecovery: activeVisibilityRecovery,
       afterResume,
       postActiveInput,
       cdpEvents,
       domEventObserved,
       headlessConstraint:
-        'DOM freeze/resume events are optional; after the CDP command settle margin, zero calibrated heartbeat callbacks in the inner frozen window and post-active callback recovery prove the lifecycle interval.',
+        'DOM freeze/resume events are optional; zero callbacks in the calibrated inner frozen window and post-active callback/audio recovery prove the CDP lifecycle interval, then a real X11 tab cycle restores native visible output.',
       relatedUnitTest:
         'tests/m15-audio-contract.test.mjs — mute, area transition, visibility, freeze and iOS interruption preserve one source',
     },

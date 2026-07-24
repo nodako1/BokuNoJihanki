@@ -75,6 +75,18 @@ run = module.Run(
     device_id="desktop-1280x720",
 )
 module.validate_x11_tab_lifecycle_contract(run, payload["valid"])
+module.validate_x11_tab_lifecycle_contract(
+    run,
+    payload["recovery"],
+    allow_initial_hidden=True,
+)
+try:
+    module.validate_x11_tab_lifecycle_contract(run, payload["recovery"])
+except module.EvidenceError:
+    pass
+else:
+    print("accepted hidden activation without recovery mode", file=sys.stderr)
+    raise SystemExit(4)
 rejected = []
 for item in payload["invalid"]:
     contract = item["contract"]
@@ -190,7 +202,7 @@ function probe(states) {
   );
 }
 
-function x11Contract() {
+function x11Contract({ initialHidden = false } = {}) {
   const browserPid = 12_345;
   const windowId = 4_194_307;
   const wmClass = {
@@ -215,7 +227,9 @@ function x11Contract() {
     masterGain: 0,
     masterGainAutomation: {
       target: 0,
-      reason: 'visibility-hidden',
+      reason: initialHidden
+        ? 'recovery:page-resume'
+        : 'visibility-hidden',
     },
   };
   const visibleSettledAudio = {
@@ -238,8 +252,8 @@ function x11Contract() {
   return {
     method: 'x11-xdotool-tab-switch',
     activationCandidateVisibility: {
-      documentHidden: false,
-      visibilityState: 'visible',
+      documentHidden: initialHidden,
+      visibilityState: initialHidden ? 'hidden' : 'visible',
     },
     x11TabControl: {
       tool: {
@@ -274,8 +288,8 @@ function x11Contract() {
         attemptCount: 1,
         activationSnapshot: snapshot(),
         candidateVisibility: {
-          documentHidden: false,
-          visibilityState: 'visible',
+          documentHidden: initialHidden,
+          visibilityState: initialHidden ? 'hidden' : 'visible',
         },
       },
       contextPageEventObserved: true,
@@ -531,6 +545,7 @@ test('Evidence X11 contract rejects every identity and lifecycle tamper', () => 
 
   const result = probeX11Contract({
     valid,
+    recovery: x11Contract({ initialHidden: true }),
     invalid,
     state: renderState(),
   });

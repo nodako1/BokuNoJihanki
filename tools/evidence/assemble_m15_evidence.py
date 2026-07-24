@@ -987,6 +987,8 @@ def validate_candidate_measurement(
 def validate_x11_tab_lifecycle_contract(
     run: Run,
     hidden_visible: dict[str, Any],
+    *,
+    allow_initial_hidden: bool = False,
 ) -> None:
     """Fail closed on the native X11 tab, focus, visibility, and audio proof."""
     label = f"{run.role}/{run.device_id}"
@@ -1094,6 +1096,21 @@ def validate_x11_tab_lifecycle_contract(
     target_window_id = activation_target["windowId"]
     activation_snapshot = nested(activation, "activationSnapshot")
     activation_visibility = nested(activation, "candidateVisibility")
+    activation_visibility_valid = (
+        isinstance(activation_visibility, dict)
+        and set(activation_visibility) == {"documentHidden", "visibilityState"}
+        and (
+            (
+                activation_visibility.get("documentHidden") is False
+                and activation_visibility.get("visibilityState") == "visible"
+            )
+            or (
+                allow_initial_hidden
+                and activation_visibility.get("documentHidden") is True
+                and activation_visibility.get("visibilityState") == "hidden"
+            )
+        )
+    )
     require(
         isinstance(activation_snapshot, dict)
         and set(activation_snapshot)
@@ -1108,10 +1125,7 @@ def validate_x11_tab_lifecycle_contract(
         and not isinstance(activation_snapshot.get("wmPid"), bool)
         and activation_snapshot["wmPid"] == browser_pid
         and activation_snapshot.get("wmClass") == activation_target["wmClass"]
-        and isinstance(activation_visibility, dict)
-        and set(activation_visibility) == {"documentHidden", "visibilityState"}
-        and activation_visibility.get("documentHidden") is False
-        and activation_visibility.get("visibilityState") == "visible"
+        and activation_visibility_valid
         and isinstance(
             hidden_visible.get("activationCandidateVisibility"),
             dict,
@@ -1228,12 +1242,25 @@ def validate_x11_tab_lifecycle_contract(
         and hidden_candidate_audio.get("documentHidden") is True
         and hidden_candidate_audio.get("sourceId") == before_hidden["sourceId"]
         and hidden_candidate_audio.get("muted") == before_hidden["muted"]
-        and hidden_automation.get("reason") == "visibility-hidden"
+        and (
+            hidden_automation.get("reason") == "visibility-hidden"
+            or (
+                allow_initial_hidden
+                and hidden_automation.get("reason") == "recovery:page-resume"
+            )
+        )
         and finite_number(hidden_automation.get("target"), f"{label}: hidden target")
         == 0
         and finite_number(hidden_audio.get("masterGain"), f"{label}: hidden gain")
         <= 0.01
-        and hidden_candidate_automation.get("reason") == "visibility-hidden"
+        and (
+            hidden_candidate_automation.get("reason") == "visibility-hidden"
+            or (
+                allow_initial_hidden
+                and hidden_candidate_automation.get("reason")
+                == "recovery:page-resume"
+            )
+        )
         and finite_number(
             hidden_candidate_automation.get("target"),
             f"{label}: hidden settled target",
@@ -1879,6 +1906,40 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         nested(frozen, "frozenCommand", "succeeded") is True
         and nested(frozen, "activeCommand", "succeeded") is True,
         f"{run.role}/{run.device_id}: CDP frozen/active command failed.",
+    )
+    before_freeze = nested(frozen, "beforeFreeze")
+    after_active = nested(frozen, "afterActive")
+    active_duration = finite_number(
+        before_freeze.get("duration"),
+        f"{run.role}/{run.device_id}: frozen/active duration",
+    )
+    require(
+        active_duration > 1,
+        f"{run.role}/{run.device_id}: frozen/active duration is invalid.",
+    )
+    active_delta = (
+        finite_number(
+            after_active.get("offset"),
+            f"{run.role}/{run.device_id}: post-active offset",
+        )
+        - finite_number(
+            before_freeze.get("offset"),
+            f"{run.role}/{run.device_id}: pre-freeze offset",
+        )
+    ) % active_duration
+    require(
+        before_freeze.get("sourceId") == after_active.get("sourceId")
+        and after_active.get("contextState") == "running"
+        and after_active.get("muted") == before_freeze.get("muted")
+        and after_active.get("lastRecoveryError") is None
+        and 0.15 <= active_delta < active_duration / 2,
+        f"{run.role}/{run.device_id}: CDP active did not resume the same BGM source.",
+    )
+    visibility_recovery = nested(frozen, "visibilityRecovery")
+    validate_x11_tab_lifecycle_contract(
+        run,
+        visibility_recovery,
+        allow_initial_hidden=True,
     )
     require(
         nested(frozen, "beforeFreeze", "sourceId") == nested(frozen, "afterResume", "sourceId")

@@ -648,6 +648,7 @@ export async function captureX11TabVisibilityLifecycle({
   browserCdpSession,
   context,
   candidatePage,
+  allowInitialHidden = false,
   hiddenReady,
   visibleReady,
   whileHidden,
@@ -664,6 +665,10 @@ export async function captureX11TabVisibilityLifecycle({
   invariant(
     candidatePage && !candidatePage.isClosed(),
     'An open candidate page is required.',
+  );
+  invariant(
+    typeof allowInitialHidden === 'boolean',
+    'allowInitialHidden must be a boolean.',
   );
   invariant(
     hiddenReady === undefined || typeof hiddenReady === 'function',
@@ -716,15 +721,23 @@ export async function captureX11TabVisibilityLifecycle({
     browserPid,
     visibilityTimeoutMs,
   );
-  const activationCandidateVisibility = await waitForPageVisibility(
-    candidatePage,
-    false,
-    visibilityTimeoutMs,
-    'Candidate after initial activation',
-  );
+  const activationCandidateVisibility = allowInitialHidden
+    ? await readVisibility(
+      candidatePage,
+      'Candidate after lifecycle-active X11 activation',
+    )
+    : await waitForPageVisibility(
+      candidatePage,
+      false,
+      visibilityTimeoutMs,
+      'Candidate after initial activation',
+    );
   invariant(
-    activationCandidateVisibility.documentHidden === false
-      && activationCandidateVisibility.visibilityState === 'visible',
+    allowInitialHidden
+      || (
+        activationCandidateVisibility.documentHidden === false
+        && activationCandidateVisibility.visibilityState === 'visible'
+      ),
     'The candidate page is not visible after initial Chrome activation.',
   );
   const initialActivationEvidence = Object.freeze({
