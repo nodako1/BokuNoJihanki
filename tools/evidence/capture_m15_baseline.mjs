@@ -1474,6 +1474,7 @@ async function horizontalTransition({
       notTransitionState: 'idle',
       inputLocked: true,
     });
+    await inputController.stop(direction);
     screenshot = await capture(
       `transition-${String(transitionSequence).padStart(2, '0')}-${exitId}-locked.png`,
     );

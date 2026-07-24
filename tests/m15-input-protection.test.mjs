@@ -490,6 +490,29 @@ test('area transition hard-stop clears touch drift and queued traversal', async 
   system.destroy();
 });
 
+test('baseline capture releases held input before the locked transition screenshot', async () => {
+  const source = await readFile(
+    'tools/evidence/capture_m15_baseline.mjs',
+    'utf8',
+  );
+  const functionStart = source.indexOf('async function horizontalTransition({');
+  const functionEnd = source.indexOf('\nasync function panelTransition({', functionStart);
+  assert.notEqual(functionStart, -1);
+  assert.notEqual(functionEnd, -1);
+
+  const body = source.slice(functionStart, functionEnd);
+  const locked = body.indexOf('locked = await waitForHud({');
+  const release = body.indexOf('await inputController.stop(direction);', locked);
+  const screenshot = body.indexOf('screenshot = await capture(', locked);
+  assert.notEqual(locked, -1);
+  assert.notEqual(release, -1);
+  assert.notEqual(screenshot, -1);
+  assert(
+    locked < release && release < screenshot,
+    'Held transition input must be released before screenshot latency can outlive the fade.',
+  );
+});
+
 test('panel tap rejects hidden, mismatched or unsafe state and accepts a current prompt', async () => {
   const { bridge, system } = await createInputHarness();
   const upPrompt = {
