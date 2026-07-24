@@ -102,6 +102,7 @@ const PANEL_OBSTACLE_SELECTORS = Object.freeze([
 ]);
 const POSITION_TOLERANCE_WORLD_PX = 4;
 const PANEL_POSITION_TOLERANCE_WORLD_PX = 1;
+const HORIZONTAL_EDGE_APPROACH_MARGIN_WORLD_PX = 160;
 
 const records = [];
 const pageErrors = [];
@@ -306,6 +307,69 @@ async function waitForAudioAdvance(before, minimumDelta = 0.15, timeout = 15_000
   return audioDiagnostics();
 }
 
+async function pollAudioLoopBoundary(sourceId, duration) {
+  const timeoutMs = Math.ceil(duration * 750 + 5_000);
+  return page.evaluate(
+    ({ expectedSourceId, expectedDuration, pollTimeoutMs }) => new Promise((resolve, reject) => {
+      const startedAt = performance.now();
+      let previous = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null;
+      let timer = null;
+
+      const finish = (result, error) => {
+        if (timer !== null) window.clearInterval(timer);
+        if (error) {
+          reject(new Error(error));
+          return;
+        }
+        resolve(result);
+      };
+
+      timer = window.setInterval(() => {
+        const current = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null;
+        if (!current || !previous) {
+          finish(null, 'Audio diagnostics disappeared while polling the loop boundary.');
+          return;
+        }
+        if (
+          current.sourceId !== expectedSourceId
+          || previous.sourceId !== expectedSourceId
+        ) {
+          finish(null, 'The BGM source changed while polling the loop boundary.');
+          return;
+        }
+
+        const wrapped = (
+          previous.offset > expectedDuration * 0.7
+          && current.offset < expectedDuration * 0.3
+          && current.offset < previous.offset
+        );
+        if (wrapped) {
+          finish({
+            before: previous,
+            after: current,
+            pollIntervalMs: 25,
+            elapsedMs: performance.now() - startedAt,
+          }, null);
+          return;
+        }
+
+        previous = current;
+        if (performance.now() - startedAt > pollTimeoutMs) {
+          finish(
+            null,
+            `BGM loop boundary was not observed within ${pollTimeoutMs}ms.`,
+          );
+        }
+      }, 25);
+    }),
+    {
+      expectedSourceId: sourceId,
+      expectedDuration: duration,
+      pollTimeoutMs: timeoutMs,
+    },
+  );
+}
+
 async function capture(filename) {
   const target = path.join(outputDir, safeFilename(filename));
   await page.screenshot({ path: target, fullPage: true });
@@ -315,7 +379,7 @@ async function capture(filename) {
 function createInputController(targetPage, targetCdpSession, useTouch) {
   let touchActive = false;
 
-  async function joystickPoint(direction) {
+  async function joystickPoint(direction, magnitude) {
     const joystick = targetPage.getByLabel('左右移動スティック', { exact: true });
     await joystick.waitFor({ state: 'visible' });
     const box = await joystick.boundingBox();
@@ -324,7 +388,7 @@ function createInputController(targetPage, targetCdpSession, useTouch) {
       x: box.x + box.width / 2,
       y: box.y + box.height / 2,
     };
-    const travel = Math.min(56, box.width * 0.38);
+    const travel = Math.min(56, box.width * 0.38) * magnitude;
     return {
       center,
       target: {
@@ -335,7 +399,11 @@ function createInputController(targetPage, targetCdpSession, useTouch) {
   }
 
   return {
-    async start(direction) {
+    async start(direction, magnitude = 1) {
+      assert(
+        Number.isFinite(magnitude) && magnitude > 0 && magnitude <= 1,
+        `Joystick magnitude must be in (0, 1]; received ${magnitude}.`,
+      );
       if (!useTouch) {
         await targetPage.keyboard.down(
           direction === 'right' ? 'ArrowRight' : 'ArrowLeft',
@@ -343,7 +411,7 @@ function createInputController(targetPage, targetCdpSession, useTouch) {
         return;
       }
       assert(!touchActive, 'A prior joystick touch is still active.');
-      const point = await joystickPoint(direction);
+      const point = await joystickPoint(direction, magnitude);
       await targetCdpSession.send('Input.dispatchTouchEvent', {
         type: 'touchStart',
         touchPoints: [{ ...point.center, radiusX: 7, radiusY: 7, force: 1 }],
@@ -423,8 +491,11 @@ async function moveToX(area, targetX, tolerance = POSITION_TOLERANCE_WORLD_PX) {
     if (Math.abs(delta) <= tolerance) return current;
     const direction = delta > 0 ? 'right' : 'left';
     const distance = Math.abs(delta);
+    const precisionMagnitude = touchEnabled && distance <= 42
+      ? Math.max(0.08, Math.min(0.6, distance / 40))
+      : 1;
 
-    await inputController.start(direction);
+    await inputController.start(direction, precisionMagnitude);
     try {
       if (distance > 42) {
         const threshold = direction === 'right'
@@ -437,7 +508,9 @@ async function moveToX(area, targetX, tolerance = POSITION_TOLERANCE_WORLD_PX) {
           ...threshold,
         }, 45_000);
       } else {
-        const pulseMs = Math.max(42, Math.min(170, Math.round(distance * 5)));
+        const pulseMs = touchEnabled
+          ? 220
+          : Math.max(42, Math.min(170, Math.round(distance * 5)));
         await page.waitForTimeout(pulseMs);
       }
     } finally {
@@ -1082,33 +1155,9 @@ async function verifyAudioTimeline() {
   );
   const middle = await audioDiagnostics();
 
-  await page.waitForFunction(
-    ({ sourceId, duration }) => {
-      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
-      return Boolean(
-        diagnostics
-        && diagnostics.sourceId === sourceId
-        && diagnostics.offset >= duration - Math.min(0.45, duration * 0.02),
-      );
-    },
-    { sourceId: start.sourceId, duration: start.duration },
-    { timeout: Math.ceil(start.duration * 1_100), polling: 75 },
-  );
-  const loopBefore = await audioDiagnostics();
-  await page.waitForFunction(
-    ({ sourceId, beforeOffset }) => {
-      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
-      return Boolean(
-        diagnostics
-        && diagnostics.sourceId === sourceId
-        && diagnostics.offset < beforeOffset
-        && diagnostics.offset < 1.5,
-      );
-    },
-    { sourceId: start.sourceId, beforeOffset: loopBefore.offset },
-    { timeout: 5_000, polling: 30 },
-  );
-  const loopAfter = await audioDiagnostics();
+  const loopBoundary = await pollAudioLoopBoundary(start.sourceId, start.duration);
+  const loopBefore = loopBoundary.before;
+  const loopAfter = loopBoundary.after;
   const boundaryDelta = cyclicOffsetDelta(
     loopBefore.offset,
     loopAfter.offset,
@@ -1123,6 +1172,8 @@ async function verifyAudioTimeline() {
     middle,
     loopBefore,
     loopAfter,
+    loopPollIntervalMs: loopBoundary.pollIntervalMs,
+    loopPollElapsedMs: loopBoundary.elapsedMs,
     boundaryDelta,
   };
   return evidence.audio.timeline;
@@ -1371,7 +1422,9 @@ async function verifyVisibilityAndFreezeRecovery() {
 async function navigateToHorizontalEdge(areaId, direction) {
   const geometry = getM15GeometryArea(areaId);
   const range = geometry.edgeTriggers[direction];
-  const targetX = direction === 'right' ? range.minX - 8 : range.maxX + 8;
+  const targetX = direction === 'right'
+    ? range.minX - HORIZONTAL_EDGE_APPROACH_MARGIN_WORLD_PX
+    : range.maxX + HORIZONTAL_EDGE_APPROACH_MARGIN_WORLD_PX;
   return moveToX(areaId, targetX, 6);
 }
 
