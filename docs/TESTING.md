@@ -235,7 +235,7 @@ runtimeの`groundY`をtestの期待値として読み返す自己参照を禁止
 
 loop testは固定sleepや厳しすぎる経過秒判定へ依存せず、境界前後をpollする。objective解析の成功だけで聴感をPASSにしない。
 
-`frozen→active`はCDP commandの成功応答だけでは合格にしない。headed ChromiumをXvfb上で実行し、foregroundで校正した40 ms heartbeatについて、900 msのfrozen区間の両端100 msを除いた内側でcallback 0件、active後のcallback再開、同一audio source、mute保持、offset前進を同時に確認する。headless Chromiumでtimerが継続する場合は正しくFAILとする。
+`frozen→active`はCDP commandの成功応答だけでは合格にしない。AAC-LCを実decodeできるheaded Google ChromeをXvfb上で実行し、foregroundで校正した40 ms heartbeatについて、900 msのfrozen区間の両端100 msを除いた内側でcallback 0件、active後のcallback再開、同一audio source、mute保持、offset前進を同時に確認する。headless Chromiumでtimerが継続する場合や、AAC codecを持たないテスト用Chromiumでdecodeが失敗する場合は正しくFAILとし、実ブラウザのdecode成功へ読み替えない。
 
 ### Browser Smoke matrix
 

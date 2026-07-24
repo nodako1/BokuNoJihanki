@@ -1554,6 +1554,9 @@ for (const marker of [
   'M15_PREVIEW_URL: https://',
   "BROWSER_HEADLESS: 'false'",
   'timeout-minutes: 60',
+  'Select headed Google Chrome with AAC support',
+  'CHROME_PATH="$(command -v google-chrome)"',
+  'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
   'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
 ]) {
   if (!browserWorkflow.includes(marker)) {

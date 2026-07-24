@@ -511,6 +511,9 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'M15_PREVIEW_URL: https://',
     "BROWSER_HEADLESS: 'false'",
     'timeout-minutes: 60',
+    'Select headed Google Chrome with AAC support',
+    'CHROME_PATH="$(command -v google-chrome)"',
+    'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
     'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
   ]) {
     assert.ok(browserWorkflow.includes(marker), marker);

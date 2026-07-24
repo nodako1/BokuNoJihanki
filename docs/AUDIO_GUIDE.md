@@ -84,7 +84,7 @@ BGM sourceはarea遷移ごとに不要な再生成をせず、現在のsourceと
 - mute／unmute: mute中も論理offsetを進め、解除時に対応位置へ復帰
 - area遷移: mute状態、source、offsetを保持
 - hidden→visible: 非表示中の入力と新規効果音を止め、復帰時にBGM状態を再同期
-- frozen→active: headed Chromium＋Xvfbで校正済みheartbeatのfrozen内側callback 0件とactive後の再開を実測し、offset前進とsource継続も確認
+- frozen→active: AAC-LCをdecodeできるheaded Google Chrome＋Xvfbで校正済みheartbeatのfrozen内側callback 0件とactive後の再開を実測し、offset前進とsource継続も確認
 - iOS interrupted→running: user activationが必要な場合を含め、同じmute状態と論理offsetへ復帰
 - BGM busとenvironment bus: 独立gainを持ち、BGM muteや復帰が環境mix定義を破壊しない
 
