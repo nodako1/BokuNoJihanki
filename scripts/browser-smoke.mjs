@@ -1449,17 +1449,30 @@ async function verifyVisibilityAndFreezeRecovery() {
     browserHeadless === false,
     'Native visibility Evidence requires headed Chromium.',
   );
-  const beforeHidden = await audioDiagnostics();
-  const beforeVisibilityHud = await latestHud();
-  const visibilityEventStartIndex = await page.evaluate(
-    () => globalThis.__m15CandidateSmoke?.lifecycleEvents?.length ?? 0,
-  );
+  let beforeOpenEvidence;
   const tabLifecycle = await captureX11TabVisibilityLifecycle({
     browser,
     browserCdpSession,
     context,
     candidatePage: page,
     timeoutMs: 12_000,
+    beforeOpen: async ({ candidatePage, activationCandidateVisibility }) => {
+      const beforeHidden = await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      );
+      assert(beforeHidden, 'Audio diagnostics are unavailable after X11 activation.');
+      const beforeVisibilityHud = await latestHud();
+      const visibilityEventStartIndex = await candidatePage.evaluate(
+        () => globalThis.__m15CandidateSmoke?.lifecycleEvents?.length ?? 0,
+      );
+      beforeOpenEvidence = {
+        activationCandidateVisibility,
+        beforeHidden,
+        beforeVisibilityHud,
+        visibilityEventStartIndex,
+      };
+      return beforeOpenEvidence;
+    },
     hiddenReady: async ({
       candidatePage,
       settledState,
@@ -1489,11 +1502,11 @@ async function verifyVisibilityAndFreezeRecovery() {
         () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
       );
       assert(
-        hidden?.sourceId === beforeHidden.sourceId,
+        hidden?.sourceId === beforeOpenEvidence.beforeHidden.sourceId,
         'hidden state replaced the BGM source.',
       );
       assert(
-        hidden.muted === beforeHidden.muted,
+        hidden.muted === beforeOpenEvidence.beforeHidden.muted,
         'hidden state changed the logical mute setting.',
       );
 
@@ -1573,13 +1586,13 @@ async function verifyVisibilityAndFreezeRecovery() {
       const afterVisibilityHud = await latestHud();
       const staleTraversal = {
         injected: null,
-        before: beforeVisibilityHud,
+        before: beforeOpenEvidence.beforeVisibilityHud,
         after: afterVisibilityHud,
         didNotTransition:
-          afterVisibilityHud.area === beforeVisibilityHud.area
-          && afterVisibilityHud.spawnId === beforeVisibilityHud.spawnId
+          afterVisibilityHud.area === beforeOpenEvidence.beforeVisibilityHud.area
+          && afterVisibilityHud.spawnId === beforeOpenEvidence.beforeVisibilityHud.spawnId
           && afterVisibilityHud.lastTransitionId
-            === beforeVisibilityHud.lastTransitionId
+            === beforeOpenEvidence.beforeVisibilityHud.lastTransitionId
           && afterVisibilityHud.transitionState === 'idle',
       };
       assert(
@@ -1587,11 +1600,11 @@ async function verifyVisibilityAndFreezeRecovery() {
         'A traversal request queued while hidden executed after visibility recovery.',
       );
       assert(
-        visible.sourceId === beforeHidden.sourceId,
+        visible.sourceId === beforeOpenEvidence.beforeHidden.sourceId,
         'hidden-visible recovery replaced the BGM source.',
       );
       assert(
-        visible.muted === beforeHidden.muted,
+        visible.muted === beforeOpenEvidence.beforeHidden.muted,
         'hidden-visible recovery changed the logical mute setting.',
       );
       assert(
@@ -1628,7 +1641,7 @@ async function verifyVisibilityAndFreezeRecovery() {
       globalThis.__m15CandidateSmoke?.lifecycleEvents?.slice(startIndex)
       ?? []
     ),
-    visibilityEventStartIndex,
+    beforeOpenEvidence.visibilityEventStartIndex,
   );
   const hiddenEventIndex = visibilityEvents.findIndex((event) => (
     event.type === 'visibilitychange'
@@ -1647,7 +1660,9 @@ async function verifyVisibilityAndFreezeRecovery() {
   evidence.lifecycle.hiddenVisible = {
     method: 'x11-xdotool-tab-switch',
     x11TabControl: tabLifecycle.x11TabControl,
-    beforeHidden,
+    activationCandidateVisibility:
+      beforeOpenEvidence.activationCandidateVisibility,
+    beforeHidden: beforeOpenEvidence.beforeHidden,
     hiddenSettledState: hiddenState,
     hidden: hiddenAudio,
     visible: visibleAudio,

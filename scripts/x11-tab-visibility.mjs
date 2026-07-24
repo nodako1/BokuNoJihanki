@@ -69,6 +69,33 @@ export function parseX11WindowId(output) {
   return parseBoundedIntegerToken(match[1], 'X11 window ID', X11_ID_MAX);
 }
 
+export function parseX11WindowList(output) {
+  invariant(typeof output === 'string', 'X11 window list output must be a string.');
+  const match = output.trim().match(
+    /^_NET_CLIENT_LIST\(WINDOW\): window id # (.+)$/,
+  );
+  invariant(
+    match !== null,
+    '_NET_CLIENT_LIST must contain one or more X11 window IDs.',
+  );
+  const tokens = match[1].split(', ');
+  invariant(
+    tokens.length > 0
+      && tokens.every((token) => /^(?:0x[0-9a-f]+|[0-9]+)$/i.test(token)),
+    '_NET_CLIENT_LIST contains an invalid X11 window ID.',
+  );
+  const windowIds = tokens.map((token) => parseBoundedIntegerToken(
+    token,
+    '_NET_CLIENT_LIST window ID',
+    X11_ID_MAX,
+  ));
+  invariant(
+    new Set(windowIds).size === windowIds.length,
+    '_NET_CLIENT_LIST contains duplicate X11 window IDs.',
+  );
+  return Object.freeze(windowIds);
+}
+
 export function parseWmPid(output) {
   invariant(typeof output === 'string', 'WM PID output must be a string.');
   const match = output.trim().match(
@@ -82,7 +109,7 @@ export function parseWmPid(output) {
   );
 }
 
-export function parseWmClass(output) {
+export function parseWmClassRecord(output) {
   invariant(typeof output === 'string', 'WM_CLASS output must be a string.');
   const match = output.trim().match(
     /^WM_CLASS\(STRING\) = "([^"\r\n]+)", "([^"\r\n]+)"$/,
@@ -91,10 +118,22 @@ export function parseWmClass(output) {
     match !== null,
     'WM_CLASS output must contain exactly one instance and class.',
   );
-  const wmClass = Object.freeze({
+  return Object.freeze({
     instance: match[1],
     class: match[2],
   });
+}
+
+function isGoogleChromeWmClass(wmClass) {
+  return (
+    wmClass
+    && /^google-chrome(?:-stable)?$/i.test(wmClass.instance)
+    && /^Google-chrome$/i.test(wmClass.class)
+  );
+}
+
+export function parseWmClass(output) {
+  const wmClass = parseWmClassRecord(output);
   invariant(
     /^google-chrome(?:-stable)?$/i.test(wmClass.instance),
     'The active X11 window is not a Google Chrome instance.',
@@ -104,6 +143,35 @@ export function parseWmClass(output) {
     'The active X11 window is not the Google Chrome window class.',
   );
   return wmClass;
+}
+
+export function selectSingleChromeX11Client(
+  clientIdentities,
+  expectedBrowserPid,
+) {
+  invariant(
+    Array.isArray(clientIdentities),
+    'X11 client identities must be an array.',
+  );
+  boundedPositiveInteger(expectedBrowserPid, 'Expected CDP browser PID');
+  const browserPidClients = clientIdentities.filter(
+    (identity) => identity?.wmPid === expectedBrowserPid,
+  );
+  invariant(
+    browserPidClients.every((identity) => (
+      isGoogleChromeWmClass(identity.wmClass)
+    )),
+    'An X11 client for the CDP browser PID has a non-Chrome WM_CLASS.',
+  );
+  invariant(
+    browserPidClients.length === 1,
+    'The root X11 client list must contain exactly one Google Chrome window '
+      + 'for the CDP browser PID.',
+  );
+  return Object.freeze({
+    ...browserPidClients[0],
+    wmClass: Object.freeze({ ...browserPidClients[0].wmClass }),
+  });
 }
 
 async function runFixedCommand(command, args) {
@@ -167,6 +235,134 @@ async function readActiveX11Snapshot(expectedBrowserPid) {
     rootActiveWindowId,
     wmPid,
     wmClass,
+  });
+}
+
+async function readX11ClientIdentity(windowId, expectedBrowserPid) {
+  const windowIdArgument = `0x${windowId.toString(16)}`;
+  let wmPid;
+  try {
+    const pidOutput = await runFixedCommand('xprop', [
+      '-id',
+      windowIdArgument,
+      '_NET_WM_PID',
+    ]);
+    wmPid = parseWmPid(pidOutput);
+  } catch {
+    return Object.freeze({
+      windowId,
+      wmPid: null,
+      wmClass: null,
+    });
+  }
+  if (wmPid !== expectedBrowserPid) {
+    return Object.freeze({
+      windowId,
+      wmPid,
+      wmClass: null,
+    });
+  }
+  const classOutput = await runFixedCommand('xprop', [
+    '-id',
+    windowIdArgument,
+    'WM_CLASS',
+  ]);
+  return Object.freeze({
+    windowId,
+    wmPid,
+    wmClass: parseWmClassRecord(classOutput),
+  });
+}
+
+async function discoverChromeX11Client(expectedBrowserPid) {
+  const clientWindowIds = parseX11WindowList(
+    await runFixedCommand('xprop', ['-root', '_NET_CLIENT_LIST']),
+  );
+  const inspected = await Promise.all(
+    clientWindowIds.map((windowId) => readX11ClientIdentity(
+      windowId,
+      expectedBrowserPid,
+    )),
+  );
+  const browserPidClientIdentities = inspected.filter(
+    (identity) => identity.wmPid === expectedBrowserPid,
+  );
+  const matchingChromeWindows = browserPidClientIdentities.filter(
+    (identity) => isGoogleChromeWmClass(identity.wmClass),
+  );
+  const target = selectSingleChromeX11Client(
+    inspected,
+    expectedBrowserPid,
+  );
+  return Object.freeze({
+    discoveryMethod: '_NET_CLIENT_LIST + _NET_WM_PID + WM_CLASS',
+    discoveryProperty: '_NET_CLIENT_LIST',
+    observedClientWindowCount: clientWindowIds.length,
+    browserPidClientCount: browserPidClientIdentities.length,
+    matchingChromeWindowCount: matchingChromeWindows.length,
+    browserPidClientIdentities: Object.freeze(
+      browserPidClientIdentities.map((identity) => Object.freeze({
+        ...identity,
+        wmClass: Object.freeze({ ...identity.wmClass }),
+      })),
+    ),
+    target,
+  });
+}
+
+async function waitForChromeX11Client(expectedBrowserPid, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastError;
+  while (Date.now() <= deadline) {
+    try {
+      return await discoverChromeX11Client(expectedBrowserPid);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, POLL_INTERVAL_MS);
+    });
+  }
+  throw new Error(
+    'The selected Google Chrome X11 client window was not discovered: '
+      + `${lastError?.message ?? 'unknown X11 client-list failure'}`,
+    { cause: lastError },
+  );
+}
+
+async function activateChromeX11Client(expectedBrowserPid, timeoutMs) {
+  const discovery = await waitForChromeX11Client(
+    expectedBrowserPid,
+    timeoutMs,
+  );
+  const targetWindowId = discovery.target.windowId;
+  const command = {
+    action: 'windowactivate',
+    sync: true,
+    attemptCount: 1,
+    targetWindowId,
+    succeeded: false,
+  };
+  await runFixedCommand('xdotool', [
+    'windowactivate',
+    '--sync',
+    `0x${targetWindowId.toString(16)}`,
+  ]);
+  command.succeeded = true;
+  const activeSnapshot = await waitForActiveX11Snapshot(
+    expectedBrowserPid,
+    timeoutMs,
+    'After initial Chrome activation',
+  );
+  invariant(
+    activeSnapshot.xdotoolActiveWindowId === targetWindowId
+      && activeSnapshot.rootActiveWindowId === targetWindowId,
+    'Initial X11 activation did not select the discovered Chrome window.',
+  );
+  return Object.freeze({
+    discovery,
+    command: Object.freeze({ ...command }),
+    activeSnapshot,
   });
 }
 
@@ -244,6 +440,33 @@ async function readVisibility(page, label) {
     `${label} did not expose a valid Page Visibility state.`,
   );
   return result;
+}
+
+async function waitForPageVisibility(
+  page,
+  expectedHidden,
+  timeoutMs,
+  label,
+) {
+  const deadline = Date.now() + timeoutMs;
+  let lastVisibility;
+  while (Date.now() <= deadline) {
+    lastVisibility = await readVisibility(page, label);
+    if (
+      lastVisibility.documentHidden === expectedHidden
+      && lastVisibility.visibilityState
+        === (expectedHidden ? 'hidden' : 'visible')
+    ) {
+      return lastVisibility;
+    }
+    await new Promise((resolve) => {
+      setTimeout(resolve, POLL_INTERVAL_MS);
+    });
+  }
+  throw new Error(
+    `${label} did not reach ${expectedHidden ? 'hidden' : 'visible'}: `
+      + `${JSON.stringify(lastVisibility)}.`,
+  );
 }
 
 async function pollVisibilityPair({
@@ -345,6 +568,7 @@ export async function captureX11TabVisibilityLifecycle({
   visibleReady,
   whileHidden,
   afterVisible,
+  beforeOpen,
   timeoutMs = 12_000,
 }) {
   invariant(browser?.isConnected(), 'The Chromium browser is not connected.');
@@ -373,6 +597,10 @@ export async function captureX11TabVisibilityLifecycle({
     afterVisible === undefined || typeof afterVisible === 'function',
     'afterVisible must be a function when provided.',
   );
+  invariant(
+    beforeOpen === undefined || typeof beforeOpen === 'function',
+    'beforeOpen must be a function when provided.',
+  );
   const visibilityTimeoutMs = normalizeTimeout(timeoutMs);
 
   const browserPid = await readBrowserPid(browserCdpSession);
@@ -399,7 +627,37 @@ export async function captureX11TabVisibilityLifecycle({
     'The X11 lifecycle probe requires exactly one initial context page.',
   );
 
+  const initialActivation = await activateChromeX11Client(
+    browserPid,
+    visibilityTimeoutMs,
+  );
+  const activationCandidateVisibility = await waitForPageVisibility(
+    candidatePage,
+    false,
+    visibilityTimeoutMs,
+    'Candidate after initial activation',
+  );
+  invariant(
+    activationCandidateVisibility.documentHidden === false
+      && activationCandidateVisibility.visibilityState === 'visible',
+    'The candidate page is not visible after initial Chrome activation.',
+  );
+  const initialActivationEvidence = Object.freeze({
+    ...initialActivation.discovery,
+    attemptCount: 1,
+    activationSnapshot: initialActivation.activeSnapshot,
+    candidateVisibility: Object.freeze({
+      ...activationCandidateVisibility,
+    }),
+  });
+  const beforeOpenResult = beforeOpen
+    ? await beforeOpen({
+      candidatePage,
+      activationCandidateVisibility,
+    })
+    : undefined;
   const commands = {
+    activateWindow: initialActivation.command,
     openTab: {
       gesture: 'Ctrl+T',
       succeeded: false,
@@ -413,10 +671,12 @@ export async function captureX11TabVisibilityLifecycle({
     beforeOpen: await waitForActiveX11Snapshot(
       browserPid,
       visibilityTimeoutMs,
-      'Before Ctrl+T',
+      'Immediately before Ctrl+T',
     ),
+    atOpenCommand: null,
     afterOpen: null,
     beforeReturn: null,
+    atReturnCommand: null,
     afterReturn: null,
     afterCleanup: null,
   };
@@ -435,6 +695,9 @@ export async function captureX11TabVisibilityLifecycle({
   const cleanupErrors = [];
 
   try {
+    assertSameActiveWindow(initialActivation.activeSnapshot, {
+      beforeOpen: x11Snapshots.beforeOpen,
+    });
     const pagesBeforeOpen = new Set(context.pages());
     const foregroundPagePromise = context.waitForEvent('page', {
       predicate: (openedPage) => !pagesBeforeOpen.has(openedPage),
@@ -443,6 +706,14 @@ export async function captureX11TabVisibilityLifecycle({
     // Attach a rejection handler before emitting the keyboard gesture so a
     // command failure cannot leave the armed Playwright event unobserved.
     foregroundPagePromise.catch(() => {});
+    x11Snapshots.atOpenCommand = await waitForActiveX11Snapshot(
+      browserPid,
+      visibilityTimeoutMs,
+      'At Ctrl+T command',
+    );
+    assertSameActiveWindow(x11Snapshots.beforeOpen, {
+      atOpenCommand: x11Snapshots.atOpenCommand,
+    });
     await sendXdotoolChord('ctrl+t');
     commands.openTab.succeeded = true;
     foregroundPage = await foregroundPagePromise;
@@ -527,6 +798,14 @@ export async function captureX11TabVisibilityLifecycle({
     assertSameActiveWindow(x11Snapshots.beforeOpen, {
       beforeReturn: x11Snapshots.beforeReturn,
     });
+    x11Snapshots.atReturnCommand = await waitForActiveX11Snapshot(
+      browserPid,
+      visibilityTimeoutMs,
+      'At Ctrl+Shift+Tab command',
+    );
+    assertSameActiveWindow(x11Snapshots.beforeOpen, {
+      atReturnCommand: x11Snapshots.atReturnCommand,
+    });
     await sendXdotoolChord('ctrl+shift+Tab');
     commands.returnTab.succeeded = true;
 
@@ -573,8 +852,10 @@ export async function captureX11TabVisibilityLifecycle({
     assertSameActiveWindow(x11Snapshots.beforeOpen, {
       afterCleanup: x11Snapshots.afterCleanup,
     });
-    const finalCandidateVisibility = await readVisibility(
+    const finalCandidateVisibility = await waitForPageVisibility(
       candidatePage,
+      false,
+      visibilityTimeoutMs,
       'Candidate',
     );
     invariant(
@@ -591,26 +872,6 @@ export async function captureX11TabVisibilityLifecycle({
         (page) => page !== candidatePage && !page.isClosed(),
       );
       if (extraPages.length > 0) {
-        try {
-          const candidateVisibility = await readVisibility(
-            candidatePage,
-            'Candidate',
-          );
-          if (candidateVisibility.documentHidden) {
-            await sendXdotoolChord('ctrl+shift+Tab');
-            commands.returnTab.succeeded = true;
-            await pollVisibilityPair({
-              candidatePage,
-              foregroundPage: extraPages[0],
-              expectedCandidateHidden: false,
-              ready: undefined,
-              timeoutMs: visibilityTimeoutMs,
-              label: 'Failure cleanup Ctrl+Shift+Tab',
-            });
-          }
-        } catch (error) {
-          cleanupErrors.push(error);
-        }
         for (const extraPage of extraPages) {
           try {
             await extraPage.close({ runBeforeUnload: false });
@@ -626,8 +887,10 @@ export async function captureX11TabVisibilityLifecycle({
           pageCounts.afterCleanup === 1,
           'Failure cleanup did not restore exactly one context page.',
         );
-        const finalCandidateVisibility = await readVisibility(
+        const finalCandidateVisibility = await waitForPageVisibility(
           candidatePage,
+          false,
+          visibilityTimeoutMs,
           'Candidate',
         );
         invariant(
@@ -662,22 +925,27 @@ export async function captureX11TabVisibilityLifecycle({
       browserPid,
       candidateTarget,
       foregroundTarget,
+      initialActivation: initialActivationEvidence,
       contextPageEventObserved,
       pageCounts: Object.freeze({ ...pageCounts }),
       commands: {
+        activateWindow: commands.activateWindow,
         openTab: Object.freeze({ ...commands.openTab }),
         returnTab: Object.freeze({ ...commands.returnTab }),
       },
       x11Snapshots: {
         beforeOpen: x11Snapshots.beforeOpen,
+        atOpenCommand: x11Snapshots.atOpenCommand,
         afterOpen: x11Snapshots.afterOpen,
         beforeReturn: x11Snapshots.beforeReturn,
+        atReturnCommand: x11Snapshots.atReturnCommand,
         afterReturn: x11Snapshots.afterReturn,
         afterCleanup: x11Snapshots.afterCleanup,
       },
       foregroundClosed,
       cleanupComplete,
     },
+    beforeOpenResult,
     hiddenSettledState,
     visibleSettledState,
     hiddenReadyResult,

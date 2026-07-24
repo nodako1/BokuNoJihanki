@@ -159,39 +159,42 @@ async function main() {
         + '<main data-m15-x11-candidate>Native visibility candidate</main>',
       { waitUntil: 'load' },
     );
-    await candidatePage.evaluate(() => {
-      const events = [{
-        sequence: 0,
-        type: 'initial',
-        documentHidden: document.hidden,
-        visibilityState: document.visibilityState,
-      }];
-      globalThis.__m15X11VisibilityEvents = events;
-      document.addEventListener('visibilitychange', () => {
-        events.push({
-          sequence: events.length,
-          type: 'visibilitychange',
-          documentHidden: document.hidden,
-          visibilityState: document.visibilityState,
-        });
-      });
-    });
-    const initialVisibility = await candidatePage.evaluate(() => ({
-      documentHidden: document.hidden,
-      visibilityState: document.visibilityState,
-    }));
-    invariant(
-      initialVisibility.documentHidden === false
-        && initialVisibility.visibilityState === 'visible',
-      'The preflight candidate did not start visible.',
-    );
-
     const lifecycle = await captureX11TabVisibilityLifecycle({
       browser,
       browserCdpSession,
       context,
       candidatePage,
       timeoutMs: 12_000,
+      beforeOpen: async ({
+        candidatePage: activatedPage,
+        activationCandidateVisibility,
+      }) => {
+        invariant(
+          activationCandidateVisibility.documentHidden === false
+            && activationCandidateVisibility.visibilityState === 'visible',
+          'The preflight candidate is not visible after Chrome activation.',
+        );
+        await activatedPage.evaluate(() => {
+          const events = [{
+            sequence: 0,
+            type: 'initial',
+            documentHidden: document.hidden,
+            visibilityState: document.visibilityState,
+          }];
+          globalThis.__m15X11VisibilityEvents = events;
+          document.addEventListener('visibilitychange', () => {
+            events.push({
+              sequence: events.length,
+              type: 'visibilitychange',
+              documentHidden: document.hidden,
+              visibilityState: document.visibilityState,
+            });
+          });
+        });
+        return {
+          initialVisibility: activationCandidateVisibility,
+        };
+      },
       hiddenReady: async ({ candidatePage: observedPage }) => {
         const events = await lifecycleEvents(observedPage);
         const hiddenObserved = events.some((event) => (
@@ -213,6 +216,7 @@ async function main() {
         }
       },
     });
+    const initialVisibility = lifecycle.beforeOpenResult.initialVisibility;
     const events = lifecycle.visibleReadyResult.lifecycleEvents;
     const eventOrder = validateLifecycleEvents(events);
     result = {

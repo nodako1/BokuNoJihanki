@@ -555,6 +555,329 @@ def validate_candidate_measurement(
     )
 
 
+def validate_x11_tab_lifecycle_contract(
+    run: Run,
+    hidden_visible: dict[str, Any],
+) -> None:
+    """Fail closed on the native X11 tab, focus, visibility, and audio proof."""
+    label = f"{run.role}/{run.device_id}"
+
+    def chrome_wm_class(value: Any) -> bool:
+        return (
+            isinstance(value, dict)
+            and set(value) == {"instance", "class"}
+            and isinstance(value.get("instance"), str)
+            and re.fullmatch(
+                r"google-chrome(?:-stable)?",
+                value["instance"],
+                flags=re.IGNORECASE,
+            )
+            is not None
+            and isinstance(value.get("class"), str)
+            and re.fullmatch(
+                r"Google-chrome",
+                value["class"],
+                flags=re.IGNORECASE,
+            )
+            is not None
+        )
+
+    require(
+        hidden_visible.get("method") == "x11-xdotool-tab-switch"
+        and "windowControl" not in hidden_visible
+        and "minimiz" not in json.dumps(hidden_visible, ensure_ascii=True).lower(),
+        f"{label}: native X11 tab-switch method is invalid.",
+    )
+    tab_control = nested(hidden_visible, "x11TabControl")
+    browser_pid = tab_control.get("browserPid")
+    tool = nested(tab_control, "tool")
+    require(
+        isinstance(browser_pid, int)
+        and not isinstance(browser_pid, bool)
+        and browser_pid > 0
+        and tool.get("name") == "xdotool"
+        and isinstance(tool.get("version"), str)
+        and bool(tool["version"].strip()),
+        f"{label}: X11 control tool or browser PID is invalid.",
+    )
+
+    candidate_target = nested(tab_control, "candidateTarget")
+    foreground_target = nested(tab_control, "foregroundTarget")
+    require(
+        isinstance(candidate_target.get("targetId"), str)
+        and bool(candidate_target["targetId"])
+        and isinstance(foreground_target.get("targetId"), str)
+        and bool(foreground_target["targetId"])
+        and candidate_target["targetId"] != foreground_target["targetId"]
+        and isinstance(candidate_target.get("browserWindowId"), int)
+        and not isinstance(candidate_target.get("browserWindowId"), bool)
+        and candidate_target["browserWindowId"] > 0
+        and foreground_target.get("browserWindowId")
+        == candidate_target["browserWindowId"]
+        and foreground_target.get("internalNewTab") is True
+        and tab_control.get("contextPageEventObserved") is True,
+        f"{label}: CDP target/window identity is invalid.",
+    )
+
+    activation = nested(tab_control, "initialActivation")
+    activation_target = nested(activation, "target")
+    identities = activation.get("browserPidClientIdentities")
+    browser_pid_client_count = activation.get("browserPidClientCount")
+    matching_chrome_window_count = activation.get("matchingChromeWindowCount")
+    activation_attempt_count = activation.get("attemptCount")
+    require(
+        activation.get("discoveryMethod")
+        == "_NET_CLIENT_LIST + _NET_WM_PID + WM_CLASS"
+        and activation.get("discoveryProperty") == "_NET_CLIENT_LIST"
+        and isinstance(activation.get("observedClientWindowCount"), int)
+        and not isinstance(activation.get("observedClientWindowCount"), bool)
+        and activation["observedClientWindowCount"] >= 1
+        and isinstance(browser_pid_client_count, int)
+        and not isinstance(browser_pid_client_count, bool)
+        and browser_pid_client_count == 1
+        and isinstance(matching_chrome_window_count, int)
+        and not isinstance(matching_chrome_window_count, bool)
+        and matching_chrome_window_count == 1
+        and isinstance(activation_attempt_count, int)
+        and not isinstance(activation_attempt_count, bool)
+        and activation_attempt_count == 1
+        and isinstance(identities, list)
+        and len(identities) == 1
+        and identities[0] == activation_target
+        and isinstance(activation_target.get("windowId"), int)
+        and not isinstance(activation_target.get("windowId"), bool)
+        and activation_target["windowId"] > 0
+        and isinstance(activation_target.get("wmPid"), int)
+        and not isinstance(activation_target.get("wmPid"), bool)
+        and activation_target["wmPid"] == browser_pid
+        and chrome_wm_class(activation_target.get("wmClass")),
+        f"{label}: singleton browser-PID Chrome X11 client is invalid.",
+    )
+    target_window_id = activation_target["windowId"]
+    activation_snapshot = nested(activation, "activationSnapshot")
+    activation_visibility = nested(activation, "candidateVisibility")
+    require(
+        isinstance(activation_snapshot, dict)
+        and set(activation_snapshot)
+        == {"xdotoolActiveWindowId", "rootActiveWindowId", "wmPid", "wmClass"}
+        and isinstance(activation_snapshot.get("xdotoolActiveWindowId"), int)
+        and not isinstance(activation_snapshot.get("xdotoolActiveWindowId"), bool)
+        and activation_snapshot["xdotoolActiveWindowId"] == target_window_id
+        and isinstance(activation_snapshot.get("rootActiveWindowId"), int)
+        and not isinstance(activation_snapshot.get("rootActiveWindowId"), bool)
+        and activation_snapshot["rootActiveWindowId"] == target_window_id
+        and isinstance(activation_snapshot.get("wmPid"), int)
+        and not isinstance(activation_snapshot.get("wmPid"), bool)
+        and activation_snapshot["wmPid"] == browser_pid
+        and activation_snapshot.get("wmClass") == activation_target["wmClass"]
+        and isinstance(activation_visibility, dict)
+        and set(activation_visibility) == {"documentHidden", "visibilityState"}
+        and activation_visibility.get("documentHidden") is False
+        and activation_visibility.get("visibilityState") == "visible"
+        and isinstance(
+            hidden_visible.get("activationCandidateVisibility"),
+            dict,
+        )
+        and hidden_visible["activationCandidateVisibility"]
+        == activation_visibility,
+        f"{label}: initial X11 activation snapshot is invalid.",
+    )
+
+    page_counts = nested(tab_control, "pageCounts")
+    require(
+        isinstance(page_counts, dict)
+        and set(page_counts) == {"before", "afterOpen", "afterCleanup"}
+        and all(
+            isinstance(page_counts[key], int)
+            and not isinstance(page_counts[key], bool)
+            for key in page_counts
+        )
+        and page_counts == {"before": 1, "afterOpen": 2, "afterCleanup": 1},
+        f"{label}: X11 page-count lifecycle is not 1 -> 2 -> 1.",
+    )
+    commands = nested(tab_control, "commands")
+    activation_command = nested(commands, "activateWindow")
+    activation_command_attempt_count = activation_command.get("attemptCount")
+    require(
+        isinstance(activation_command, dict)
+        and set(activation_command)
+        == {"action", "sync", "attemptCount", "targetWindowId", "succeeded"}
+        and activation_command.get("action") == "windowactivate"
+        and activation_command.get("sync") is True
+        and isinstance(activation_command_attempt_count, int)
+        and not isinstance(activation_command_attempt_count, bool)
+        and activation_command_attempt_count == 1
+        and isinstance(activation_command.get("targetWindowId"), int)
+        and not isinstance(activation_command.get("targetWindowId"), bool)
+        and activation_command["targetWindowId"] == target_window_id
+        and activation_command.get("succeeded") is True
+        and nested(commands, "openTab", "gesture") == "Ctrl+T"
+        and nested(commands, "openTab", "succeeded") is True
+        and nested(commands, "returnTab", "gesture") == "Ctrl+Shift+Tab"
+        and nested(commands, "returnTab", "succeeded") is True,
+        f"{label}: X11 activation or tab gestures are invalid.",
+    )
+
+    snapshots = nested(tab_control, "x11Snapshots")
+    snapshot_names = {
+        "beforeOpen",
+        "atOpenCommand",
+        "afterOpen",
+        "beforeReturn",
+        "atReturnCommand",
+        "afterReturn",
+        "afterCleanup",
+    }
+    require(
+        isinstance(snapshots, dict) and set(snapshots) == snapshot_names,
+        f"{label}: active-window snapshot coverage is incomplete.",
+    )
+    for snapshot_name in snapshot_names:
+        snapshot = nested(snapshots, snapshot_name)
+        require(
+            isinstance(snapshot.get("xdotoolActiveWindowId"), int)
+            and not isinstance(snapshot.get("xdotoolActiveWindowId"), bool)
+            and snapshot["xdotoolActiveWindowId"] == target_window_id
+            and isinstance(snapshot.get("rootActiveWindowId"), int)
+            and not isinstance(snapshot.get("rootActiveWindowId"), bool)
+            and snapshot["rootActiveWindowId"] == target_window_id
+            and isinstance(snapshot.get("wmPid"), int)
+            and not isinstance(snapshot.get("wmPid"), bool)
+            and snapshot["wmPid"] == browser_pid
+            and chrome_wm_class(snapshot.get("wmClass")),
+            f"{label}: {snapshot_name} does not identify the activated Chrome window.",
+        )
+    require(
+        tab_control.get("foregroundClosed") is True
+        and tab_control.get("cleanupComplete") is True,
+        f"{label}: X11 witness cleanup is incomplete.",
+    )
+
+    before_hidden = nested(hidden_visible, "beforeHidden")
+    hidden_audio = nested(hidden_visible, "hidden")
+    visible_audio = nested(hidden_visible, "visible")
+    require(
+        all(
+            item.get("sourceId") == before_hidden.get("sourceId")
+            for item in (hidden_audio, visible_audio)
+        )
+        and isinstance(before_hidden.get("sourceId"), str)
+        and bool(before_hidden["sourceId"])
+        and all(
+            item.get("muted") == before_hidden.get("muted")
+            for item in (hidden_audio, visible_audio)
+        )
+        and isinstance(before_hidden.get("muted"), bool),
+        f"{label}: hidden/visible source or mute state changed.",
+    )
+
+    hidden_settled = nested(hidden_visible, "hiddenSettledState")
+    hidden_candidate = nested(hidden_settled, "candidate")
+    hidden_foreground = nested(hidden_settled, "foreground")
+    hidden_candidate_audio = nested(hidden_candidate, "audio")
+    hidden_automation = nested(hidden_audio, "masterGainAutomation")
+    hidden_candidate_automation = nested(
+        hidden_candidate_audio,
+        "masterGainAutomation",
+    )
+    require(
+        hidden_candidate.get("documentHidden") is True
+        and hidden_candidate.get("visibilityState") == "hidden"
+        and isinstance(hidden_foreground, dict)
+        and hidden_foreground.get("documentHidden") is False
+        and hidden_foreground.get("visibilityState") == "visible"
+        and hidden_audio.get("documentHidden") is True
+        and hidden_candidate_audio.get("documentHidden") is True
+        and hidden_candidate_audio.get("sourceId") == before_hidden["sourceId"]
+        and hidden_candidate_audio.get("muted") == before_hidden["muted"]
+        and hidden_automation.get("reason") == "visibility-hidden"
+        and finite_number(hidden_automation.get("target"), f"{label}: hidden target")
+        == 0
+        and finite_number(hidden_audio.get("masterGain"), f"{label}: hidden gain")
+        <= 0.01
+        and hidden_candidate_automation.get("reason") == "visibility-hidden"
+        and finite_number(
+            hidden_candidate_automation.get("target"),
+            f"{label}: hidden settled target",
+        )
+        == 0
+        and finite_number(
+            hidden_candidate_audio.get("masterGain"),
+            f"{label}: hidden settled gain",
+        )
+        <= 0.01,
+        f"{label}: mutually hidden candidate audio did not settle.",
+    )
+
+    visible_settled = nested(hidden_visible, "visibleSettledState")
+    visible_candidate = nested(visible_settled, "candidate")
+    visible_foreground = nested(visible_settled, "foreground")
+    visible_candidate_audio = nested(visible_candidate, "audio")
+    visible_automation = nested(visible_audio, "masterGainAutomation")
+    visible_candidate_automation = nested(
+        visible_candidate_audio,
+        "masterGainAutomation",
+    )
+    visible_target = finite_number(
+        visible_automation.get("target"),
+        f"{label}: visible target",
+    )
+    visible_gain = finite_number(
+        visible_audio.get("masterGain"),
+        f"{label}: visible gain",
+    )
+    visible_candidate_target = finite_number(
+        visible_candidate_automation.get("target"),
+        f"{label}: visible settled target",
+    )
+    visible_candidate_gain = finite_number(
+        visible_candidate_audio.get("masterGain"),
+        f"{label}: visible settled gain",
+    )
+    require(
+        visible_candidate.get("documentHidden") is False
+        and visible_candidate.get("visibilityState") == "visible"
+        and isinstance(visible_foreground, dict)
+        and visible_foreground.get("documentHidden") is True
+        and visible_foreground.get("visibilityState") == "hidden"
+        and visible_audio.get("documentHidden") is False
+        and visible_candidate_audio.get("documentHidden") is False
+        and visible_candidate_audio.get("sourceId") == before_hidden["sourceId"]
+        and visible_candidate_audio.get("muted") == before_hidden["muted"]
+        and visible_audio.get("lastRecoveryError") is None
+        and visible_automation.get("reason") == "visibility-visible"
+        and visible_target > 0
+        and abs(visible_gain - visible_target) <= 0.02
+        and visible_candidate_automation.get("reason") == "visibility-visible"
+        and visible_candidate_target > 0
+        and abs(visible_candidate_gain - visible_candidate_target) <= 0.02,
+        f"{label}: mutually visible candidate audio did not recover.",
+    )
+    duration = finite_number(
+        visible_candidate_audio.get("duration"),
+        f"{label}: visible duration",
+    )
+    require(duration > 1, f"{label}: visible duration is invalid.")
+    start_offset = finite_number(
+        visible_candidate_audio.get("offset"),
+        f"{label}: visible settled offset",
+    )
+    resumed_offset = finite_number(
+        visible_audio.get("offset"),
+        f"{label}: resumed visible offset",
+    )
+    recomputed_delta = (resumed_offset - start_offset) % duration
+    recorded_delta = finite_number(
+        hidden_visible.get("visibleRecoveryDelta"),
+        f"{label}: recorded visible recovery delta",
+    )
+    require(
+        0.15 <= recomputed_delta < duration / 2
+        and math.isclose(recorded_delta, recomputed_delta, abs_tol=1e-6),
+        f"{label}: visible recovery offset delta is invalid.",
+    )
+
+
 def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     timeline = nested(run.state, "evidence", "audio", "timeline")
     names = ("start", "startedForward", "middle", "loopBefore", "loopAfter")
@@ -644,6 +967,7 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         f"{run.role}/{run.device_id}: native browser backgrounding was not enabled.",
     )
     hidden_visible = nested(lifecycle, "hiddenVisible")
+    validate_x11_tab_lifecycle_contract(run, hidden_visible)
     require(
         hidden_visible.get("method") == "x11-xdotool-tab-switch",
         f"{run.role}/{run.device_id}: visibility recovery did not use a real X11 Chrome tab switch.",
@@ -662,6 +986,7 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     browser_pid = tab_control.get("browserPid")
     candidate_target = nested(tab_control, "candidateTarget")
     foreground_target = nested(tab_control, "foregroundTarget")
+    initial_activation = nested(tab_control, "initialActivation")
     require(
         isinstance(tool, dict)
         and isinstance(candidate_target, dict)
@@ -697,6 +1022,122 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         and tab_control.get("contextPageEventObserved") is True,
         f"{run.role}/{run.device_id}: candidate/foreground CDP tab identity is invalid.",
     )
+    activation_target = nested(initial_activation, "target")
+    require(
+        isinstance(activation_target, dict),
+        f"{run.role}/{run.device_id}: initial Chrome X11 target must be an object.",
+    )
+    activation_target_window_id = activation_target.get("windowId")
+    activation_snapshot = nested(initial_activation, "activationSnapshot")
+    activation_visibility = nested(initial_activation, "candidateVisibility")
+    browser_pid_client_identities = initial_activation.get(
+        "browserPidClientIdentities",
+    )
+    browser_pid_client_count = initial_activation.get("browserPidClientCount")
+    matching_chrome_window_count = initial_activation.get(
+        "matchingChromeWindowCount",
+    )
+    activation_attempt_count = initial_activation.get("attemptCount")
+    require(
+        isinstance(initial_activation, dict)
+        and initial_activation.get("discoveryMethod")
+        == "_NET_CLIENT_LIST + _NET_WM_PID + WM_CLASS"
+        and initial_activation.get("discoveryProperty") == "_NET_CLIENT_LIST"
+        and isinstance(initial_activation.get("observedClientWindowCount"), int)
+        and not isinstance(initial_activation.get("observedClientWindowCount"), bool)
+        and initial_activation["observedClientWindowCount"] >= 1
+        and isinstance(browser_pid_client_count, int)
+        and not isinstance(browser_pid_client_count, bool)
+        and browser_pid_client_count == 1
+        and isinstance(matching_chrome_window_count, int)
+        and not isinstance(matching_chrome_window_count, bool)
+        and matching_chrome_window_count == 1
+        and isinstance(activation_attempt_count, int)
+        and not isinstance(activation_attempt_count, bool)
+        and activation_attempt_count == 1
+        and isinstance(browser_pid_client_identities, list)
+        and len(browser_pid_client_identities) == 1
+        and isinstance(activation_target_window_id, int)
+        and not isinstance(activation_target_window_id, bool)
+        and activation_target_window_id > 0
+        and isinstance(activation_target.get("wmPid"), int)
+        and not isinstance(activation_target.get("wmPid"), bool)
+        and activation_target["wmPid"] == browser_pid
+        and isinstance(activation_target.get("wmClass"), dict),
+        f"{run.role}/{run.device_id}: initial Chrome X11 client discovery is invalid.",
+    )
+    recomputed_matching_chrome_clients = []
+    for identity in browser_pid_client_identities:
+        require(
+            isinstance(identity, dict)
+            and set(identity) == {"windowId", "wmPid", "wmClass"}
+            and isinstance(identity.get("wmPid"), int)
+            and not isinstance(identity.get("wmPid"), bool)
+            and identity["wmPid"] == browser_pid
+            and isinstance(identity.get("windowId"), int)
+            and not isinstance(identity.get("windowId"), bool)
+            and identity["windowId"] > 0
+            and isinstance(identity.get("wmClass"), dict),
+            f"{run.role}/{run.device_id}: browser-PID X11 client identity is invalid.",
+        )
+        identity_class = identity["wmClass"]
+        if (
+            set(identity_class) == {"instance", "class"}
+            and isinstance(identity_class.get("instance"), str)
+            and re.fullmatch(
+                r"google-chrome(?:-stable)?",
+                identity_class["instance"],
+                flags=re.IGNORECASE,
+            )
+            is not None
+            and isinstance(identity_class.get("class"), str)
+            and re.fullmatch(
+                r"Google-chrome",
+                identity_class["class"],
+                flags=re.IGNORECASE,
+            )
+            is not None
+        ):
+            recomputed_matching_chrome_clients.append(identity)
+    require(
+        len(recomputed_matching_chrome_clients) == 1
+        and recomputed_matching_chrome_clients[0] == activation_target,
+        f"{run.role}/{run.device_id}: singleton Chrome X11 client cannot be recomputed from discovery Evidence.",
+    )
+    activation_wm_class = activation_target["wmClass"]
+    require(
+        set(activation_wm_class) == {"instance", "class"}
+        and isinstance(activation_wm_class.get("instance"), str)
+        and re.fullmatch(
+            r"google-chrome(?:-stable)?",
+            activation_wm_class["instance"],
+            flags=re.IGNORECASE,
+        )
+        is not None
+        and isinstance(activation_wm_class.get("class"), str)
+        and re.fullmatch(
+            r"Google-chrome",
+            activation_wm_class["class"],
+            flags=re.IGNORECASE,
+        )
+        is not None,
+        f"{run.role}/{run.device_id}: initial activation WM_CLASS is not Google Chrome.",
+    )
+    require(
+        isinstance(activation_snapshot, dict)
+        and activation_snapshot.get("xdotoolActiveWindowId")
+        == activation_target_window_id
+        and activation_snapshot.get("rootActiveWindowId")
+        == activation_target_window_id
+        and activation_snapshot.get("wmPid") == browser_pid
+        and activation_snapshot.get("wmClass") == activation_wm_class
+        and activation_visibility
+        == {
+            "documentHidden": False,
+            "visibilityState": "visible",
+        },
+        f"{run.role}/{run.device_id}: post-activation X11 snapshot or candidate visibility is invalid.",
+    )
     page_counts = nested(tab_control, "pageCounts")
     require(
         isinstance(page_counts, dict)
@@ -715,8 +1156,17 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         isinstance(commands, dict),
         f"{run.role}/{run.device_id}: X11 command Evidence must be an object.",
     )
+    command_attempt_count = nested(commands, "activateWindow", "attemptCount")
     require(
-        nested(commands, "openTab", "gesture") == "Ctrl+T"
+        nested(commands, "activateWindow", "action") == "windowactivate"
+        and nested(commands, "activateWindow", "sync") is True
+        and isinstance(command_attempt_count, int)
+        and not isinstance(command_attempt_count, bool)
+        and command_attempt_count == 1
+        and nested(commands, "activateWindow", "targetWindowId")
+        == activation_target_window_id
+        and nested(commands, "activateWindow", "succeeded") is True
+        and nested(commands, "openTab", "gesture") == "Ctrl+T"
         and nested(commands, "openTab", "succeeded") is True
         and nested(commands, "returnTab", "gesture") == "Ctrl+Shift+Tab"
         and nested(commands, "returnTab", "succeeded") is True,
@@ -725,8 +1175,10 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     snapshots = nested(tab_control, "x11Snapshots")
     snapshot_names = (
         "beforeOpen",
+        "atOpenCommand",
         "afterOpen",
         "beforeReturn",
+        "atReturnCommand",
         "afterReturn",
         "afterCleanup",
     )
@@ -780,6 +1232,15 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     require(
         len(set(active_window_ids)) == 1,
         f"{run.role}/{run.device_id}: X11 active Chrome window changed during the tab lifecycle.",
+    )
+    require(
+        active_window_ids[0] == activation_target_window_id,
+        f"{run.role}/{run.device_id}: X11 lifecycle did not use the discovered Chrome client window.",
+    )
+    require(
+        hidden_visible.get("activationCandidateVisibility")
+        == activation_visibility,
+        f"{run.role}/{run.device_id}: post-activation candidate visibility was not preserved in lifecycle Evidence.",
     )
     require(
         tab_control.get("foregroundClosed") is True
@@ -2463,11 +2924,13 @@ def build_readme(
             "",
             "## Native lifecycle capture",
             "",
-            "Each candidate run proves a real X11 Chrome tab switch with "
-            "`xdotool`, one unchanged active X11 window/PID, distinct CDP tab "
-            "targets in the same browser window, `1 -> 2 -> 1` page cleanup, "
-            "mutually inverted candidate/witness visibility, and resumed audio "
-            "gain and offset.",
+            "Each candidate run discovers exactly one root X11 client matching "
+            "the CDP browser PID and Google Chrome `WM_CLASS`, activates that "
+            "validated client once with `xdotool --sync`, and then proves a "
+            "real Chrome tab switch with one unchanged active X11 window/PID. "
+            "It also proves distinct CDP tab targets in the same browser "
+            "window, `1 -> 2 -> 1` page cleanup, mutually inverted candidate/"
+            "witness visibility, and resumed audio gain and offset.",
             "",
             *[f"- {constraint}" for constraint in lifecycle_constraints],
             "",
