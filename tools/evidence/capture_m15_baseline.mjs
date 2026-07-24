@@ -1673,6 +1673,7 @@ try {
     captureStatus: 'complete',
     baseUrl,
     expectedCommit,
+    observedCommit: baselineContract.sourceCommit,
     viewport,
     deviceScaleFactor,
     touchEnabled,
@@ -1744,6 +1745,7 @@ try {
     captureStatus: 'operational-failure',
     baseUrl,
     expectedCommit,
+    observedCommit: baselineContract?.sourceCommit ?? null,
     baselineRoot,
     viewport,
     deviceScaleFactor,
@@ -1769,20 +1771,63 @@ try {
     failure: error?.stack ?? String(error),
   };
 } finally {
-  fs.writeFileSync(
-    path.join(outputDirectory, 'state.json'),
-    `${JSON.stringify(statePayload, null, 2)}\n`,
-  );
+  let traceFinalized = context === undefined;
   if (context) {
     await context.tracing.stop({
       path: path.join(outputDirectory, 'trace.zip'),
-    }).catch((error) => record('trace-error', error?.stack ?? String(error)));
+    }).then(() => {
+      traceFinalized = true;
+    }).catch((error) => {
+      failure ??= error;
+      record('trace-error', error?.stack ?? String(error));
+    });
   }
+  let browserClosed = browser === undefined;
+  if (browser) {
+    await browser.close().then(() => {
+      browserClosed = true;
+    }).catch((error) => {
+      failure ??= error;
+      record('browser-close-error', error?.stack ?? String(error));
+    });
+  }
+  const finalization = {
+    browserClosed,
+    traceFinalized,
+    completedAt: new Date().toISOString(),
+  };
+  if (failure) {
+    statePayload.captureStatus = 'operational-failure';
+    statePayload.failure ??= failure?.stack ?? String(failure);
+  }
+  statePayload.finalization = finalization;
+  record('finalization', {
+    captureStatus: statePayload.captureStatus,
+    ...finalization,
+  });
+  const runtimeLogPath = path.join(outputDirectory, 'runtime.log');
+  const statePath = path.join(outputDirectory, 'state.json');
+  fs.writeFileSync(runtimeLogPath, `${records.join('\n')}\n`);
   fs.writeFileSync(
-    path.join(outputDirectory, 'runtime.log'),
-    `${records.join('\n')}\n`,
+    statePath,
+    `${JSON.stringify(statePayload, null, 2)}\n`,
   );
-  if (browser) await browser.close();
+  if (!failure) {
+    fs.writeFileSync(
+      path.join(outputDirectory, 'completion.json'),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        status: 'complete',
+        expectedCommit,
+        observedCommit: baselineContract.sourceCommit,
+        browserClosed,
+        traceFinalized,
+        stateSha256: fileSha256(statePath),
+        runtimeLogSha256: fileSha256(runtimeLogPath),
+        completedAt: finalization.completedAt,
+      }, null, 2)}\n`,
+    );
+  }
 }
 
 if (failure) throw failure;

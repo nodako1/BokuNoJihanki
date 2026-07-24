@@ -261,11 +261,32 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
     "'state.json'",
     "'runtime.log'",
     "'trace.zip'",
+    "'completion.json'",
+    'await browser.close().then',
+    'stateSha256: fileSha256(statePath)',
+    'runtimeLogSha256: fileSha256(runtimeLogPath)',
     'assert.equal(pageErrors.length, 0',
     'Baseline failed requests:',
   ]) {
     assert.ok(baselineCapture.includes(marker), marker);
   }
+  const baselineFinalizationOrder = [
+    baselineCapture.indexOf('await browser.close().then'),
+    baselineCapture.indexOf('fs.writeFileSync(runtimeLogPath'),
+    baselineCapture.indexOf(
+      'statePath,',
+      baselineCapture.indexOf('fs.writeFileSync(runtimeLogPath'),
+    ),
+    baselineCapture.indexOf("path.join(outputDirectory, 'completion.json')"),
+  ];
+  assert.ok(baselineFinalizationOrder.every((index) => index >= 0));
+  assert.ok(
+    baselineFinalizationOrder.every(
+      (index, markerIndex) => (
+        markerIndex === 0 || index > baselineFinalizationOrder[markerIndex - 1]
+      ),
+    ),
+  );
   assert.doesNotMatch(baselineCapture, /gitOutput\(\s*baselineRoot\b/);
   for (const marker of [
     'Refusing non-empty Evidence directory',
@@ -294,8 +315,33 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
     'state.get("observedCommit") == candidate_sha',
     'state.get("browserHeadless") is False',
     'heartbeat.get("verified") is True',
-    'heartbeat.get("innerFrozenCallbacks") == []',
-    'len(heartbeat["postActiveCallbacks"]) >= 1',
+    'heartbeat.get("innerFrozenCallbacks") == recomputed_inner_callbacks',
+    'len(recomputed_post_active) >= 1',
+    'len(mute_toggles) >= 2',
+    'automation = nested(after, "masterGainAutomation")',
+    'actual = finite_number(',
+    'hidden_visible.get("method") == "playwright-real-tab-activation"',
+    'hidden_settled.get("visibilityState") == "hidden"',
+    'visible_settled.get("visibilityState") == "visible"',
+    'visible_event_index > hidden_event_index',
+    'request_count_after == request_count_before + 1',
+    'nested(injected, "traversalRequest", "visibilityState") == "hidden"',
+    'recomputed_stale_rejection',
+    'after_resume_automation = nested(after_resume, "masterGainAutomation")',
+    'completion_path = resolved / "completion.json"',
+    'completion.get("stateSha256") == sha256(state_path)',
+    'completion.get("runtimeLogSha256") == sha256(runtime_log)',
+    'state.get("observedCommit") == baseline_sha',
+    'recomputed_inner_callbacks = [',
+    'recomputed_gaps = [',
+    'active_requested_at - frozen_accepted_at',
+    'math.isclose(measured_max_gap, recomputed_max_gap',
+    'frozen_settle_margin == 400',
+    'active_settle_margin == 100',
+    'window_end - window_start >= 2_600',
+    'recomputed_max_gap >= minimum_gap',
+    'post_active_input = nested(frozen, "postActiveInput")',
+    'state.get("status") == "complete"',
     'validate_audio_directory',
     'validate_tracked_assets',
     'assert_phase_and_ground_pairing',
@@ -308,6 +354,11 @@ test('M1.5 Evidence fixtures are independent and hash-bound to official areas', 
   ]) {
     assert.ok(evidenceAssembler.includes(marker), marker);
   }
+  assert.doesNotMatch(
+    evidenceAssembler,
+    /deterministic-document-visibility-override|visibilityOverride/,
+  );
+  assert.doesNotMatch(evidenceAssembler, /if role != ["']baseline["']:/);
   assert.doesNotMatch(
     JSON.stringify({
       candidateSource,
@@ -329,6 +380,7 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     productionWorkflow,
     sideScrollScene,
     gameBridge,
+    audioEngine,
     viteConfig,
     buildBadge,
     buildTypes,
@@ -339,6 +391,7 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     readFile('.github/workflows/production-smoke.yml', 'utf-8'),
     readFile('src/game/scenes/SideScrollTownScene.ts', 'utf-8'),
     readFile('src/game/gameBridge.ts', 'utf-8'),
+    readFile('src/game/systems/audioEngine.ts', 'utf-8'),
     readFile('vite.config.ts', 'utf-8'),
     readFile('src/ui/BuildBadge.tsx', 'utf-8'),
     readFile('src/types/build.d.ts', 'utf-8'),
@@ -362,8 +415,9 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'evidence.panelMatrix.length === 12',
     'requiredAggregatePanelStatesAcrossThreeViewports: 36',
     'triggerBoundaryWorldX',
-    'fixtureWorldX: entrance.triggerRange.minX + 4',
-    'fixtureWorldX: entrance.triggerRange.maxX - 4',
+    'PANEL_TRIGGER_INSET_WORLD_PX = 8',
+    'entrance.triggerRange.minX + PANEL_TRIGGER_INSET_WORLD_PX',
+    'entrance.triggerRange.maxX - PANEL_TRIGGER_INSET_WORLD_PX',
     'fixtureGroundMeasurement',
     "'boku-no-jihanki:player-screen-geometry'",
     'lastPlayerGeometry',
@@ -388,11 +442,31 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'Math.max(0.08, Math.min(0.6, distance / 40))',
     'PANEL_POSITION_TOLERANCE_WORLD_PX = 4',
     'requestAnimationFrame(() => resolve())',
+    'async function createInstrumentedPage({',
+    'accountRuntimeFailures = false',
+    'if (!accountRuntimeFailures || !collectRuntimeFailures) return;',
+    'await inputController.cancel().catch(() => {});',
+    'await page.close();',
+    'accountRuntimeFailures: true',
+    'cdpLifecycleEvents.length = 0',
     "'Page.setWebLifecycleState'",
     "'Page.setLifecycleEventsEnabled'",
     "'Page.lifecycleEvent'",
-    "visibilityOverride = 'hidden'",
-    "method: 'deterministic-document-visibility-override'",
+    'await coverPage.bringToFront();',
+    'await page.bringToFront();',
+    'visibilityState: document.visibilityState',
+    "method: 'playwright-real-tab-activation'",
+    'hiddenPanelClick.visibilityState === \'hidden\'',
+    'hiddenPanelClick.requestCountAfter',
+    'hiddenPanelClick.traversalRequest?.visibilityState === \'hidden\'',
+    'traversalRequests: []',
+    "'boku-no-jihanki:area-traversal-request'",
+    'staleTraversal.didNotTransition',
+    'A traversal request queued while hidden executed after visibility recovery.',
+    'value.masterGainAutomation?.reason === (muted ? \'mute\' : \'unmute\')',
+    'value.masterGain - value.masterGainAutomation.target',
+    'snapshot.audio?.masterGainAutomation?.target === 0',
+    'snapshot.audio?.masterGain <= 0.01',
     'frozenResponse',
     'activeResponse',
     "method: 'cdp-page-lifecycle'",
@@ -410,8 +484,16 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'innerFrozenCallbacks.length === 0',
     'postActiveCallbacks.length >= 1',
     'minimumSuspensionGapMs',
-    'frozenSettleMarginMs = 250',
+    'setTimeout(resolve, 3_200)',
+    'frozenSettleMarginMs = 400',
     'activeSettleMarginMs = 100',
+    'Math.floor(frozenWallDurationMs * 0.78)',
+    'frozenAcceptedAt,',
+    'activeRequestedAt,',
+    'const postActiveInput = await exerciseWalk(',
+    'fileSha256(statePath)',
+    'fileSha256(runtimeLogPath)',
+    "path.join(outputDir, 'completion.json')",
     'CDP frozen state did not suspend the page heartbeat:',
     'prepareVercelPreviewAccess',
     'isVercelAuthenticationUrl',
@@ -442,6 +524,17 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     smoke,
     /document\.dispatchEvent\(new Event\(['"](?:freeze|resume)['"]\)\)/,
   );
+  for (const legacyPattern of [
+    /fixtureWorldX:\s*entrance\.triggerRange\.minX\s*\+\s*4\b/,
+    /fixtureWorldX:\s*entrance\.triggerRange\.maxX\s*-\s*4\b/,
+    /\bvisibilityOverride\b/,
+    /deterministic-document-visibility-override/,
+    /Object\.defineProperty\(\s*document\s*,\s*['"](?:hidden|visibilityState)['"]/,
+    /frozenSettleMarginMs\s*=\s*800\b/,
+    /activeSettleMarginMs\s*=\s*300\b/,
+  ]) {
+    assert.doesNotMatch(smoke, legacyPattern);
+  }
   assert.ok(
     smoke.indexOf('previewAccess = await prepareVercelPreviewAccess()')
       < smoke.indexOf('await context.tracing.start'),
@@ -462,6 +555,60 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
       ),
     ),
   );
+  const freshExactPageOrder = [
+    smoke.indexOf('} = await createInstrumentedPage());'),
+    smoke.indexOf('let commitMatched = false'),
+    smoke.indexOf('collectRuntimeFailures = false;', exactBadgeWaitOrder[2]),
+    smoke.indexOf('await page.close();', exactBadgeWaitOrder[2]),
+    smoke.indexOf(
+      '} = await createInstrumentedPage({',
+      exactBadgeWaitOrder[2],
+    ),
+    smoke.indexOf('accountRuntimeFailures: true', exactBadgeWaitOrder[2]),
+    smoke.indexOf('pageErrors.length = 0', exactBadgeWaitOrder[2]),
+    smoke.indexOf('failedRequests.length = 0', exactBadgeWaitOrder[2]),
+    smoke.indexOf('requestedUrls.clear()', exactBadgeWaitOrder[2]),
+    smoke.indexOf('cdpLifecycleEvents.length = 0', exactBadgeWaitOrder[2]),
+    smoke.indexOf('collectRuntimeFailures = true', exactBadgeWaitOrder[2]),
+    smoke.indexOf('const exactResponse = await page.goto', exactBadgeWaitOrder[2]),
+    smoke.indexOf('m15-smoke-exact=', exactBadgeWaitOrder[2]),
+  ];
+  assert.ok(freshExactPageOrder.every((index) => index >= 0));
+  assert.ok(
+    freshExactPageOrder.every(
+      (index, markerIndex) => (
+        markerIndex === 0 || index > freshExactPageOrder[markerIndex - 1]
+      ),
+    ),
+  );
+  assert.equal(
+    smoke.match(/accountRuntimeFailures: true/g)?.length,
+    1,
+  );
+  const finalizationOrder = [
+    smoke.indexOf('await browser.close().then'),
+    smoke.indexOf("statePayload.status = 'complete'"),
+    smoke.indexOf('fs.writeFileSync(runtimeLogPath'),
+    smoke.indexOf('statePath,', smoke.indexOf('fs.writeFileSync(runtimeLogPath')),
+    smoke.indexOf("path.join(outputDir, 'completion.json')"),
+  ];
+  assert.ok(finalizationOrder.every((index) => index >= 0));
+  assert.ok(
+    finalizationOrder.every(
+      (index, markerIndex) => (
+        markerIndex === 0 || index > finalizationOrder[markerIndex - 1]
+      ),
+    ),
+  );
+  for (const marker of [
+    'masterGain: this.masterGain?.gain.value ?? 0',
+    'bgmBusGain: this.bgmBusGain?.gain.value ?? 0',
+    'ambienceBusGain: this.ambienceBusGain?.gain.value ?? 0',
+    'masterGainAutomation: this.lastMasterGainAutomation',
+    'this.lastMasterGainAutomation = {',
+  ]) {
+    assert.ok(audioEngine.includes(marker), marker);
+  }
   assert.ok(viteConfig.includes('__BUILD_COMMIT_FULL__'));
   assert.ok(buildBadge.includes('data-build-commit={__BUILD_COMMIT_FULL__}'));
   assert.ok(buildTypes.includes('declare const __BUILD_COMMIT_FULL__: string;'));

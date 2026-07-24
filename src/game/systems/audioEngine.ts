@@ -11,6 +11,22 @@ type RecoveryReason =
   | 'page-show'
   | 'user-activation'
   | 'visibility';
+type MasterGainAutomationReason =
+  | 'context-running'
+  | 'freeze'
+  | 'mix-update'
+  | 'mute'
+  | 'unmute'
+  | 'visibility-hidden'
+  | 'visibility-visible'
+  | `recovery:${Exclude<RecoveryReason, 'visibility'>}`;
+
+export type MasterGainAutomationDiagnostics = Readonly<{
+  target: number;
+  scheduledAtContextTime: number;
+  timeConstant: number;
+  reason: MasterGainAutomationReason;
+}>;
 
 export type AudioEngineDiagnostics = {
   assetUrl: string;
@@ -25,6 +41,7 @@ export type AudioEngineDiagnostics = {
   masterGain: number;
   bgmBusGain: number;
   ambienceBusGain: number;
+  masterGainAutomation: MasterGainAutomationDiagnostics | null;
   recoveryCount: number;
   lastRecoveryReason: RecoveryReason | null;
   lastRecoveryError: string | null;
@@ -69,6 +86,7 @@ class AmbientAudioEngine {
   private recoveryCount = 0;
   private lastRecoveryReason: RecoveryReason | null = null;
   private lastRecoveryError: string | null = null;
+  private lastMasterGainAutomation: MasterGainAutomationDiagnostics | null = null;
   private lifecycleListenersAttached = false;
   private lifecycleGeneration = 0;
   private tearingDown = false;
@@ -80,13 +98,13 @@ class AmbientAudioEngine {
 
   private readonly handleVisibility = (): void => {
     this.captureBgmPosition();
-    this.applyOutputGain();
+    this.applyOutputGain(document.hidden ? 'visibility-hidden' : 'visibility-visible');
     if (!document.hidden) void this.recoverPlayback('visibility');
   };
 
   private readonly handleFreeze = (): void => {
     this.captureBgmPosition();
-    this.applyOutputGain(true);
+    this.applyOutputGain('freeze', true);
   };
 
   private readonly handlePageResume = (): void => {
@@ -117,7 +135,7 @@ class AmbientAudioEngine {
 
     if (state === 'running') {
       this.lastRecoveryError = null;
-      this.applyOutputGain();
+      this.applyOutputGain('context-running');
     }
   };
 
@@ -190,7 +208,7 @@ class AmbientAudioEngine {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this.applyOutputGain();
+    this.applyOutputGain(muted ? 'mute' : 'unmute');
     if (!muted) this.handleUserActivation();
   }
 
@@ -198,7 +216,6 @@ class AmbientAudioEngine {
     const contextState = this.context
       ? this.context.state as RecoverableAudioContextState
       : 'not-created';
-    const outputMuted = this.muted || (typeof document !== 'undefined' && document.hidden);
 
     return {
       assetUrl: BGM_ASSET_URL,
@@ -210,9 +227,12 @@ class AmbientAudioEngine {
       offset: this.getBgmOffset(),
       muted: this.muted,
       documentHidden: typeof document !== 'undefined' && document.hidden,
-      masterGain: outputMuted ? 0 : MASTER_VOLUME,
-      bgmBusGain: this.bgmBusGain ? BGM_BUS_VOLUME : 0,
-      ambienceBusGain: this.ambienceBusGain ? AMBIENCE_BUS_VOLUME : 0,
+      masterGain: this.masterGain?.gain.value ?? 0,
+      bgmBusGain: this.bgmBusGain?.gain.value ?? 0,
+      ambienceBusGain: this.ambienceBusGain?.gain.value ?? 0,
+      masterGainAutomation: this.lastMasterGainAutomation
+        ? { ...this.lastMasterGainAutomation }
+        : null,
       recoveryCount: this.recoveryCount,
       lastRecoveryReason: this.lastRecoveryReason,
       lastRecoveryError: this.lastRecoveryError,
@@ -349,21 +369,33 @@ class AmbientAudioEngine {
       0.8,
     );
     this.trafficGain?.gain.setTargetAtTime(profile.traffic, now, 0.8);
-    this.applyOutputGain();
+    this.applyOutputGain('mix-update');
   }
 
-  private applyOutputGain(forceSilent = false): void {
+  private applyOutputGain(
+    reason: MasterGainAutomationReason,
+    forceSilent = false,
+  ): void {
     const context = this.context;
     const masterGain = this.masterGain;
     if (!context || !masterGain) return;
 
     const hidden = typeof document !== 'undefined' && document.hidden;
     const silent = forceSilent || hidden || this.muted;
+    const target = silent ? 0 : MASTER_VOLUME;
+    const scheduledAtContextTime = context.currentTime;
+    const timeConstant = silent ? 0.04 : 0.14;
     masterGain.gain.setTargetAtTime(
-      silent ? 0 : MASTER_VOLUME,
-      context.currentTime,
-      silent ? 0.04 : 0.14,
+      target,
+      scheduledAtContextTime,
+      timeConstant,
     );
+    this.lastMasterGainAutomation = {
+      target,
+      scheduledAtContextTime,
+      timeConstant,
+      reason,
+    };
   }
 
   private createAmbientLayers(): void {
@@ -532,10 +564,13 @@ class AmbientAudioEngine {
       const initialState = context.state as RecoverableAudioContextState;
       const needsSource = !this.bgmSource && this.bgmBuffer !== null;
       const needsContextResume = initialState !== 'running';
+      const outputGainReason: MasterGainAutomationReason = reason === 'visibility'
+        ? 'visibility-visible'
+        : `recovery:${reason}`;
 
       if (needsSource) this.startBgmSource(this.bgmAnchorOffset);
       if (!needsSource && !needsContextResume) {
-        this.applyOutputGain();
+        this.applyOutputGain(outputGainReason);
         return;
       }
 
@@ -544,7 +579,7 @@ class AmbientAudioEngine {
       this.lastRecoveryError = null;
       try {
         if (needsContextResume) await context.resume();
-        this.applyOutputGain();
+        this.applyOutputGain(outputGainReason);
       } catch (error) {
         this.lastRecoveryError = error instanceof Error ? error.message : String(error);
       }
@@ -630,6 +665,7 @@ class AmbientAudioEngine {
     this.recoveryPromise = null;
     this.bgmAnchorOffset = 0;
     this.bgmAnchorContextTime = 0;
+    this.lastMasterGainAutomation = null;
   }
 
   private playTone(

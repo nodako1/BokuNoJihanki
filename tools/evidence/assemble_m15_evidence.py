@@ -89,6 +89,16 @@ def require(condition: bool, message: str) -> None:
         raise EvidenceError(message)
 
 
+def finite_number(value: Any, name: str) -> float:
+    require(
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value)),
+        f"{name} must be a finite number.",
+    )
+    return float(value)
+
+
 def strict_json_load(path: Path) -> dict[str, Any]:
     require(path.is_file() and not path.is_symlink(), f"Missing regular JSON file: {path}")
 
@@ -236,6 +246,29 @@ def load_run(role: str, source: Path) -> Run:
     require(not failure_artifacts, f"{role}/{EXPECTED_VIEWPORTS[key]} contains failure artifacts: {failure_artifacts}")
     require("failure" not in state, f"{role}/{EXPECTED_VIEWPORTS[key]} state contains failure.")
     require("partialEvidence" not in state, f"{role}/{EXPECTED_VIEWPORTS[key]} contains partial Evidence.")
+    runtime_log = resolved / "runtime.log"
+    completion_path = resolved / "completion.json"
+    require(
+        runtime_log.is_file() and not runtime_log.is_symlink(),
+        f"{role}/{EXPECTED_VIEWPORTS[key]} is missing its final runtime log.",
+    )
+    completion = strict_json_load(completion_path)
+    require(
+        completion.get("status") == "complete"
+        and completion.get("browserClosed") is True
+        and completion.get("traceFinalized") is True,
+        f"{role}/{EXPECTED_VIEWPORTS[key]} did not complete browser finalization.",
+    )
+    require(
+        completion.get("expectedCommit") == state.get("expectedCommit")
+        and completion.get("observedCommit") == state.get("observedCommit"),
+        f"{role}/{EXPECTED_VIEWPORTS[key]} completion SHA differs from state.",
+    )
+    require(
+        completion.get("stateSha256") == sha256(state_path)
+        and completion.get("runtimeLogSha256") == sha256(runtime_log),
+        f"{role}/{EXPECTED_VIEWPORTS[key]} completion hashes do not bind the final files.",
+    )
     return Run(
         role=role,
         source=resolved,
@@ -333,6 +366,12 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
     require(state.get("kind") == "M1.5-baseline-capture", f"{run.role}/{run.device_id}: wrong baseline kind.")
     require(state.get("captureStatus") == "complete", f"{run.role}/{run.device_id}: baseline capture is not complete.")
     require(state.get("expectedCommit") == baseline_sha, f"{run.role}/{run.device_id}: baseline SHA mismatch.")
+    require(
+        state.get("observedCommit") == baseline_sha
+        and nested(state, "finalization", "browserClosed") is True
+        and nested(state, "finalization", "traceFinalized") is True,
+        f"{run.role}/{run.device_id}: baseline finalization or observed SHA is invalid.",
+    )
     require(
         nested(state, "runtime", "baselineSourceCommit") == baseline_sha,
         f"{run.role}/{run.device_id}: verified baseline source SHA mismatch.",
@@ -437,25 +476,179 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     timeline = nested(run.state, "evidence", "audio", "timeline")
     names = ("start", "startedForward", "middle", "loopBefore", "loopAfter")
     source_ids = [nested(timeline, name, "sourceId") for name in names]
-    require(source_ids[0] is not None and len(set(source_ids)) == 1, f"{run.role}/{run.device_id}: BGM source changed across timeline.")
-    require(nested(timeline, "start", "decodedChannels") == 2, f"{run.role}/{run.device_id}: decoded BGM is not stereo.")
-    require(float(nested(timeline, "start", "decodedSampleRate")) > 0, f"{run.role}/{run.device_id}: invalid decoded sample rate.")
     require(
-        0 < float(timeline.get("boundaryDelta", 0)) < 1.5,
+        all(isinstance(source_id, str) and source_id for source_id in source_ids)
+        and len(set(source_ids)) == 1,
+        f"{run.role}/{run.device_id}: BGM source changed across timeline.",
+    )
+    require(nested(timeline, "start", "decodedChannels") == 2, f"{run.role}/{run.device_id}: decoded BGM is not stereo.")
+    require(
+        finite_number(
+            nested(timeline, "start", "decodedSampleRate"),
+            f"{run.role}/{run.device_id}: decoded sample rate",
+        ) > 0,
+        f"{run.role}/{run.device_id}: invalid decoded sample rate.",
+    )
+    require(
+        0 < finite_number(
+            timeline.get("boundaryDelta"),
+            f"{run.role}/{run.device_id}: loop boundary delta",
+        ) < 1.5,
         f"{run.role}/{run.device_id}: invalid loop-boundary advance.",
     )
+    mute_toggles = nested(run.state, "evidence", "audio", "muteToggles")
+    require(
+        isinstance(mute_toggles, list)
+        and len(mute_toggles) >= 2
+        and all(isinstance(toggle, dict) for toggle in mute_toggles),
+        f"{run.role}/{run.device_id}: actual mute/unmute gain Evidence is incomplete.",
+    )
+    requested_mute_states = [
+        toggle.get("requestedMuted") for toggle in mute_toggles
+    ]
+    require(
+        all(state is True or state is False for state in requested_mute_states)
+        and any(state is True for state in requested_mute_states)
+        and any(state is False for state in requested_mute_states),
+        f"{run.role}/{run.device_id}: mute Evidence states are invalid.",
+    )
+    for toggle in mute_toggles:
+        muted = toggle.get("requestedMuted")
+        after = nested(toggle, "after")
+        automation = nested(after, "masterGainAutomation")
+        expected_reason = "mute" if muted else "unmute"
+        require(
+            after.get("muted") is muted
+            and automation.get("reason") == expected_reason,
+            f"{run.role}/{run.device_id}: {expected_reason} automation was not observed.",
+        )
+        target = finite_number(
+            automation.get("target"),
+            f"{run.role}/{run.device_id}: {expected_reason} target gain",
+        )
+        actual = finite_number(
+            after.get("masterGain"),
+            f"{run.role}/{run.device_id}: {expected_reason} actual gain",
+        )
+        require(
+            (muted and target == 0 and actual <= 0.01)
+            or (
+                not muted
+                and target > 0
+                and abs(actual - target) <= 0.02
+            ),
+            f"{run.role}/{run.device_id}: {expected_reason} actual gain did not settle.",
+        )
     lifecycle = nested(run.state, "evidence", "lifecycle")
     hidden_visible = nested(lifecycle, "hiddenVisible")
     require(
-        hidden_visible.get("method") == "deterministic-document-visibility-override",
-        f"{run.role}/{run.device_id}: visibility recovery method is not recorded.",
+        hidden_visible.get("method") == "playwright-real-tab-activation",
+        f"{run.role}/{run.device_id}: visibility recovery did not use a real tab activation.",
     )
-    visibility_sources = {
+    visibility_sources = [
         nested(hidden_visible, name, "sourceId")
         for name in ("beforeHidden", "hidden", "visible")
-    }
-    require(len(visibility_sources) == 1 and None not in visibility_sources, f"{run.role}/{run.device_id}: visibility recovery replaced the BGM source.")
-    require(nested(hidden_visible, "hidden", "masterGain") == 0, f"{run.role}/{run.device_id}: hidden output was not silenced.")
+    ]
+    require(
+        all(isinstance(source_id, str) and source_id for source_id in visibility_sources)
+        and len(set(visibility_sources)) == 1,
+        f"{run.role}/{run.device_id}: visibility recovery replaced the BGM source.",
+    )
+    hidden_audio = nested(hidden_visible, "hidden")
+    hidden_automation = nested(hidden_audio, "masterGainAutomation")
+    hidden_settled = nested(hidden_visible, "hiddenSettledState")
+    hidden_target = finite_number(
+        hidden_automation.get("target"),
+        f"{run.role}/{run.device_id}: hidden gain target",
+    )
+    hidden_gain = finite_number(
+        hidden_audio.get("masterGain"),
+        f"{run.role}/{run.device_id}: hidden actual gain",
+    )
+    require(
+        hidden_settled.get("documentHidden") is True
+        and hidden_settled.get("visibilityState") == "hidden"
+        and nested(hidden_settled, "audio", "documentHidden") is True
+        and hidden_audio.get("documentHidden") is True
+        and hidden_target == 0
+        and hidden_automation.get("reason") == "visibility-hidden"
+        and hidden_gain <= 0.01,
+        f"{run.role}/{run.device_id}: actual hidden-tab gain was not silenced.",
+    )
+    visible_audio = nested(hidden_visible, "visible")
+    visible_automation = nested(visible_audio, "masterGainAutomation")
+    visible_settled = nested(hidden_visible, "visibleSettledState")
+    visible_target = finite_number(
+        visible_automation.get("target"),
+        f"{run.role}/{run.device_id}: visible gain target",
+    )
+    visible_gain = finite_number(
+        visible_audio.get("masterGain"),
+        f"{run.role}/{run.device_id}: visible actual gain",
+    )
+    require(
+        visible_settled.get("documentHidden") is False
+        and visible_settled.get("visibilityState") == "visible"
+        and nested(visible_settled, "audio", "documentHidden") is False
+        and visible_audio.get("documentHidden") is False
+        and visible_target > 0
+        and abs(visible_gain - visible_target) <= 0.02,
+        f"{run.role}/{run.device_id}: actual visible-tab gain did not recover.",
+    )
+    visibility_events = hidden_visible.get("visibilityEvents")
+    require(
+        isinstance(visibility_events, list)
+        and all(isinstance(event, dict) for event in visibility_events),
+        f"{run.role}/{run.device_id}: visibility events are malformed.",
+    )
+    hidden_event_index = next(
+        (
+            index
+            for index, event in enumerate(visibility_events)
+            if event.get("type") == "visibilitychange"
+            and event.get("visibilityState") == "hidden"
+        ),
+        -1,
+    )
+    visible_event_index = next(
+        (
+            index
+            for index, event in enumerate(visibility_events)
+            if index > hidden_event_index
+            and event.get("type") == "visibilitychange"
+            and event.get("visibilityState") == "visible"
+        ),
+        -1,
+    )
+    require(
+        hidden_event_index >= 0 and visible_event_index > hidden_event_index,
+        f"{run.role}/{run.device_id}: real hidden/visible DOM events are missing.",
+    )
+    stale_traversal = nested(hidden_visible, "staleTraversal")
+    injected = nested(stale_traversal, "injected")
+    request_count_before = nested(injected, "requestCountBefore")
+    request_count_after = nested(injected, "requestCountAfter")
+    stale_before = nested(stale_traversal, "before")
+    stale_after = nested(stale_traversal, "after")
+    recomputed_stale_rejection = (
+        stale_after.get("area") == stale_before.get("area")
+        and stale_after.get("spawnId") == stale_before.get("spawnId")
+        and stale_after.get("lastTransitionId")
+        == stale_before.get("lastTransitionId")
+        and stale_after.get("transitionState") == "idle"
+    )
+    require(
+        isinstance(request_count_before, int)
+        and not isinstance(request_count_before, bool)
+        and isinstance(request_count_after, int)
+        and not isinstance(request_count_after, bool)
+        and stale_traversal.get("didNotTransition") is True
+        and recomputed_stale_rejection
+        and request_count_after == request_count_before + 1
+        and nested(injected, "traversalRequest", "direction") == "up"
+        and nested(injected, "traversalRequest", "visibilityState") == "hidden",
+        f"{run.role}/{run.device_id}: stale hidden-tab traversal was not rejected.",
+    )
     frozen = nested(lifecycle, "frozenActive")
     require(frozen.get("method") == "cdp-page-lifecycle", f"{run.role}/{run.device_id}: lifecycle test did not use CDP.")
     require(
@@ -468,19 +661,179 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         and nested(frozen, "afterResume", "lastRecoveryError") is None,
         f"{run.role}/{run.device_id}: frozen/active recovery failed.",
     )
+    after_resume = nested(frozen, "afterResume")
+    after_resume_automation = nested(after_resume, "masterGainAutomation")
+    after_resume_target = finite_number(
+        after_resume_automation.get("target"),
+        f"{run.role}/{run.device_id}: active recovery gain target",
+    )
+    after_resume_gain = finite_number(
+        after_resume.get("masterGain"),
+        f"{run.role}/{run.device_id}: active recovery actual gain",
+    )
+    require(
+        after_resume_target > 0
+        and abs(after_resume_gain - after_resume_target) <= 0.02,
+        f"{run.role}/{run.device_id}: actual master gain did not recover after CDP active.",
+    )
     heartbeat = nested(frozen, "heartbeatSuspension")
+    after_heartbeat = nested(heartbeat, "afterResume")
+    callback_values = after_heartbeat.get("callbackWallMs")
+    before_heartbeat = nested(heartbeat, "beforeFreeze")
+    host_window = nested(heartbeat, "innerFrozenHostWindow")
+    inner_browser_window = nested(heartbeat, "innerFrozenBrowserWindow")
     require(
-        heartbeat.get("verified") is True,
-        f"{run.role}/{run.device_id}: CDP lifecycle heartbeat suspension was not verified.",
+        isinstance(callback_values, list)
+        and all(
+            isinstance(value, (int, float)) and not isinstance(value, bool)
+            for value in callback_values
+        ),
+        f"{run.role}/{run.device_id}: raw heartbeat timestamps are malformed.",
+    )
+    window_start = finite_number(
+        nested(inner_browser_window, "start"),
+        f"{run.role}/{run.device_id}: frozen window start",
+    )
+    window_end = finite_number(
+        nested(inner_browser_window, "end"),
+        f"{run.role}/{run.device_id}: frozen window end",
+    )
+    recomputed_inner_callbacks = [
+        value
+        for value in callback_values
+        if window_start <= float(value) <= window_end
+    ]
+    frozen_settle_margin = finite_number(
+        heartbeat.get("frozenSettleMarginMs"),
+        f"{run.role}/{run.device_id}: frozen settle margin",
+    )
+    active_settle_margin = finite_number(
+        heartbeat.get("activeSettleMarginMs"),
+        f"{run.role}/{run.device_id}: active boundary margin",
+    )
+    frozen_accepted_at = finite_number(
+        heartbeat.get("frozenAcceptedAt"),
+        f"{run.role}/{run.device_id}: frozen acceptance time",
+    )
+    active_requested_at = finite_number(
+        heartbeat.get("activeRequestedAt"),
+        f"{run.role}/{run.device_id}: active request time",
+    )
+    browser_clock_offset = finite_number(
+        heartbeat.get("browserClockOffsetMs"),
+        f"{run.role}/{run.device_id}: browser clock offset",
+    )
+    host_window_start = finite_number(
+        nested(host_window, "start"),
+        f"{run.role}/{run.device_id}: frozen host window start",
+    )
+    host_window_end = finite_number(
+        nested(host_window, "end"),
+        f"{run.role}/{run.device_id}: frozen host window end",
+    )
+    active_boundary = active_requested_at + browser_clock_offset
+    recomputed_post_active = [
+        value for value in callback_values if float(value) > active_boundary
+    ]
+    frozen_duration = finite_number(
+        heartbeat.get("frozenWallDurationMs"),
+        f"{run.role}/{run.device_id}: frozen wall duration",
+    )
+    minimum_gap = finite_number(
+        heartbeat.get("minimumSuspensionGapMs"),
+        f"{run.role}/{run.device_id}: minimum suspension gap",
+    )
+    measured_max_gap = finite_number(
+        after_heartbeat.get("maxGapMs"),
+        f"{run.role}/{run.device_id}: measured maximum heartbeat gap",
+    )
+    before_last_wall = finite_number(
+        before_heartbeat.get("lastWallMs"),
+        f"{run.role}/{run.device_id}: pre-freeze heartbeat time",
     )
     require(
-        heartbeat.get("innerFrozenCallbacks") == [],
-        f"{run.role}/{run.device_id}: callbacks ran inside the calibrated frozen window.",
+        callback_values == sorted(callback_values)
+        and all(float(value) >= before_last_wall for value in callback_values),
+        f"{run.role}/{run.device_id}: raw heartbeat timestamps are not chronological.",
+    )
+    recomputed_gaps = [
+        float(value) - (
+            before_last_wall if index == 0 else float(callback_values[index - 1])
+        )
+        for index, value in enumerate(callback_values)
+    ]
+    recomputed_max_gap = max(recomputed_gaps, default=0.0)
+    expected_minimum_gap = max(2_500, math.floor(frozen_duration * 0.78))
+    require(
+        frozen_duration >= 3_000
+        and frozen_settle_margin == 400
+        and active_settle_margin == 100
+        and math.isclose(
+            active_requested_at - frozen_accepted_at,
+            frozen_duration,
+            abs_tol=1,
+        )
+        and math.isclose(
+            host_window_start,
+            frozen_accepted_at + frozen_settle_margin,
+            abs_tol=1,
+        )
+        and math.isclose(
+            host_window_end,
+            active_requested_at - active_settle_margin,
+            abs_tol=1,
+        )
+        and math.isclose(
+            window_start,
+            host_window_start + browser_clock_offset,
+            abs_tol=1,
+        )
+        and math.isclose(
+            window_end,
+            host_window_end + browser_clock_offset,
+            abs_tol=1,
+        )
+        and minimum_gap == expected_minimum_gap
+        and window_end - window_start >= 2_600,
+        f"{run.role}/{run.device_id}: CDP frozen measurement window is too weak.",
     )
     require(
-        isinstance(heartbeat.get("postActiveCallbacks"), list)
-        and len(heartbeat["postActiveCallbacks"]) >= 1,
+        heartbeat.get("innerFrozenCallbacks") == recomputed_inner_callbacks
+        and recomputed_inner_callbacks == [],
+        f"{run.role}/{run.device_id}: callbacks ran inside the recomputed frozen window.",
+    )
+    require(
+        heartbeat.get("postActiveCallbacks") == recomputed_post_active
+        and len(recomputed_post_active) >= 1,
         f"{run.role}/{run.device_id}: page heartbeat did not resume after active.",
+    )
+    recomputed_verified = (
+        not recomputed_inner_callbacks
+        and bool(recomputed_post_active)
+        and math.isclose(measured_max_gap, recomputed_max_gap, abs_tol=1)
+        and recomputed_max_gap >= minimum_gap
+    )
+    require(
+        heartbeat.get("verified") is True and recomputed_verified,
+        f"{run.role}/{run.device_id}: raw heartbeat data does not verify CDP suspension.",
+    )
+    post_active_input = nested(frozen, "postActiveInput")
+    expected_input_source = "touch" if run.viewport_key[3] else "keyboard"
+    require(
+        nested(post_active_input, "during", "area") == "life-road"
+        and nested(post_active_input, "during", "inputSource")
+        == expected_input_source
+        and finite_number(
+            nested(post_active_input, "during", "speed"),
+            f"{run.role}/{run.device_id}: post-active movement speed",
+        ) > 0
+        and nested(post_active_input, "stopped", "area") == "life-road"
+        and nested(post_active_input, "stopped", "inputSource") == "none"
+        and finite_number(
+            nested(post_active_input, "stopped", "speed"),
+            f"{run.role}/{run.device_id}: post-active stopped speed",
+        ) == 0,
+        f"{run.role}/{run.device_id}: real movement input did not recover after CDP active.",
     )
     require(
         isinstance(frozen.get("headlessConstraint"), str) and frozen["headlessConstraint"],
@@ -506,12 +859,12 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
     )
     require(not state.get("pageErrors"), f"{run.role}/{run.device_id}: page errors are non-zero.")
     require(not state.get("failedRequests"), f"{run.role}/{run.device_id}: failed requests are non-zero.")
-    status = state.get("status", state.get("captureStatus"))
-    if status is not None:
-        require(
-            str(status).lower() in {"pass", "passed", "complete"},
-            f"{run.role}/{run.device_id}: state status is not PASS/complete.",
-        )
+    require(
+        state.get("status") == "complete"
+        and nested(state, "finalization", "browserClosed") is True
+        and nested(state, "finalization", "traceFinalized") is True,
+        f"{run.role}/{run.device_id}: candidate run is not fully finalized.",
+    )
 
     invariants = nested(state, "invariants")
     for name in (
@@ -1209,6 +1562,9 @@ def copy_run_evidence(
     runtime_log = run.source / "runtime.log"
     if runtime_log.is_file() and not runtime_log.is_symlink():
         copy_file(runtime_log, raw_root / "runtime.log")
+    completion = run.source / "completion.json"
+    if completion.is_file() and not completion.is_symlink():
+        copy_file(completion, raw_root / "completion.json")
 
     for area_id in AREA_IDS:
         selected["ground"][area_id] = {}
@@ -1547,6 +1903,7 @@ def run_metrics(run: Run) -> dict[str, Any]:
     runtime = state.get("runtime", {})
     log_path = run.source / "runtime.log"
     trace_path = run.source / "trace.zip"
+    completion_path = run.source / "completion.json"
     return {
         "role": run.role,
         "deviceId": run.device_id,
@@ -1566,6 +1923,11 @@ def run_metrics(run: Run) -> dict[str, Any]:
         "runtimeLog": (
             {"path": str(log_path), **file_record(log_path)}
             if log_path.is_file() and not log_path.is_symlink()
+            else None
+        ),
+        "completion": (
+            {"path": str(completion_path), **file_record(completion_path)}
+            if completion_path.is_file() and not completion_path.is_symlink()
             else None
         ),
         "trace": (
@@ -2085,4 +2447,13 @@ if __name__ == "__main__":
         main()
     except EvidenceError as error:
         print(f"ERROR: {error}", file=sys.stderr)
+        raise SystemExit(2) from error
+    except (
+        AttributeError,
+        KeyError,
+        OverflowError,
+        TypeError,
+        ValueError,
+    ) as error:
+        print(f"ERROR: malformed Evidence input: {error}", file=sys.stderr)
         raise SystemExit(2) from error

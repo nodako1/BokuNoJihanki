@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import {
@@ -111,6 +112,7 @@ const PANEL_OBSTACLE_SELECTORS = Object.freeze([
 ]);
 const POSITION_TOLERANCE_WORLD_PX = 4;
 const PANEL_POSITION_TOLERANCE_WORLD_PX = 4;
+const PANEL_TRIGGER_INSET_WORLD_PX = 8;
 const HORIZONTAL_EDGE_APPROACH_MARGIN_WORLD_PX = 160;
 
 const records = [];
@@ -165,6 +167,12 @@ const record = (kind, value) => {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function fileSha256(filename) {
+  const hash = createHash('sha256');
+  hash.update(fs.readFileSync(filename));
+  return hash.digest('hex');
 }
 
 function normalizeRect(rect) {
@@ -369,6 +377,28 @@ async function audioDiagnostics() {
   );
 }
 
+async function pollFromHost(
+  description,
+  read,
+  accept,
+  timeout = 10_000,
+  interval = 75,
+) {
+  const deadline = Date.now() + timeout;
+  let lastValue = null;
+  do {
+    lastValue = await read();
+    if (accept(lastValue)) return lastValue;
+    await new Promise((resolve) => {
+      setTimeout(resolve, interval);
+    });
+  } while (Date.now() < deadline);
+  throw new Error(
+    `Timed out waiting for ${description}; last value `
+      + `${JSON.stringify(lastValue)}.`,
+  );
+}
+
 async function waitForAudioReady(timeout = 30_000) {
   await page.waitForFunction(
     () => {
@@ -547,6 +577,56 @@ function createInputController(targetPage, targetCdpSession, useTouch) {
       });
       touchActive = false;
     },
+  };
+}
+
+async function createInstrumentedPage({
+  accountRuntimeFailures = false,
+} = {}) {
+  const targetPage = await context.newPage();
+  const targetCdpSession = await context.newCDPSession(targetPage);
+  await targetCdpSession.send('Page.enable');
+  await targetCdpSession.send(
+    'Page.setLifecycleEventsEnabled',
+    { enabled: true },
+  );
+  targetCdpSession.on('Page.lifecycleEvent', (event) => {
+    if (!accountRuntimeFailures) return;
+    cdpLifecycleEvents.push({
+      ...event,
+      receivedAt: Date.now(),
+    });
+  });
+  targetPage.on('console', (message) => {
+    if (!accountRuntimeFailures) return;
+    record(`console:${message.type()}`, message.text());
+  });
+  targetPage.on('pageerror', (error) => {
+    if (!accountRuntimeFailures || !collectRuntimeFailures) return;
+    const detail = error.stack ?? error.message;
+    pageErrors.push(detail);
+    record('pageerror', detail);
+  });
+  targetPage.on('request', (request) => {
+    if (!accountRuntimeFailures) return;
+    requestedUrls.add(request.url());
+  });
+  targetPage.on('requestfailed', (request) => {
+    if (!accountRuntimeFailures || !collectRuntimeFailures) return;
+    const detail =
+      `${request.method()} ${request.url()} :: `
+      + `${request.failure()?.errorText ?? 'unknown'}`;
+    failedRequests.push(detail);
+    record('requestfailed', detail);
+  });
+  return {
+    page: targetPage,
+    cdpSession: targetCdpSession,
+    inputController: createInputController(
+      targetPage,
+      targetCdpSession,
+      touchEnabled,
+    ),
   };
 }
 
@@ -980,8 +1060,10 @@ async function capturePanelMatrix(direction) {
     {
       name: 'start',
       triggerBoundaryWorldX: entrance.triggerRange.minX,
-      fixtureWorldX: entrance.triggerRange.minX + 4,
-      targetWorldX: entrance.triggerRange.minX + 4,
+      fixtureWorldX:
+        entrance.triggerRange.minX + PANEL_TRIGGER_INSET_WORLD_PX,
+      targetWorldX:
+        entrance.triggerRange.minX + PANEL_TRIGGER_INSET_WORLD_PX,
     },
     {
       name: 'center',
@@ -992,8 +1074,10 @@ async function capturePanelMatrix(direction) {
     {
       name: 'end',
       triggerBoundaryWorldX: entrance.triggerRange.maxX,
-      fixtureWorldX: entrance.triggerRange.maxX - 4,
-      targetWorldX: entrance.triggerRange.maxX - 4,
+      fixtureWorldX:
+        entrance.triggerRange.maxX - PANEL_TRIGGER_INSET_WORLD_PX,
+      targetWorldX:
+        entrance.triggerRange.maxX - PANEL_TRIGGER_INSET_WORLD_PX,
     },
   ];
   const results = [];
@@ -1217,6 +1301,7 @@ async function tapPanelAndTransition({
 async function setMuted(muted) {
   const current = await latestHud();
   if (current.audioMuted === muted) return current;
+  const before = await audioDiagnostics();
   const label = muted ? '音をオフにする' : '音をオンにする';
   const button = page.getByRole('button', { name: label, exact: true });
   await button.waitFor({ state: 'visible' });
@@ -1229,8 +1314,36 @@ async function setMuted(muted) {
     await button.click();
   }
   const snapshot = await waitForHud({ audioMuted: muted });
-  const diagnostics = await audioDiagnostics();
+  const diagnostics = await pollFromHost(
+    `the actual master gain to settle after ${muted ? 'mute' : 'unmute'}`,
+    audioDiagnostics,
+    (value) => (
+      value?.muted === muted
+      && value.masterGainAutomation?.reason === (muted ? 'mute' : 'unmute')
+      && (
+        muted
+          ? (
+            value.masterGainAutomation.target === 0
+            && value.masterGain <= 0.01
+          )
+          : (
+            value.masterGainAutomation.target > 0
+            && Math.abs(
+              value.masterGain - value.masterGainAutomation.target,
+            ) <= 0.02
+          )
+      )
+    ),
+    8_000,
+  );
   assert(diagnostics.muted === muted, 'Audio diagnostics mute state disagrees.');
+  evidence.audio.muteToggles ??= [];
+  evidence.audio.muteToggles.push({
+    requestedMuted: muted,
+    before,
+    after: diagnostics,
+    hud: snapshot,
+  });
   return snapshot;
 }
 
@@ -1288,68 +1401,171 @@ async function verifyAudioTimeline() {
 
 async function verifyVisibilityAndFreezeRecovery() {
   const beforeHidden = await audioDiagnostics();
-  await page.evaluate(() => {
-    const smoke = globalThis.__m15CandidateSmoke;
-    smoke.visibilityOverride = 'hidden';
-    Object.defineProperty(document, 'hidden', {
-      configurable: true,
-      get: () => smoke.visibilityOverride === 'hidden',
+  const beforeVisibilityHud = await latestHud();
+  const visibilityEventStartIndex = await page.evaluate(
+    () => globalThis.__m15CandidateSmoke?.lifecycleEvents?.length ?? 0,
+  );
+  let coverPage = null;
+  let hiddenState = null;
+  let visibleState = null;
+  let hiddenAudio = null;
+  let visibleAudio = null;
+  let staleTraversal = null;
+  try {
+    coverPage = await context.newPage();
+    await coverPage.goto(
+      'data:text/html,<title>M1.5 visibility witness</title>',
+      { waitUntil: 'load' },
+    );
+    await coverPage.bringToFront();
+    hiddenState = await pollFromHost(
+      'a real hidden tab with settled output gain',
+      () => page.evaluate(() => ({
+        documentHidden: document.hidden,
+        visibilityState: document.visibilityState,
+        audio:
+          globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      })),
+      (snapshot) => (
+        snapshot?.documentHidden === true
+        && snapshot.visibilityState === 'hidden'
+        && snapshot.audio?.documentHidden === true
+        && snapshot.audio?.masterGainAutomation?.target === 0
+        && snapshot.audio?.masterGain <= 0.01
+      ),
+      12_000,
+    );
+    const hidden = hiddenState.audio;
+    hiddenAudio = hidden;
+    assert(
+      hidden.sourceId === beforeHidden.sourceId,
+      'hidden state replaced the BGM source.',
+    );
+    assert(
+      hidden.muted === beforeHidden.muted,
+      'hidden state changed the logical mute setting.',
+    );
+
+    // Queue an adversarial late panel click while input is suspended. The
+    // visible edge must clear it before the next game update.
+    const hiddenPanelClick = await page.getByRole('button', {
+      name: PANEL_LABELS.up,
+      exact: true,
+    }).evaluate((button) => {
+      const smoke = globalThis.__m15CandidateSmoke;
+      const requestCountBefore = smoke?.traversalRequests?.length ?? 0;
+      button.click();
+      const traversalRequest =
+        smoke?.traversalRequests?.at(-1) ?? null;
+      return {
+        clickedAt: performance.now(),
+        visibilityState: document.visibilityState,
+        requestCountBefore,
+        requestCountAfter: smoke?.traversalRequests?.length ?? 0,
+        traversalRequest,
+      };
     });
-    Object.defineProperty(document, 'visibilityState', {
-      configurable: true,
-      get: () => smoke.visibilityOverride,
+    assert(
+      hiddenPanelClick.visibilityState === 'hidden',
+      'Stale traversal probe did not run while the real tab was hidden.',
+    );
+    assert(
+      hiddenPanelClick.requestCountAfter
+        === hiddenPanelClick.requestCountBefore + 1
+      && hiddenPanelClick.traversalRequest?.direction === 'up'
+      && hiddenPanelClick.traversalRequest?.visibilityState === 'hidden',
+      'Hidden panel tap did not enqueue one observable traversal request.',
+    );
+
+    await page.bringToFront();
+    visibleState = await pollFromHost(
+      'the original tab to become visible with restored output gain',
+      () => page.evaluate(() => ({
+        documentHidden: document.hidden,
+        visibilityState: document.visibilityState,
+        audio:
+          globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      })),
+      (snapshot) => (
+        snapshot?.documentHidden === false
+        && snapshot.visibilityState === 'visible'
+        && snapshot.audio?.documentHidden === false
+        && snapshot.audio?.masterGainAutomation?.target > 0
+        && Math.abs(
+          snapshot.audio.masterGain
+            - snapshot.audio.masterGainAutomation.target,
+        ) <= 0.02
+      ),
+      12_000,
+    );
+    const visible = await waitForAudioAdvance(beforeHidden);
+    visibleAudio = visible;
+    await new Promise((resolve) => {
+      setTimeout(resolve, 750);
     });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  await page.waitForFunction(
-    () => (
-      document.visibilityState === 'hidden'
-      && globalThis.__BOKU_M15_AUDIO__?.getDiagnostics().documentHidden === true
+    const afterVisibilityHud = await latestHud();
+    staleTraversal = {
+      injected: hiddenPanelClick,
+      before: beforeVisibilityHud,
+      after: afterVisibilityHud,
+      didNotTransition:
+        afterVisibilityHud.area === beforeVisibilityHud.area
+        && afterVisibilityHud.spawnId === beforeVisibilityHud.spawnId
+        && afterVisibilityHud.lastTransitionId
+          === beforeVisibilityHud.lastTransitionId
+        && afterVisibilityHud.transitionState === 'idle',
+    };
+    assert(
+      staleTraversal.didNotTransition,
+      'A traversal request queued while hidden executed after visibility recovery.',
+    );
+    assert(
+      visible.sourceId === beforeHidden.sourceId,
+      'hidden-visible recovery replaced the BGM source.',
+    );
+    assert(
+      visible.muted === beforeHidden.muted,
+      'hidden-visible recovery changed the logical mute setting.',
+    );
+    assert(
+      visible.lastRecoveryError === null,
+      `hidden-visible recovery error: ${visible.lastRecoveryError}.`,
+    );
+  } finally {
+    if (coverPage && !coverPage.isClosed()) await coverPage.close();
+    if (page && !page.isClosed()) await page.bringToFront();
+  }
+  const visibilityEvents = await page.evaluate(
+    (startIndex) => (
+      globalThis.__m15CandidateSmoke?.lifecycleEvents?.slice(startIndex)
+      ?? []
     ),
-    null,
-    { timeout: 5_000, polling: 50 },
+    visibilityEventStartIndex,
   );
-  const hidden = await audioDiagnostics();
-  assert(hidden.documentHidden === true, 'Visibility handler did not mute hidden output.');
+  const hiddenEventIndex = visibilityEvents.findIndex((event) => (
+    event.type === 'visibilitychange'
+    && event.visibilityState === 'hidden'
+  ));
+  const visibleEventIndex = visibilityEvents.findIndex((event, index) => (
+    index > hiddenEventIndex
+    && event.type === 'visibilitychange'
+    && event.visibilityState === 'visible'
+  ));
   assert(
-    hidden.sourceId === beforeHidden.sourceId,
-    'hidden state replaced the BGM source.',
+    hiddenEventIndex >= 0 && visibleEventIndex > hiddenEventIndex,
+    `Real hidden-visible events were not observed in order: `
+      + `${JSON.stringify(visibilityEvents)}.`,
   );
-  assert(
-    hidden.muted === beforeHidden.muted,
-    'hidden state changed the logical mute setting.',
-  );
-  assert(hidden.masterGain === 0, 'Hidden output was not silenced.');
-  await page.evaluate(() => {
-    globalThis.__m15CandidateSmoke.visibilityOverride = 'visible';
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
-  await page.waitForFunction(
-    () => (
-      document.visibilityState === 'visible'
-      && globalThis.__BOKU_M15_AUDIO__?.getDiagnostics().documentHidden === false
-    ),
-    null,
-    { timeout: 5_000, polling: 50 },
-  );
-  const visible = await waitForAudioAdvance(beforeHidden);
-  assert(
-    visible.sourceId === beforeHidden.sourceId,
-    'hidden-visible recovery replaced the BGM source.',
-  );
-  assert(
-    visible.muted === beforeHidden.muted,
-    'hidden-visible recovery changed the logical mute setting.',
-  );
-  assert(
-    visible.lastRecoveryError === null,
-    `hidden-visible recovery error: ${visible.lastRecoveryError}.`,
-  );
-  await page.evaluate(() => {
-    delete document.hidden;
-    delete document.visibilityState;
-    globalThis.__m15CandidateSmoke.visibilityOverride = null;
-  });
+  evidence.lifecycle.hiddenVisible = {
+    method: 'playwright-real-tab-activation',
+    beforeHidden,
+    hiddenSettledState: hiddenState,
+    hidden: hiddenAudio,
+    visible: visibleAudio,
+    visibleSettledState: visibleState,
+    visibilityEvents,
+    staleTraversal,
+  };
 
   const beforeFreeze = await audioDiagnostics();
   await page.waitForFunction(
@@ -1396,7 +1612,7 @@ async function verifyVisibilityAndFreezeRecovery() {
   );
   const frozenAcceptedAt = Date.now();
   await new Promise((resolve) => {
-    setTimeout(resolve, 900);
+    setTimeout(resolve, 3_200);
   });
   const activeRequestedAt = Date.now();
   const activeResponse = await cdpSession.send(
@@ -1416,7 +1632,10 @@ async function verifyVisibilityAndFreezeRecovery() {
     return { ...heartbeat, recentGapsMs: [...heartbeat.recentGapsMs] };
   });
   const frozenWallDurationMs = activeRequestedAt - frozenAcceptedAt;
-  const frozenSettleMarginMs = 250;
+  // Bound the command-settle edge to 400 ms, then require a callback-free
+  // interior longer than 2.5 s. The Evidence assembler independently
+  // reconstructs these windows from the raw callback timestamps.
+  const frozenSettleMarginMs = 400;
   const activeSettleMarginMs = 100;
   const innerFrozenHostWindow = {
     start: frozenAcceptedAt + frozenSettleMarginMs,
@@ -1438,9 +1657,42 @@ async function verifyVisibilityAndFreezeRecovery() {
     ),
   );
   const minimumSuspensionGapMs = Math.max(
-    500,
-    Math.floor(frozenWallDurationMs * 0.6),
+    2_500,
+    Math.floor(frozenWallDurationMs * 0.78),
   );
+  const frozenMeasurement = {
+    calibration: calibrationHeartbeat,
+    browserClockOffsetMs,
+    beforeFreeze: beforeFreezeHeartbeat,
+    afterResume: afterFreezeHeartbeat,
+    frozenAcceptedAt,
+    activeRequestedAt,
+    frozenWallDurationMs,
+    frozenSettleMarginMs,
+    activeSettleMarginMs,
+    innerFrozenHostWindow,
+    innerFrozenBrowserWindow,
+    innerFrozenCallbacks,
+    postActiveCallbacks,
+    minimumSuspensionGapMs,
+    verified:
+      innerFrozenCallbacks.length === 0
+      && postActiveCallbacks.length >= 1
+      && afterFreezeHeartbeat.maxGapMs >= minimumSuspensionGapMs,
+  };
+  evidence.lifecycle.frozenActive = {
+    method: 'cdp-page-lifecycle',
+    beforeFreeze,
+    frozenCommand: {
+      succeeded: true,
+      response: frozenResponse,
+    },
+    activeCommand: {
+      succeeded: true,
+      response: activeResponse,
+    },
+    heartbeatSuspension: frozenMeasurement,
+  };
   assert(
     innerFrozenHostWindow.end > innerFrozenHostWindow.start,
     'CDP frozen measurement window was too short.',
@@ -1459,7 +1711,26 @@ async function verifyVisibilityAndFreezeRecovery() {
     `CDP frozen state did not suspend the page heartbeat: `
       + `${afterFreezeHeartbeat.maxGapMs}ms < ${minimumSuspensionGapMs}ms.`,
   );
-  const afterResume = await waitForAudioAdvance(beforeFreeze);
+  await waitForAudioAdvance(beforeFreeze);
+  const afterResume = await pollFromHost(
+    'the actual master gain and BGM position to recover after CDP active',
+    audioDiagnostics,
+    (snapshot) => (
+      snapshot?.sourceId === beforeFreeze.sourceId
+      && snapshot.muted === beforeFreeze.muted
+      && snapshot.lastRecoveryError === null
+      && snapshot.masterGainAutomation?.target > 0
+      && Math.abs(
+        snapshot.masterGain - snapshot.masterGainAutomation.target,
+      ) <= 0.02
+      && cyclicOffsetDelta(
+        beforeFreeze.offset,
+        snapshot.offset,
+        beforeFreeze.duration,
+      ) > 0
+    ),
+    12_000,
+  );
   assert(
     afterResume.sourceId === beforeFreeze.sourceId,
     'frozen-active recovery replaced the BGM source.',
@@ -1472,6 +1743,18 @@ async function verifyVisibilityAndFreezeRecovery() {
     afterResume.muted === beforeFreeze.muted,
     'frozen-active recovery changed the logical mute setting.',
   );
+  const postActiveInput = await exerciseWalk(
+    'life-road',
+    'right',
+    'lifecycle-active-input.png',
+  );
+  assert(
+    postActiveInput.during.inputSource
+      === (touchEnabled ? 'touch' : 'keyboard')
+    && postActiveInput.stopped.inputSource === 'none'
+    && postActiveInput.stopped.speed === 0,
+    'Real movement input did not recover and stop after CDP active.',
+  );
   const lifecycleEvents = await page.evaluate(
     () => globalThis.__m15CandidateSmoke?.lifecycleEvents ?? [],
   );
@@ -1482,12 +1765,7 @@ async function verifyVisibilityAndFreezeRecovery() {
   };
 
   evidence.lifecycle = {
-    hiddenVisible: {
-      method: 'deterministic-document-visibility-override',
-      beforeHidden,
-      hidden,
-      visible,
-    },
+    hiddenVisible: evidence.lifecycle.hiddenVisible,
     frozenActive: {
       method: 'cdp-page-lifecycle',
       beforeFreeze,
@@ -1500,24 +1778,10 @@ async function verifyVisibilityAndFreezeRecovery() {
         response: activeResponse,
       },
       heartbeatSuspension: {
-        calibration: calibrationHeartbeat,
-        browserClockOffsetMs,
-        beforeFreeze: beforeFreezeHeartbeat,
-        afterResume: afterFreezeHeartbeat,
-        frozenWallDurationMs,
-        frozenSettleMarginMs,
-        activeSettleMarginMs,
-        innerFrozenHostWindow,
-        innerFrozenBrowserWindow,
-        innerFrozenCallbacks,
-        postActiveCallbacks,
-        minimumSuspensionGapMs,
-        verified:
-          innerFrozenCallbacks.length === 0
-          && postActiveCallbacks.length >= 1
-          && afterFreezeHeartbeat.maxGapMs >= minimumSuspensionGapMs,
+        ...frozenMeasurement,
       },
       afterResume,
+      postActiveInput,
       cdpEvents,
       domEventObserved,
       headlessConstraint:
@@ -1574,6 +1838,7 @@ try {
       playerGeometries: [],
       lastPrompt: null,
       prompts: [],
+      traversalRequests: [],
       lifecycleEvents: [],
       heartbeat: {
         ticks: 0,
@@ -1610,6 +1875,16 @@ try {
       state.prompts.push(snapshot);
       if (state.prompts.length > 400) state.prompts.shift();
     });
+    globalThis.addEventListener(
+      'boku-no-jihanki:area-traversal-request',
+      (event) => {
+        state.traversalRequests.push({
+          direction: event.detail,
+          capturedAt: performance.now(),
+          visibilityState: document.visibilityState,
+        });
+      },
+    );
     for (const type of ['visibilitychange', 'freeze', 'resume', 'pageshow']) {
       const target = type === 'pageshow' ? globalThis : document;
       target.addEventListener(type, () => {
@@ -1645,35 +1920,11 @@ try {
     });
     tracingStarted = true;
   }
-  page = await context.newPage();
-  cdpSession = await context.newCDPSession(page);
-  await cdpSession.send('Page.enable');
-  await cdpSession.send('Page.setLifecycleEventsEnabled', { enabled: true });
-  cdpSession.on('Page.lifecycleEvent', (event) => {
-    cdpLifecycleEvents.push({
-      ...event,
-      receivedAt: Date.now(),
-    });
-  });
-  inputController = createInputController(page, cdpSession, touchEnabled);
-  page.on('console', (message) => {
-    record(`console:${message.type()}`, message.text());
-  });
-  page.on('pageerror', (error) => {
-    if (!collectRuntimeFailures) return;
-    const detail = error.stack ?? error.message;
-    pageErrors.push(detail);
-    record('pageerror', detail);
-  });
-  page.on('request', (request) => requestedUrls.add(request.url()));
-  page.on('requestfailed', (request) => {
-    if (!collectRuntimeFailures) return;
-    const detail =
-      `${request.method()} ${request.url()} :: `
-      + `${request.failure()?.errorText ?? 'unknown'}`;
-    failedRequests.push(detail);
-    record('requestfailed', detail);
-  });
+  ({
+    page,
+    cdpSession,
+    inputController,
+  } = await createInstrumentedPage());
 
   const deadline = Date.now() + productionWaitMs;
   let commitMatched = false;
@@ -1708,9 +1959,24 @@ try {
     );
   }
 
+  // The commit polling page can still own app-level preload requests after
+  // navigation reaches network-idle. Close it before runtime accounting so a
+  // reload cannot misclassify those intentionally aborted requests as
+  // failures of the exact candidate page.
+  collectRuntimeFailures = false;
+  await inputController.cancel().catch(() => {});
+  await page.close();
+  ({
+    page,
+    cdpSession,
+    inputController,
+  } = await createInstrumentedPage({
+    accountRuntimeFailures: true,
+  }));
   pageErrors.length = 0;
   failedRequests.length = 0;
   requestedUrls.clear();
+  cdpLifecycleEvents.length = 0;
   collectRuntimeFailures = true;
   const exactResponse = await page.goto(
     `${baseUrl.replace(/\/$/, '')}/?m15-smoke-exact=${Date.now()}`,
@@ -2126,20 +2392,65 @@ try {
   };
   if (page) await capture('failure.png').catch(() => {});
 } finally {
-  fs.writeFileSync(
-    path.join(outputDir, 'state.json'),
-    `${JSON.stringify(statePayload, null, 2)}\n`,
-  );
+  let traceFinalized = !tracingStarted;
   if (context && tracingStarted) {
     await context.tracing.stop({
       path: path.join(outputDir, 'trace.zip'),
-    }).catch((error) => record('trace-error', error?.stack ?? String(error)));
+    }).then(() => {
+      traceFinalized = true;
+    }).catch((error) => {
+      failure ??= error;
+      record('trace-error', error?.stack ?? String(error));
+    });
   }
+  let browserClosed = browser === undefined;
+  if (browser) {
+    await browser.close().then(() => {
+      browserClosed = true;
+    }).catch((error) => {
+      failure ??= error;
+      record('browser-close-error', error?.stack ?? String(error));
+    });
+  }
+  const finalization = {
+    browserClosed,
+    traceFinalized,
+    completedAt: new Date().toISOString(),
+  };
+  if (failure) {
+    statePayload.status = 'failed';
+    statePayload.failure ??= failure?.stack ?? String(failure);
+  } else {
+    statePayload.status = 'complete';
+  }
+  statePayload.finalization = finalization;
+  record('finalization', {
+    status: statePayload.status,
+    ...finalization,
+  });
+  const runtimeLogPath = path.join(outputDir, 'runtime.log');
+  const statePath = path.join(outputDir, 'state.json');
+  fs.writeFileSync(runtimeLogPath, `${records.join('\n')}\n`);
   fs.writeFileSync(
-    path.join(outputDir, 'runtime.log'),
-    `${records.join('\n')}\n`,
+    statePath,
+    `${JSON.stringify(statePayload, null, 2)}\n`,
   );
-  if (browser) await browser.close();
+  if (!failure) {
+    fs.writeFileSync(
+      path.join(outputDir, 'completion.json'),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        status: 'complete',
+        expectedCommit,
+        observedCommit,
+        browserClosed,
+        traceFinalized,
+        stateSha256: fileSha256(statePath),
+        runtimeLogSha256: fileSha256(runtimeLogPath),
+        completedAt: finalization.completedAt,
+      }, null, 2)}\n`,
+    );
+  }
 }
 
 if (failure) throw failure;

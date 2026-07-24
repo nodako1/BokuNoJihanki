@@ -527,6 +527,7 @@ test('visibility and freeze hard-stop input, then visible and active resume clea
     system,
   } = await createInputHarness();
   bridge.setVirtualInput({ x: 1, y: 0, active: true });
+  bridge.requestAreaTraversal('up');
 
   documentTarget.hidden = true;
   documentTarget.dispatchEvent({ type: 'visibilitychange' });
@@ -543,22 +544,38 @@ test('visibility and freeze hard-stop input, then visible and active resume clea
   assert.equal(system.consumeHardStop(), true);
   assert.equal(system.consumeHardStop(), false);
 
+  // A request delivered late while the tab is already hidden must not survive
+  // the visible edge either.
+  bridge.requestAreaTraversal('up');
   documentTarget.hidden = false;
   documentTarget.dispatchEvent({ type: 'visibilitychange' });
+  assert.equal(system.read('up').traversal, null);
   bridge.setVirtualInput({ x: -1, y: 0, active: true });
   assert.equal(system.read(null).horizontal, -1);
 
+  bridge.requestAreaTraversal('down');
   documentTarget.dispatchEvent({ type: 'freeze' });
   assert.equal(system.read(null).horizontal, 0);
   assert.equal(system.consumeHardStop(), true);
+  bridge.requestAreaTraversal('down');
   documentTarget.dispatchEvent({ type: 'resume' });
+  assert.equal(system.read('down').traversal, null);
   bridge.setVirtualInput({ x: 0.5, y: 0, active: true });
   assert.deepEqual(inputSnapshot(system.read(null)), {
     horizontal: 0.5,
     source: 'touch',
     traversal: null,
   });
+
+  bridge.requestAreaTraversal('down');
+  assert.deepEqual(inputSnapshot(system.read('down')), {
+    horizontal: 0.5,
+    source: 'touch',
+    traversal: 'down',
+  });
+  bridge.requestAreaTraversal('up');
   system.destroy();
+  assert.equal(bridge.consumeAreaTraversalRequest(), null);
 });
 
 test('scene derives traversal allowance and prompt visibility from the same branch gate', async () => {

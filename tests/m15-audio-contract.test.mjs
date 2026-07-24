@@ -95,16 +95,33 @@ test('runtime fetch/decode contract accepts normal browser resampling and keeps 
 
 class FakeAudioParam {
   value = 0;
+  history = [];
 
-  setTargetAtTime(value) {
+  setTargetAtTime(value, scheduledAtContextTime, timeConstant) {
+    this.history.push({
+      method: 'setTargetAtTime',
+      value,
+      scheduledAtContextTime,
+      timeConstant,
+    });
     this.value = value;
   }
 
-  setValueAtTime(value) {
+  setValueAtTime(value, scheduledAtContextTime) {
+    this.history.push({
+      method: 'setValueAtTime',
+      value,
+      scheduledAtContextTime,
+    });
     this.value = value;
   }
 
-  exponentialRampToValueAtTime(value) {
+  exponentialRampToValueAtTime(value, endTime) {
+    this.history.push({
+      method: 'exponentialRampToValueAtTime',
+      value,
+      endTime,
+    });
     this.value = value;
   }
 }
@@ -185,12 +202,15 @@ class FakeAudioContext extends EventTarget {
     this.state = 'running';
     this.destination = new FakeNode();
     this.sources = [];
+    this.gainNodes = [];
     this.resumeCount = 0;
     FakeAudioContext.instances.push(this);
   }
 
   createGain() {
-    return new FakeGainNode();
+    const node = new FakeGainNode();
+    this.gainNodes.push(node);
+    return node;
   }
 
   createBiquadFilter() {
@@ -263,6 +283,41 @@ const drainMicrotasks = async () => {
   await Promise.resolve();
   await Promise.resolve();
 };
+const gainNodes = (context) => {
+  const [master, bgmBus, ambienceBus] = context.gainNodes;
+  assert.ok(master, 'master GainNode was not created');
+  assert.ok(bgmBus, 'BGM bus GainNode was not created');
+  assert.ok(ambienceBus, 'ambience bus GainNode was not created');
+  return { master, bgmBus, ambienceBus };
+};
+const assertMasterAutomation = (
+  context,
+  {
+    target,
+    scheduledAtContextTime = context.currentTime,
+    timeConstant,
+    reason,
+  },
+) => {
+  const diagnostics = audioEngine.getDiagnostics();
+  const { master, bgmBus, ambienceBus } = gainNodes(context);
+  assert.equal(diagnostics.masterGain, master.gain.value);
+  assert.equal(diagnostics.bgmBusGain, bgmBus.gain.value);
+  assert.equal(diagnostics.ambienceBusGain, ambienceBus.gain.value);
+  assert.deepEqual(diagnostics.masterGainAutomation, {
+    target,
+    scheduledAtContextTime,
+    timeConstant,
+    reason,
+  });
+  assert.deepEqual(master.gain.history.at(-1), {
+    method: 'setTargetAtTime',
+    value: target,
+    scheduledAtContextTime,
+    timeConstant,
+  });
+  assert.equal(master.gain.value, target);
+};
 
 test('fake WebAudio proves offset progression and loop relation without fixed sleeps', async () => {
   assert.equal(await audioEngine.start(), true);
@@ -272,6 +327,38 @@ test('fake WebAudio proves offset progression and loop relation without fixed sl
   assert.equal(started.decodedSampleRate, 44_100);
   assert.equal(started.duration, analysis.format.durationSeconds);
   assert.ok(started.sourceId?.endsWith('#1'));
+  assertMasterAutomation(context, {
+    target: 0.68,
+    timeConstant: 0.14,
+    reason: 'mix-update',
+  });
+
+  const { master, bgmBus, ambienceBus } = gainNodes(context);
+  const originalGains = [
+    master.gain.value,
+    bgmBus.gain.value,
+    ambienceBus.gain.value,
+  ];
+  master.gain.value = 0.321;
+  bgmBus.gain.value = 0.432;
+  ambienceBus.gain.value = 0.543;
+  assert.deepEqual(
+    {
+      masterGain: audioEngine.getDiagnostics().masterGain,
+      bgmBusGain: audioEngine.getDiagnostics().bgmBusGain,
+      ambienceBusGain: audioEngine.getDiagnostics().ambienceBusGain,
+    },
+    {
+      masterGain: 0.321,
+      bgmBusGain: 0.432,
+      ambienceBusGain: 0.543,
+    },
+  );
+  [
+    master.gain.value,
+    bgmBus.gain.value,
+    ambienceBus.gain.value,
+  ] = originalGains;
 
   context.currentTime = analysis.format.durationSeconds - 0.05;
   const beforeBoundary = audioEngine.getDiagnostics();
@@ -290,30 +377,63 @@ test('mute, area transition, visibility, freeze and iOS interruption preserve on
   context.currentTime = 4.25;
   const offsetBeforeMixChanges = audioEngine.getDiagnostics().offset;
   audioEngine.setMuted(true);
-  assert.equal(audioEngine.getDiagnostics().masterGain, 0);
+  assertMasterAutomation(context, {
+    target: 0,
+    timeConstant: 0.04,
+    reason: 'mute',
+  });
   audioEngine.setArea('upper-vending-lane');
+  assertMasterAutomation(context, {
+    target: 0,
+    timeConstant: 0.04,
+    reason: 'mix-update',
+  });
   audioEngine.setMuted(false);
+  assertMasterAutomation(context, {
+    target: 0.68,
+    timeConstant: 0.14,
+    reason: 'unmute',
+  });
   assert.equal(audioEngine.getDiagnostics().sourceId, sourceId);
   assert.equal(audioEngine.getDiagnostics().offset, offsetBeforeMixChanges);
 
   context.currentTime = 7.5;
   documentTarget.hidden = true;
   documentTarget.dispatchEvent(new Event('visibilitychange'));
-  assert.equal(audioEngine.getDiagnostics().masterGain, 0);
+  assertMasterAutomation(context, {
+    target: 0,
+    timeConstant: 0.04,
+    reason: 'visibility-hidden',
+  });
   context.state = 'suspended';
   documentTarget.hidden = false;
   documentTarget.dispatchEvent(new Event('visibilitychange'));
   await drainMicrotasks();
   assert.equal(context.state, 'running');
+  assertMasterAutomation(context, {
+    target: 0.68,
+    timeConstant: 0.14,
+    reason: 'visibility-visible',
+  });
   assert.equal(audioEngine.getDiagnostics().sourceId, sourceId);
   assert.equal(audioEngine.getDiagnostics().lastRecoveryReason, 'visibility');
 
   context.currentTime = 10;
   documentTarget.dispatchEvent(new Event('freeze'));
+  assertMasterAutomation(context, {
+    target: 0,
+    timeConstant: 0.04,
+    reason: 'freeze',
+  });
   context.state = 'suspended';
   documentTarget.dispatchEvent(new Event('resume'));
   await drainMicrotasks();
   assert.equal(context.state, 'running');
+  assertMasterAutomation(context, {
+    target: 0.68,
+    timeConstant: 0.14,
+    reason: 'recovery:page-resume',
+  });
   assert.equal(audioEngine.getDiagnostics().sourceId, sourceId);
   assert.equal(audioEngine.getDiagnostics().lastRecoveryReason, 'page-resume');
 
@@ -323,6 +443,11 @@ test('mute, area transition, visibility, freeze and iOS interruption preserve on
   await drainMicrotasks();
   const afterInterruption = audioEngine.getDiagnostics();
   assert.equal(context.state, 'running');
+  assertMasterAutomation(context, {
+    target: 0.68,
+    timeConstant: 0.14,
+    reason: 'recovery:audio-context-state',
+  });
   assert.equal(afterInterruption.sourceId, sourceId);
   assert.equal(afterInterruption.lastRecoveryReason, 'audio-context-state');
   assert.ok(afterInterruption.recoveryCount >= 3);

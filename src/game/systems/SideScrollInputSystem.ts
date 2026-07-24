@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  clearAreaTraversalRequest,
   clearVirtualInput,
   consumeAreaTraversalRequest,
   readVirtualInput,
@@ -23,9 +24,11 @@ export class SideScrollInputSystem {
     this.suspended = true;
     this.hardStopPending = true;
     clearVirtualInput();
+    clearAreaTraversalRequest();
   };
 
   private readonly resumeInput = (): void => {
+    clearAreaTraversalRequest();
     this.suspended = false;
   };
 
@@ -123,5 +126,6 @@ export class SideScrollInputSystem {
     window.removeEventListener('pagehide', this.stopInput);
     window.removeEventListener('pageshow', this.resumeInput);
     clearVirtualInput();
+    clearAreaTraversalRequest();
   }
 }

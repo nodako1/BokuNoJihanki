@@ -910,12 +910,38 @@ for (const marker of [
   "'state.json'",
   "'runtime.log'",
   "'trace.zip'",
+  "'completion.json'",
+  'await browser.close().then',
+  'stateSha256: fileSha256(statePath)',
+  'runtimeLogSha256: fileSha256(runtimeLogPath)',
   'assert.equal(pageErrors.length, 0',
   'Baseline failed requests:',
 ]) {
   if (!baselineCapture.includes(marker)) {
     failures.push(`M1.5 baseline capture is missing ${marker}.`);
   }
+}
+const baselineFinalizationOrder = [
+  baselineCapture.indexOf('await browser.close().then'),
+  baselineCapture.indexOf('fs.writeFileSync(runtimeLogPath'),
+  baselineCapture.indexOf(
+    'statePath,',
+    baselineCapture.indexOf('fs.writeFileSync(runtimeLogPath'),
+  ),
+  baselineCapture.indexOf("path.join(outputDirectory, 'completion.json')"),
+];
+if (
+  baselineFinalizationOrder.some((index) => index < 0)
+  || baselineFinalizationOrder.some(
+    (index, markerIndex) => (
+      markerIndex > 0 && index <= baselineFinalizationOrder[markerIndex - 1]
+    ),
+  )
+) {
+  failures.push(
+    'M1.5 baseline capture must close the browser and hash final state/log '
+    + 'before writing its completion marker.',
+  );
 }
 if (/gitOutput\(\s*baselineRoot\b/.test(baselineCapture)) {
   failures.push(
@@ -1097,8 +1123,33 @@ for (const marker of [
   'state.get("observedCommit") == candidate_sha',
   'state.get("browserHeadless") is False',
   'heartbeat.get("verified") is True',
-  'heartbeat.get("innerFrozenCallbacks") == []',
-  'len(heartbeat["postActiveCallbacks"]) >= 1',
+  'heartbeat.get("innerFrozenCallbacks") == recomputed_inner_callbacks',
+  'len(recomputed_post_active) >= 1',
+  'len(mute_toggles) >= 2',
+  'automation = nested(after, "masterGainAutomation")',
+  'actual = finite_number(',
+  'hidden_visible.get("method") == "playwright-real-tab-activation"',
+  'hidden_settled.get("visibilityState") == "hidden"',
+  'visible_settled.get("visibilityState") == "visible"',
+  'visible_event_index > hidden_event_index',
+  'request_count_after == request_count_before + 1',
+  'nested(injected, "traversalRequest", "visibilityState") == "hidden"',
+  'recomputed_stale_rejection',
+  'after_resume_automation = nested(after_resume, "masterGainAutomation")',
+  'completion_path = resolved / "completion.json"',
+  'completion.get("stateSha256") == sha256(state_path)',
+  'completion.get("runtimeLogSha256") == sha256(runtime_log)',
+  'state.get("observedCommit") == baseline_sha',
+  'recomputed_inner_callbacks = [',
+  'recomputed_gaps = [',
+  'active_requested_at - frozen_accepted_at',
+  'math.isclose(measured_max_gap, recomputed_max_gap',
+  'frozen_settle_margin == 400',
+  'active_settle_margin == 100',
+  'window_end - window_start >= 2_600',
+  'recomputed_max_gap >= minimum_gap',
+  'post_active_input = nested(frozen, "postActiveInput")',
+  'state.get("status") == "complete"',
   'validate_audio_directory',
   'validate_tracked_assets',
   'assert_phase_and_ground_pairing',
@@ -1113,6 +1164,20 @@ for (const marker of [
     failures.push(`M1.5 Evidence assembler is missing ${marker}.`);
   }
 }
+if (
+  /deterministic-document-visibility-override|visibilityOverride/.test(
+    evidenceAssembler,
+  )
+) {
+  failures.push(
+    'M1.5 Evidence assembler must reject fake document visibility overrides.',
+  );
+}
+if (/if role != ["']baseline["']:/.test(evidenceAssembler)) {
+  failures.push(
+    'M1.5 Evidence assembler must require completion hashes for baseline runs.',
+  );
+}
 for (const marker of [
   "BGM_ASSET_URL = '/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a'",
   'bgmBusGain',
@@ -1126,6 +1191,11 @@ for (const marker of [
   "'pageshow'",
   "'interrupted'",
   '__BOKU_M15_AUDIO__',
+  'masterGain: this.masterGain?.gain.value ?? 0',
+  'bgmBusGain: this.bgmBusGain?.gain.value ?? 0',
+  'ambienceBusGain: this.ambienceBusGain?.gain.value ?? 0',
+  'masterGainAutomation: this.lastMasterGainAutomation',
+  'this.lastMasterGainAutomation = {',
 ]) {
   if (!audioEngine.includes(marker)) {
     failures.push(`M1.5 audio runtime is missing ${marker}.`);
@@ -1373,8 +1443,9 @@ for (const marker of [
   'evidence.panelMatrix.length === 12',
   'requiredAggregatePanelStatesAcrossThreeViewports: 36',
   'triggerBoundaryWorldX',
-  'fixtureWorldX: entrance.triggerRange.minX + 4',
-  'fixtureWorldX: entrance.triggerRange.maxX - 4',
+  'PANEL_TRIGGER_INSET_WORLD_PX = 8',
+  'entrance.triggerRange.minX + PANEL_TRIGGER_INSET_WORLD_PX',
+  'entrance.triggerRange.maxX - PANEL_TRIGGER_INSET_WORLD_PX',
   'fixtureGroundMeasurement',
   "'boku-no-jihanki:player-screen-geometry'",
   'lastPlayerGeometry',
@@ -1393,12 +1464,32 @@ for (const marker of [
   'sourceId',
   'BGM loop boundary did not advance naturally.',
   'BGM loop replaced its source.',
+  'async function createInstrumentedPage({',
+  'accountRuntimeFailures = false',
+  'if (!accountRuntimeFailures || !collectRuntimeFailures) return;',
+  'await inputController.cancel().catch(() => {});',
+  'await page.close();',
+  'accountRuntimeFailures: true',
+  'cdpLifecycleEvents.length = 0',
   "'Page.setWebLifecycleState'",
   "'Page.setLifecycleEventsEnabled'",
   "'Page.lifecycleEvent'",
   "'visibilitychange'",
-  "visibilityOverride = 'hidden'",
-  "method: 'deterministic-document-visibility-override'",
+  'await coverPage.bringToFront();',
+  'await page.bringToFront();',
+  'visibilityState: document.visibilityState',
+  "method: 'playwright-real-tab-activation'",
+  "hiddenPanelClick.visibilityState === 'hidden'",
+  'hiddenPanelClick.requestCountAfter',
+  "hiddenPanelClick.traversalRequest?.visibilityState === 'hidden'",
+  'traversalRequests: []',
+  "'boku-no-jihanki:area-traversal-request'",
+  'staleTraversal.didNotTransition',
+  'A traversal request queued while hidden executed after visibility recovery.',
+  "value.masterGainAutomation?.reason === (muted ? 'mute' : 'unmute')",
+  'value.masterGain - value.masterGainAutomation.target',
+  'snapshot.audio?.masterGainAutomation?.target === 0',
+  'snapshot.audio?.masterGain <= 0.01',
   'frozenResponse',
   'activeResponse',
   "method: 'cdp-page-lifecycle'",
@@ -1416,8 +1507,16 @@ for (const marker of [
   'innerFrozenCallbacks.length === 0',
   'postActiveCallbacks.length >= 1',
   'minimumSuspensionGapMs',
-  'frozenSettleMarginMs = 250',
+  'setTimeout(resolve, 3_200)',
+  'frozenSettleMarginMs = 400',
   'activeSettleMarginMs = 100',
+  'Math.floor(frozenWallDurationMs * 0.78)',
+  'frozenAcceptedAt,',
+  'activeRequestedAt,',
+  'const postActiveInput = await exerciseWalk(',
+  'fileSha256(statePath)',
+  'fileSha256(runtimeLogPath)',
+  "path.join(outputDir, 'completion.json')",
   'CDP frozen state did not suspend the page heartbeat:',
   'prepareVercelPreviewAccess',
   'isVercelAuthenticationUrl',
@@ -1444,6 +1543,31 @@ for (const marker of [
 ]) {
   if (!browserSmoke.includes(marker)) {
     failures.push(`M1.5 Browser Smoke is missing ${marker}.`);
+  }
+}
+for (const [legacyPattern, label] of [
+  [
+    /fixtureWorldX:\s*entrance\.triggerRange\.minX\s*\+\s*4\b/,
+    'legacy panel start inset',
+  ],
+  [
+    /fixtureWorldX:\s*entrance\.triggerRange\.maxX\s*-\s*4\b/,
+    'legacy panel end inset',
+  ],
+  [/\bvisibilityOverride\b/, 'fake visibility override'],
+  [
+    /deterministic-document-visibility-override/,
+    'fake visibility Evidence method',
+  ],
+  [
+    /Object\.defineProperty\(\s*document\s*,\s*['"](?:hidden|visibilityState)['"]/,
+    'fake document visibility property',
+  ],
+  [/frozenSettleMarginMs\s*=\s*800\b/, 'oversized frozen settle margin'],
+  [/activeSettleMarginMs\s*=\s*300\b/, 'oversized active settle margin'],
+]) {
+  if (legacyPattern.test(browserSmoke)) {
+    failures.push(`M1.5 Browser Smoke still contains ${label}.`);
   }
 }
 if (
@@ -1475,6 +1599,76 @@ if (
 ) {
   failures.push(
     'M1.5 Browser Smoke must wait for the exact commit badge before collecting results.',
+  );
+}
+const freshExactPageOrder = [
+  browserSmoke.indexOf('} = await createInstrumentedPage());'),
+  browserSmoke.indexOf('let commitMatched = false'),
+  browserSmoke.indexOf(
+    'collectRuntimeFailures = false;',
+    exactBadgeWaitOrder[2],
+  ),
+  browserSmoke.indexOf('await page.close();', exactBadgeWaitOrder[2]),
+  browserSmoke.indexOf(
+    '} = await createInstrumentedPage({',
+    exactBadgeWaitOrder[2],
+  ),
+  browserSmoke.indexOf(
+    'accountRuntimeFailures: true',
+    exactBadgeWaitOrder[2],
+  ),
+  browserSmoke.indexOf('pageErrors.length = 0', exactBadgeWaitOrder[2]),
+  browserSmoke.indexOf('failedRequests.length = 0', exactBadgeWaitOrder[2]),
+  browserSmoke.indexOf('requestedUrls.clear()', exactBadgeWaitOrder[2]),
+  browserSmoke.indexOf(
+    'cdpLifecycleEvents.length = 0',
+    exactBadgeWaitOrder[2],
+  ),
+  browserSmoke.indexOf(
+    'collectRuntimeFailures = true',
+    exactBadgeWaitOrder[2],
+  ),
+  browserSmoke.indexOf(
+    'const exactResponse = await page.goto',
+    exactBadgeWaitOrder[2],
+  ),
+  browserSmoke.indexOf('m15-smoke-exact=', exactBadgeWaitOrder[2]),
+];
+if (
+  freshExactPageOrder.some((index) => index < 0)
+  || freshExactPageOrder.some(
+    (index, markerIndex) => (
+      markerIndex > 0 && index <= freshExactPageOrder[markerIndex - 1]
+    ),
+  )
+  || browserSmoke.match(/accountRuntimeFailures: true/g)?.length !== 1
+) {
+  failures.push(
+    'M1.5 Browser Smoke must isolate exact-run failures on one fresh '
+    + 'instrumented page after closing the commit polling page.',
+  );
+}
+const finalizationOrder = [
+  browserSmoke.indexOf('await browser.close().then'),
+  browserSmoke.indexOf("statePayload.status = 'complete'"),
+  browserSmoke.indexOf('fs.writeFileSync(runtimeLogPath'),
+  browserSmoke.indexOf(
+    'statePath,',
+    browserSmoke.indexOf('fs.writeFileSync(runtimeLogPath'),
+  ),
+  browserSmoke.indexOf("path.join(outputDir, 'completion.json')"),
+];
+if (
+  finalizationOrder.some((index) => index < 0)
+  || finalizationOrder.some(
+    (index, markerIndex) => (
+      markerIndex > 0 && index <= finalizationOrder[markerIndex - 1]
+    ),
+  )
+) {
+  failures.push(
+    'M1.5 Browser Smoke must close the browser and finalize state/log hashes '
+    + 'before writing its completion marker.',
   );
 }
 for (const [source, marker, label] of [
