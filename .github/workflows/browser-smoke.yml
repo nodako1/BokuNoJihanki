@@ -108,6 +108,11 @@ jobs:
 
       - name: Install browser, real X11 window manager and Japanese font
         run: |
+          SETUP_ARTIFACT_DIR="diagnostics/baseline-${{ matrix.device_id }}"
+          mkdir -p "$SETUP_ARTIFACT_DIR"
+          exec > >(
+            tee -a "$SETUP_ARTIFACT_DIR/render-environment-setup.log"
+          ) 2>&1
           npm install --no-save --no-package-lock playwright@1.56.1
           npx playwright install --with-deps chromium
           sudo apt-get update
@@ -116,7 +121,7 @@ jobs:
             fonts-noto-cjk \
             openbox \
             x11-utils
-          sudo fc-cache -f
+          fc-cache -f -v
           JAPANESE_FONT_MATCH="$(
             fc-match --format='%{family[0]}' 'sans-serif:lang=ja'
           )"
@@ -127,9 +132,21 @@ jobs:
             dpkg-query --show --showformat='${Version}' fonts-noto-cjk
           )"
           JAPANESE_FONT_COUNT="$(fc-list :lang=ja | wc -l)"
-          [[ "$JAPANESE_FONT_MATCH" == *"Noto Sans CJK"* ]]
-          test -f "$JAPANESE_FONT_FILE"
-          test "$JAPANESE_FONT_COUNT" -gt 0
+          printf 'Resolved Japanese font family: %s\n' "$JAPANESE_FONT_MATCH"
+          printf 'Resolved Japanese font file: %s\n' "$JAPANESE_FONT_FILE"
+          printf 'Japanese font file count: %s\n' "$JAPANESE_FONT_COUNT"
+          if [[ "$JAPANESE_FONT_MATCH" != *"Noto Sans CJK"* ]]; then
+            echo "Japanese sans-serif did not resolve to Noto Sans CJK." >&2
+            exit 1
+          fi
+          if [[ ! -f "$JAPANESE_FONT_FILE" ]]; then
+            echo "Resolved Japanese font file does not exist." >&2
+            exit 1
+          fi
+          if [[ ! "$JAPANESE_FONT_COUNT" =~ ^[[:space:]]*[1-9][0-9]*$ ]]; then
+            echo "No Japanese-capable fonts were enumerated." >&2
+            exit 1
+          fi
           JAPANESE_FONT_SHA256="$(
             sha256sum "$JAPANESE_FONT_FILE" | cut -d ' ' -f 1
           )"
