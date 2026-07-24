@@ -464,6 +464,32 @@ test('touch joystick produces right, left and release-stop input', async () => {
   system.destroy();
 });
 
+test('area transition hard-stop clears touch drift and queued traversal', async () => {
+  const { bridge, system } = await createInputHarness();
+
+  bridge.setVirtualInput({ x: 1, y: 0, active: true });
+  bridge.requestAreaTraversal('up');
+  system.clearForTransition();
+
+  assert.deepEqual(inputSnapshot(system.read('up')), {
+    horizontal: 0,
+    source: 'none',
+    traversal: null,
+  });
+  assert.equal(system.consumeHardStop(), true);
+  assert.equal(bridge.consumeAreaTraversalRequest(), null);
+
+  const sceneSource = await readFile(
+    'src/game/scenes/SideScrollTownScene.ts',
+    'utf8',
+  );
+  assert.match(
+    sceneSource,
+    /reduceM14Transition\(this\.transitionState,\s*\{\s*type:\s*'start',\s*transition\s*\}\);[\s\S]{0,120}?this\.inputSystem\.clearForTransition\(\);[\s\S]{0,80}?this\.velocityX\s*=\s*0;/,
+  );
+  system.destroy();
+});
+
 test('panel tap rejects hidden, mismatched or unsafe state and accepts a current prompt', async () => {
   const { bridge, system } = await createInputHarness();
   const upPrompt = {

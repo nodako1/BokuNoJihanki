@@ -1613,10 +1613,14 @@ for (const marker of [
   "'resume'",
   "'pagehide'",
   "'pageshow'",
+  'clearForTransition(): void',
 ]) {
   if (!sideScrollInput.includes(marker)) {
     failures.push(`M1.5 input gate is missing ${marker}.`);
   }
+}
+if (!sideScrollScene.includes('this.inputSystem.clearForTransition();')) {
+  failures.push('M1.5 transitions must hard-stop carried touch input.');
 }
 for (const marker of [
   'readAreaPanelObstacles',

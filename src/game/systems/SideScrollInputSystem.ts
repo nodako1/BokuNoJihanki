@@ -110,6 +110,12 @@ export class SideScrollInputSystem {
     return { horizontal, source, traversal };
   }
 
+  clearForTransition(): void {
+    this.hardStopPending = true;
+    clearVirtualInput();
+    clearAreaTraversalRequest();
+  }
+
   consumeHardStop(): boolean {
     const pending = this.hardStopPending;
     this.hardStopPending = false;

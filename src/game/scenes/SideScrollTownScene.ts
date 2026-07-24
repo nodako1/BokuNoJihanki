@@ -515,6 +515,7 @@ export class SideScrollTownScene extends Phaser.Scene {
     };
     try {
       this.transitionState = reduceM14Transition(this.transitionState, { type: 'start', transition });
+      this.inputSystem.clearForTransition();
       this.velocityX = 0;
       clearAreaTraversalRequest();
       this.updateBranchPrompt(null, true);
