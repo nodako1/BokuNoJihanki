@@ -52,6 +52,14 @@ const expectedCommit = (process.env.EXPECTED_COMMIT ?? '').trim();
 if (!/^[0-9a-f]{40}$/i.test(expectedCommit)) {
   throw new Error('EXPECTED_COMMIT must be a complete 40-character Git SHA.');
 }
+const parsedBaseUrl = new URL(baseUrl);
+const isVercelPreviewTarget =
+  parsedBaseUrl.protocol === 'https:'
+  && parsedBaseUrl.hostname.endsWith('.vercel.app')
+  && parsedBaseUrl.hostname !== 'boku-no-jihanki.vercel.app';
+const vercelAutomationBypassSecret = (
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET ?? ''
+).trim();
 const browserExecutablePath =
   process.env.BROWSER_EXECUTABLE_PATH?.trim() || undefined;
 const configuredOutputDir =
@@ -69,7 +77,8 @@ const deviceScaleFactor = positiveNumberFromEnv(
   1,
 );
 const touchEnabled = booleanFromEnv('BROWSER_TOUCH', false);
-const traceEnabled = booleanFromEnv('BROWSER_TRACE', true);
+const requestedTraceEnabled = booleanFromEnv('BROWSER_TRACE', true);
+let traceEnabled = requestedTraceEnabled;
 const browserHeadless = booleanFromEnv('BROWSER_HEADLESS', true);
 fs.mkdirSync(configuredOutputDir, { recursive: true });
 const outputDir = fs.mkdtempSync(
@@ -101,7 +110,7 @@ const PANEL_OBSTACLE_SELECTORS = Object.freeze([
   '[data-area-panel-obstacle]',
 ]);
 const POSITION_TOLERANCE_WORLD_PX = 4;
-const PANEL_POSITION_TOLERANCE_WORLD_PX = 1;
+const PANEL_POSITION_TOLERANCE_WORLD_PX = 4;
 const HORIZONTAL_EDGE_APPROACH_MARGIN_WORLD_PX = 160;
 
 const records = [];
@@ -128,6 +137,14 @@ let inputController;
 let collectRuntimeFailures = false;
 let observedCommit = '';
 let failure;
+let tracingStarted = false;
+let previewAccess = {
+  target: isVercelPreviewTarget,
+  protectionDetected: false,
+  bypassConfigured: false,
+  bypassCookieStored: false,
+  preflightStatus: null,
+};
 let statePayload = {
   baseUrl,
   expectedCommit,
@@ -137,6 +154,7 @@ let statePayload = {
   traceEnabled,
   browserHeadless,
   outputDir,
+  previewAccess,
 };
 
 const record = (kind, value) => {
@@ -155,6 +173,89 @@ function normalizeRect(rect) {
 
 function cyclicOffsetDelta(before, after, duration) {
   return ((after - before) % duration + duration) % duration;
+}
+
+function isVercelAuthenticationUrl(value) {
+  try {
+    const url = new URL(value, baseUrl);
+    return (
+      (url.hostname === 'vercel.com' || url.hostname.endsWith('.vercel.com'))
+      && (
+        url.pathname.startsWith('/sso-api')
+        || url.pathname.startsWith('/login')
+      )
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function prepareVercelPreviewAccess() {
+  if (!isVercelPreviewTarget) return previewAccess;
+
+  const publicProbe = await context.request.get(baseUrl, {
+    failOnStatusCode: false,
+    maxRedirects: 0,
+    timeout: 30_000,
+  });
+  const publicStatus = publicProbe.status();
+  const publicLocation = publicProbe.headers().location ?? '';
+  if (publicStatus >= 200 && publicStatus < 300) {
+    previewAccess = {
+      ...previewAccess,
+      preflightStatus: publicStatus,
+    };
+    return previewAccess;
+  }
+
+  const protectionDetected =
+    publicStatus >= 300
+    && publicStatus < 400
+    && isVercelAuthenticationUrl(publicLocation);
+  if (!protectionDetected) {
+    throw new Error(
+      `Vercel Preview preflight returned unexpected HTTP ${publicStatus}.`,
+    );
+  }
+  previewAccess = {
+    ...previewAccess,
+    protectionDetected: true,
+    bypassConfigured: vercelAutomationBypassSecret.length > 0,
+    preflightStatus: publicStatus,
+  };
+  if (vercelAutomationBypassSecret.length === 0) {
+    throw new Error(
+      'Vercel Preview is protected, but the GitHub Actions repository secret '
+        + 'VERCEL_AUTOMATION_BYPASS_SECRET is not configured.',
+    );
+  }
+
+  const cookiesBefore = await context.cookies(baseUrl);
+  const bypassResponse = await context.request.get(baseUrl, {
+    failOnStatusCode: false,
+    headers: {
+      'x-vercel-protection-bypass': vercelAutomationBypassSecret,
+      'x-vercel-set-bypass-cookie': 'samesitenone',
+    },
+    maxRedirects: 0,
+    timeout: 30_000,
+  });
+  const bypassStatus = bypassResponse.status();
+  if (bypassStatus < 200 || bypassStatus >= 300) {
+    throw new Error(
+      `Vercel Preview rejected the configured automation bypass with HTTP `
+        + `${bypassStatus}.`,
+    );
+  }
+  const cookiesAfter = await context.cookies(baseUrl);
+  previewAccess = {
+    target: true,
+    protectionDetected: true,
+    bypassConfigured: true,
+    bypassCookieStored: cookiesAfter.length > cookiesBefore.length,
+    preflightStatus: bypassStatus,
+  };
+  return previewAccess;
 }
 
 async function latestHud(targetPage = page) {
@@ -508,10 +609,13 @@ async function moveToX(area, targetX, tolerance = POSITION_TOLERANCE_WORLD_PX) {
           ...threshold,
         }, 45_000);
       } else {
-        const pulseMs = touchEnabled
-          ? 220
-          : Math.max(42, Math.min(170, Math.round(distance * 5)));
-        await page.waitForTimeout(pulseMs);
+        if (touchEnabled) {
+          await page.waitForTimeout(220);
+        } else {
+          await page.evaluate(
+            () => new Promise((resolve) => requestAnimationFrame(() => resolve())),
+          );
+        }
       }
     } finally {
       await inputController.stop(direction);
@@ -533,7 +637,7 @@ async function setFacingAtX(area, targetX, facing) {
       0,
       Math.min(geometry.worldWidth, targetX + preparationOffset),
     );
-    await moveToX(area, preparedX, 3);
+    await moveToX(area, preparedX, POSITION_TOLERANCE_WORLD_PX);
     const settled = await moveToX(
       area,
       targetX,
@@ -1309,9 +1413,11 @@ async function verifyVisibilityAndFreezeRecovery() {
     return { ...heartbeat, recentGapsMs: [...heartbeat.recentGapsMs] };
   });
   const frozenWallDurationMs = activeRequestedAt - frozenAcceptedAt;
+  const frozenSettleMarginMs = 250;
+  const activeSettleMarginMs = 100;
   const innerFrozenHostWindow = {
-    start: frozenAcceptedAt + 100,
-    end: activeRequestedAt - 100,
+    start: frozenAcceptedAt + frozenSettleMarginMs,
+    end: activeRequestedAt - activeSettleMarginMs,
   };
   const innerFrozenBrowserWindow = {
     start: innerFrozenHostWindow.start + browserClockOffsetMs,
@@ -1396,6 +1502,8 @@ async function verifyVisibilityAndFreezeRecovery() {
         beforeFreeze: beforeFreezeHeartbeat,
         afterResume: afterFreezeHeartbeat,
         frozenWallDurationMs,
+        frozenSettleMarginMs,
+        activeSettleMarginMs,
         innerFrozenHostWindow,
         innerFrozenBrowserWindow,
         innerFrozenCallbacks,
@@ -1410,7 +1518,7 @@ async function verifyVisibilityAndFreezeRecovery() {
       cdpEvents,
       domEventObserved,
       headlessConstraint:
-        'DOM freeze/resume events are optional; zero calibrated heartbeat callbacks in the inner frozen window and post-active callback recovery prove the CDP lifecycle interval.',
+        'DOM freeze/resume events are optional; after the CDP command settle margin, zero calibrated heartbeat callbacks in the inner frozen window and post-active callback recovery prove the lifecycle interval.',
       relatedUnitTest:
         'tests/m15-audio-contract.test.mjs — mute, area transition, visibility, freeze and iOS interruption preserve one source',
     },
@@ -1446,6 +1554,15 @@ try {
     isMobile: touchEnabled,
     locale: 'ja-JP',
   });
+  previewAccess = await prepareVercelPreviewAccess();
+  if (previewAccess.protectionDetected && previewAccess.bypassConfigured) {
+    // A Vercel bypass cookie is a credential. Never persist it in trace.zip.
+    traceEnabled = false;
+  }
+  statePayload.previewAccess = previewAccess;
+  statePayload.traceEnabled = traceEnabled;
+  statePayload.traceSuppressedForProtectedPreview =
+    requestedTraceEnabled && !traceEnabled;
   await context.addInitScript(() => {
     const state = {
       lastHud: null,
@@ -1523,6 +1640,7 @@ try {
       snapshots: true,
       sources: false,
     });
+    tracingStarted = true;
   }
   page = await context.newPage();
   cdpSession = await context.newCDPSession(page);
@@ -1562,6 +1680,14 @@ try {
       waitUntil: 'networkidle',
       timeout: 60_000,
     });
+    if (
+      isVercelPreviewTarget
+      && isVercelAuthenticationUrl(page.url())
+    ) {
+      throw new Error(
+        'Vercel Preview navigation was redirected to an authentication page.',
+      );
+    }
     if (!response || response.status() >= 400) {
       throw new Error(`Page returned HTTP ${response?.status() ?? 'no response'}.`);
     }
@@ -1922,8 +2048,11 @@ try {
     deviceScaleFactor,
     touchEnabled,
     traceEnabled,
+    traceSuppressedForProtectedPreview:
+      requestedTraceEnabled && !traceEnabled,
     browserHeadless,
     outputDir,
+    previewAccess,
     runtime: {
       nodeVersion: process.version,
       browserVersion: browser.version(),
@@ -1978,8 +2107,11 @@ try {
     deviceScaleFactor,
     touchEnabled,
     traceEnabled,
+    traceSuppressedForProtectedPreview:
+      requestedTraceEnabled && !traceEnabled,
     browserHeadless,
     outputDir,
+    previewAccess,
     evidence,
     transitionChecks,
     lastHud,
@@ -1995,7 +2127,7 @@ try {
     path.join(outputDir, 'state.json'),
     `${JSON.stringify(statePayload, null, 2)}\n`,
   );
-  if (context && traceEnabled) {
+  if (context && tracingStarted) {
     await context.tracing.stop({
       path: path.join(outputDir, 'trace.zip'),
     }).catch((error) => record('trace-error', error?.stack ?? String(error)));

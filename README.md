@@ -10,20 +10,23 @@
 
 ## 現在の状態
 
-バージョン`0.1.0`、マイルストーン **M1.4 2D横スクロール街探索・3エリア遷移基盤（完了・Production確認済み）**です。
+バージョン`0.1.0`、current milestoneは **M1.5 実機品質修正版（必須・再構築中）**です。
 
-M1.4で街探索の正式基盤を高解像度2D横スクロールへ切り替え、左右移動と横方向カメラ、3つの独立エリア、左右端と上下分岐による遷移を統合しました。M1.3の住宅街実装とアセットはフォールバック／設計履歴として保存し、M2の経済コアも変更せず保持しています。M1.4からM2機能はまだSceneへ接続していません。
+M1.4の2D横スクロール基盤は正常にProduction配信され、その履歴は保持します。一方、後続のユーザー実iPhone確認で主人公、接地、上下導線、遷移パネル、BGMの品質問題が確認されたため、M1全体の完成判定を再オープンしました。M1.5完了までM2 Scene統合とopen PR #31は停止します。
 
-### Production確認結果
+### M1.4 Production確認履歴
 
 - 実装Pull Request: `#32`
 - 実装PR最終head: `5c6895d0d1e2ad31a95f6490e60cc26f89d290cf`
-- Production確認済みmerge: `147f770a4b73077c4e5dc0523839b3fefb789db4`
+- M1.4実装Production commit: `147f770a4b73077c4e5dc0523839b3fefb789db4`
+- 現main／Production baseline: `29223ee31fd4fc4fbca21a37b01fe89277279647`
 - Vercel／Quality／Production Smoke／Production Browser Smoke: `success`
 - Production Browser Smoke: 15画面、3エリア、5遷移、全invariant成功
 - `pageerror`: `0`、failed request: `0`
 - 公開URL: https://boku-no-jihanki.vercel.app
 - 詳細証跡: [M1.4 Production Evidence](docs/evidence/M1_4_PRODUCTION_EVIDENCE.md)
+
+M1.4の成功結果は配信履歴であり、M1.5 candidateの合格証跡には流用しません。
 
 ### M1.4のプレイ範囲
 
@@ -71,13 +74,9 @@ M1.3画像を再生成する場合は、従来どおり`python3 tools/art/genera
 
 ## 検証とProduction反映
 
-1. Node.js 22環境で`npm ci`と`npm run check`を完走する。
-2. ローカルpreviewに対して`node scripts/browser-smoke.mjs`を実行し、3エリア往復、分岐、カメラ、アニメーション、時間帯を確認する。
-3. PRのQuality、Browser Smoke、Visual Reviewを完了してmainへマージする。
-4. Vercel Productionがmainの対象コミットを配信したことを確認する。
-5. Production Smoke、Production Browser Smoke、1280×720実画面の目視確認を完了する。
+M1.5は、local検証 → remote PR headと同一完全SHAのVercel Preview → CI・くーちゃんcandidate QA・リダ君Evidence監査 → ユーザー実iPhoneの5項目承認 → main merge → 同一merge SHAのProduction確認、の順で進めます。承認後にコードまたは素材が変わった場合は、新しいPreview SHAで承認を取り直します。
 
-M1.4は上記すべてを完了し、Production確認済みです。代表的なiPhone／Android実機での性能・操作感確認や微調整は、M2を止めない任意工程の[M1.5 polish](docs/specs/M1_5_POLISH.md)として管理します。
+詳細は[M1.5 実機品質修正版仕様](docs/specs/M1_5_POLISH.md)を正とします。
 
 ## 開発ルール Ver.2.4
 
@@ -86,7 +85,7 @@ M1.4は上記すべてを完了し、Production確認済みです。代表的な
 3. 3エリアを独立した横長ワールドとして扱い、巨大な連結画像にしない。
 4. 主人公は静止画切替ではなくフレーム式アニメーションを必須とする。
 5. シームレス性よりエリア単位の完成度を優先する。
-6. mainマージ後にVercel、Production Smoke、Production Browser Smoke、実画面を確認する。
+6. 必須のmain前gateを満たした後だけマージし、Vercel、Production Smoke、Production Browser Smoke、実画面を確認する。
 7. モックアップを完成証跡として使わない。
 
 詳細: [M1.4仕様](docs/specs/M1_4_SIDE_SCROLL_TOWN.md) / [M1.5 polish](docs/specs/M1_5_POLISH.md) / [M1.3仕様](docs/specs/M1_3_RESIDENTIAL_VERTICAL_SLICE.md) / [アーキテクチャ](docs/ARCHITECTURE.md) / [開発ルール](docs/DEVELOPMENT_RULES.md) / [テスト](docs/TESTING.md) / [デプロイ](docs/DEPLOYMENT.md) / [ロードマップ](docs/ROADMAP.md)

@@ -12,6 +12,7 @@ M1.4「2D横スクロール街探索・3エリア遷移基盤」の実装とProd
 - PR Browser Smoke run: `30008762333` — success
 - PR Browser Artifact: `8564271801`
 - implementation merge commit: `147f770a4b73077c4e5dc0523839b3fefb789db4`
+- PR #34後の現main／Production baseline: `29223ee31fd4fc4fbca21a37b01fe89277279647`
 - automated review: Blocking issueなし
 
 最終修正では、遷移中に復元された`fading-in`状態をresetした場合も遷移元spawnへ正しく戻るよう、`sourceSpawnId`の保存・復元と非初期spawnの回帰テストを追加しました。修正後は107/107テスト、lint、typecheck、buildが成功しています。
@@ -51,10 +52,12 @@ M1.4「2D横スクロール街探索・3エリア遷移基盤」の実装とProd
 
 公開URLでbuild `147f770`を確認し、左右のタッチ移動、入力解放後の停止、時刻の06:15への更新、音声MUTEDを確認しました。3エリア、上下矢印、5遷移、時間帯は同じ公開URLを対象にしたProduction Browser Smokeと15画面Artifactで確認しています。
 
-## 最終文書PRの再検証
+## PR #34後のbaseline
 
-最終文書PRでは`.vercel-production-retry`を更新し、通常の1280×720に加えて代表スマホ横画面844×390でも同じ3エリア・5遷移・15画面のfull Browser Smokeを実行します。最終main SHAのVercel、Production Smoke、Production Browser Smoke、Artifact、公開画面の結果は、自己参照できないcommit内ではなく最終PRのConversationへSHAとrun／artifact IDを固定します。
+最終文書・mobile gateを含むPR #34は`29223ee31fd4fc4fbca21a37b01fe89277279647`として確定した。`147f770...`はM1.4実装のProduction確認commit、`29223ee...`は現在のmain／Production baselineであり、役割を混同しない。
 
-## M1完了判定
+## M1.4配信履歴とM1再オープン
 
-Productionで確認したM1.4の2D横スクロール方式をM1の正式基盤とします。M1.3のコードと素材はfallback兼設計履歴として保存し、M2 economyコアも保存したままM1.4 Sceneへ接続していません。スマホ横画面の再検証後、残る実機別の性能・操作感調整はM1.5 polish候補とし、M1の必須機能を妨げない場合はM2を次工程とします。
+M1.4のProduction配信成功と既存run／Artifactは有効な履歴として保持する。ただし、固定`groundY` invariant、内部trigger通過、15画面、エラー0件は、背景道路との接地、背景導線、UIと主人公の重なり、BGMの聴感品質を承認する証拠ではない。
+
+後続のユーザー実iPhone確認によりM1全体の完成判定を再オープンした。現在の必須gateは[M1.5 実機品質修正版](../specs/M1_5_POLISH.md)であり、Production確認までM2 Scene統合とopen PR #31を停止する。

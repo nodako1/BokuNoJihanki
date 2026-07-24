@@ -1413,7 +1413,18 @@ for (const marker of [
   'innerFrozenCallbacks.length === 0',
   'postActiveCallbacks.length >= 1',
   'minimumSuspensionGapMs',
+  'frozenSettleMarginMs = 250',
+  'activeSettleMarginMs = 100',
   'CDP frozen state did not suspend the page heartbeat:',
+  'prepareVercelPreviewAccess',
+  'isVercelAuthenticationUrl',
+  "'x-vercel-protection-bypass'",
+  "'x-vercel-set-bypass-cookie': 'samesitenone'",
+  'Never persist it in trace.zip.',
+  'traceSuppressedForProtectedPreview',
+  'tracingStarted = true',
+  'context && tracingStarted',
+  'Vercel Preview navigation was redirected to an authentication page.',
   'HUD timeline player ground invariant failed.',
   'pageErrors.length === 0',
   'failedRequests.length === 0',
@@ -1631,6 +1642,7 @@ if (
   }
   for (const marker of [
     'BASE_URL: ${{ env.M15_PREVIEW_URL }}',
+    'VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}',
     'diagnostics/preview-${{ matrix.device_id }}',
     "PRODUCTION_WAIT_MS: '900000'",
   ]) {
