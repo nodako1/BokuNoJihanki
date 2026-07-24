@@ -142,7 +142,7 @@ async function readActiveX11Snapshot(expectedBrowserPid) {
     'xdotool and _NET_ACTIVE_WINDOW disagree about the active X11 window.',
   );
 
-  const windowIdArgument = String(xdotoolActiveWindowId);
+  const windowIdArgument = `0x${xdotoolActiveWindowId.toString(16)}`;
   const [pidOutput, classOutput] = await Promise.all([
     runFixedCommand('xprop', [
       '-id',
@@ -184,7 +184,8 @@ async function waitForActiveX11Snapshot(expectedBrowserPid, timeoutMs, label) {
     });
   }
   throw new Error(
-    `${label} did not expose the active Google Chrome X11 window.`,
+    `${label} did not expose the active Google Chrome X11 window: `
+      + `${lastError?.message ?? 'unknown X11 inspection failure'}`,
     { cause: lastError },
   );
 }
