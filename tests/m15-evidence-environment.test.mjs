@@ -75,18 +75,34 @@ run = module.Run(
     device_id="desktop-1280x720",
 )
 module.validate_x11_tab_lifecycle_contract(run, payload["valid"])
-module.validate_x11_tab_lifecycle_contract(
-    run,
-    payload["recovery"],
-    allow_initial_hidden=True,
-)
+for contract in payload["recoveryValid"]:
+    module.validate_x11_tab_lifecycle_contract(
+        run,
+        contract,
+        allow_initial_hidden=True,
+    )
 try:
-    module.validate_x11_tab_lifecycle_contract(run, payload["recovery"])
+    module.validate_x11_tab_lifecycle_contract(
+        run,
+        payload["recoveryValid"][0],
+    )
 except module.EvidenceError:
     pass
 else:
     print("accepted hidden activation without recovery mode", file=sys.stderr)
     raise SystemExit(4)
+for contract in payload["recoveryInvalid"]:
+    try:
+        module.validate_x11_tab_lifecycle_contract(
+            run,
+            contract,
+            allow_initial_hidden=True,
+        )
+    except module.EvidenceError:
+        pass
+    else:
+        print("accepted invalid recovery reason", file=sys.stderr)
+        raise SystemExit(5)
 rejected = []
 for item in payload["invalid"]:
     contract = item["contract"]
@@ -202,7 +218,10 @@ function probe(states) {
   );
 }
 
-function x11Contract({ initialHidden = false } = {}) {
+function x11Contract({
+  initialHidden = false,
+  hiddenReason,
+} = {}) {
   const browserPid = 12_345;
   const windowId = 4_194_307;
   const wmClass = {
@@ -227,9 +246,11 @@ function x11Contract({ initialHidden = false } = {}) {
     masterGain: 0,
     masterGainAutomation: {
       target: 0,
-      reason: initialHidden
-        ? 'recovery:page-resume'
-        : 'visibility-hidden',
+      reason: hiddenReason ?? (
+        initialHidden
+          ? 'recovery:page-resume'
+          : 'visibility-hidden'
+      ),
     },
   };
   const visibleSettledAudio = {
@@ -543,9 +564,24 @@ test('Evidence X11 contract rejects every identity and lifecycle tamper', () => 
       .browserPidClientIdentities[0].wmPid = 12_345.0;
   });
 
+  const recoveryReasons = [
+    'visibility-hidden',
+    'freeze',
+    'context-running',
+    'recovery:page-resume',
+  ];
   const result = probeX11Contract({
     valid,
-    recovery: x11Contract({ initialHidden: true }),
+    recoveryValid: recoveryReasons.map((hiddenReason) => x11Contract({
+      initialHidden: true,
+      hiddenReason,
+    })),
+    recoveryInvalid: [
+      x11Contract({
+        initialHidden: true,
+        hiddenReason: 'mix-update',
+      }),
+    ],
     invalid,
     state: renderState(),
   });

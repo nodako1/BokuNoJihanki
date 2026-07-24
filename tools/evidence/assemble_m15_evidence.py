@@ -48,6 +48,14 @@ REQUIRED_PANEL_OBSTACLE_SELECTORS = frozenset(
         ".build-badge",
     },
 )
+RECOVERY_INITIAL_HIDDEN_AUTOMATION_REASONS = frozenset(
+    {
+        "visibility-hidden",
+        "freeze",
+        "context-running",
+        "recovery:page-resume",
+    },
+)
 PHASE_CAPTURE_POSITION = "left"
 PHASE_CAPTURE_FACING = "right"
 PHASE_CAPTURE_TOLERANCE_WORLD_PX = 4
@@ -1232,6 +1240,11 @@ def validate_x11_tab_lifecycle_contract(
         hidden_candidate_audio,
         "masterGainAutomation",
     )
+    valid_hidden_reasons = (
+        RECOVERY_INITIAL_HIDDEN_AUTOMATION_REASONS
+        if allow_initial_hidden
+        else frozenset({"visibility-hidden"})
+    )
     require(
         hidden_candidate.get("documentHidden") is True
         and hidden_candidate.get("visibilityState") == "hidden"
@@ -1242,25 +1255,12 @@ def validate_x11_tab_lifecycle_contract(
         and hidden_candidate_audio.get("documentHidden") is True
         and hidden_candidate_audio.get("sourceId") == before_hidden["sourceId"]
         and hidden_candidate_audio.get("muted") == before_hidden["muted"]
-        and (
-            hidden_automation.get("reason") == "visibility-hidden"
-            or (
-                allow_initial_hidden
-                and hidden_automation.get("reason") == "recovery:page-resume"
-            )
-        )
+        and hidden_automation.get("reason") in valid_hidden_reasons
         and finite_number(hidden_automation.get("target"), f"{label}: hidden target")
         == 0
         and finite_number(hidden_audio.get("masterGain"), f"{label}: hidden gain")
         <= 0.01
-        and (
-            hidden_candidate_automation.get("reason") == "visibility-hidden"
-            or (
-                allow_initial_hidden
-                and hidden_candidate_automation.get("reason")
-                == "recovery:page-resume"
-            )
-        )
+        and hidden_candidate_automation.get("reason") in valid_hidden_reasons
         and finite_number(
             hidden_candidate_automation.get("target"),
             f"{label}: hidden settled target",

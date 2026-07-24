@@ -287,3 +287,34 @@ test('M1.5 native visibility helper forbids synthetic or minimize paths', async 
     [...returnOrder].sort((left, right) => left - right),
   );
 });
+
+test('M1.5 lifecycle Evidence stores audio-enriched ready results', async () => {
+  const source = await readFile(
+    new URL('../scripts/browser-smoke.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    source,
+    /hiddenSettledState:\s*activeTabLifecycle\.hiddenReadyResult/,
+  );
+  assert.match(
+    source,
+    /visibleSettledState:\s*activeTabLifecycle\.visibleReadyResult/,
+  );
+  assert.doesNotMatch(
+    source,
+    /hiddenSettledState:\s*activeTabLifecycle\.hiddenSettledState/,
+  );
+  assert.doesNotMatch(
+    source,
+    /visibleSettledState:\s*activeTabLifecycle\.visibleSettledState/,
+  );
+  for (const reason of [
+    'visibility-hidden',
+    'freeze',
+    'context-running',
+    'recovery:page-resume',
+  ]) {
+    assert.match(source, new RegExp(`'${reason}'`));
+  }
+});

@@ -210,6 +210,12 @@ const PANEL_OBSTACLE_SELECTORS = Object.freeze([
   '.build-badge',
   '[data-area-panel-obstacle]',
 ]);
+const M15_LIFECYCLE_HIDDEN_AUDIO_REASONS = Object.freeze([
+  'visibility-hidden',
+  'freeze',
+  'context-running',
+  'recovery:page-resume',
+]);
 const POSITION_TOLERANCE_WORLD_PX = 4;
 const PANEL_POSITION_TOLERANCE_WORLD_PX = 4;
 const PANEL_TRIGGER_INSET_WORLD_PX = 8;
@@ -2016,6 +2022,9 @@ async function verifyVisibilityAndFreezeRecovery() {
         || audio?.muted !== beforeFreeze.muted
         || audio?.documentHidden !== true
         || audio?.masterGainAutomation?.target !== 0
+        || !M15_LIFECYCLE_HIDDEN_AUDIO_REASONS.includes(
+          audio?.masterGainAutomation?.reason,
+        )
         || !Number.isFinite(audio?.masterGain)
         || audio.masterGain > 0.01
       ) {
@@ -2083,9 +2092,9 @@ async function verifyVisibilityAndFreezeRecovery() {
     activationCandidateVisibility:
       activeTabLifecycle.beforeOpenResult.activationCandidateVisibility,
     beforeHidden: activeTabLifecycle.beforeOpenResult.beforeHidden,
-    hiddenSettledState: activeTabLifecycle.hiddenSettledState,
+    hiddenSettledState: activeTabLifecycle.hiddenReadyResult,
     hidden: activeTabLifecycle.whileHiddenResult,
-    visibleSettledState: activeTabLifecycle.visibleSettledState,
+    visibleSettledState: activeTabLifecycle.visibleReadyResult,
     visible: activeTabLifecycle.afterVisibleResult.visible,
     visibleRecoveryDelta:
       activeTabLifecycle.afterVisibleResult.visibleRecoveryDelta,
