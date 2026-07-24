@@ -327,8 +327,8 @@ def render_environment_fingerprint(run: Run) -> dict[str, Any]:
         f"{run.role}/{run.device_id}: pinned Linux render host is invalid.",
     )
     require(
-        isinstance(font_match, str) and "Noto Sans CJK" in font_match,
-        f"{run.role}/{run.device_id}: Japanese font did not resolve to Noto Sans CJK.",
+        font_match == "Noto Sans CJK JP",
+        f"{run.role}/{run.device_id}: Japanese font did not resolve to Noto Sans CJK JP.",
     )
     require(
         isinstance(font_file, str) and Path(font_file).is_absolute(),

@@ -44,8 +44,8 @@ if [[ "${M15_RUNNER_OS_IMAGE:-}" != "ubuntu-24.04" ]]; then
   echo "M15_RUNNER_OS_IMAGE must identify the pinned ubuntu-24.04 image." >&2
   exit 1
 fi
-if [[ "${M15_JAPANESE_FONT_MATCH:-}" != *"Noto Sans CJK"* ]]; then
-  echo "M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK." >&2
+if [[ "${M15_JAPANESE_FONT_MATCH:-}" != "Noto Sans CJK JP" ]]; then
+  echo "M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK JP." >&2
   exit 1
 fi
 if [[ ! "${M15_JAPANESE_FONT_SHA256:-}" =~ ^[0-9a-f]{64}$ ]]; then

@@ -103,7 +103,13 @@ test('Evidence rejects tofu fonts and cross-run environment drift', () => {
   tofu.fontEnvironment.japaneseFontMatch = 'DejaVu Sans';
   let result = probe([tofu]);
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /did not resolve to Noto Sans CJK/);
+  assert.match(result.stderr, /did not resolve to Noto Sans CJK JP/);
+
+  const wrongRegion = renderState();
+  wrongRegion.fontEnvironment.japaneseFontMatch = 'Noto Sans CJK KR';
+  result = probe([wrongRegion]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /did not resolve to Noto Sans CJK JP/);
 
   for (const mutate of [
     (state) => {

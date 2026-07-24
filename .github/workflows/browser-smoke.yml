@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - '.github/fontconfig/**'
       - '.github/workflows/browser-smoke.yml'
       - '.github/workflows/production-smoke.yml'
       - '.vercel-production-retry'
@@ -24,6 +25,7 @@ on:
     branches:
       - main
     paths:
+      - '.github/fontconfig/**'
       - '.github/workflows/browser-smoke.yml'
       - '.github/workflows/production-smoke.yml'
       - '.vercel-production-retry'
@@ -121,26 +123,72 @@ jobs:
             fonts-noto-cjk \
             openbox \
             x11-utils
+          M15_FONTCONFIG_FILE="$(
+            realpath .github/fontconfig/m15-noto-cjk.conf
+          )"
+          test -r "$M15_FONTCONFIG_FILE"
+          export FONTCONFIG_FILE="$M15_FONTCONFIG_FILE"
+          echo "FONTCONFIG_FILE=$M15_FONTCONFIG_FILE" >> "$GITHUB_ENV"
+          printf 'Fontconfig policy file: %s\nSHA-256: %s\n' \
+            "$M15_FONTCONFIG_FILE" \
+            "$(sha256sum "$M15_FONTCONFIG_FILE" | cut -d ' ' -f 1)"
           fc-cache -f -v
+          JAPANESE_FONT_PATTERN='sans-serif:lang=ja'
+          CONFIGURED_JAPANESE_FONT_FAMILY="$(
+            fc-pattern --config --default \
+              --format='%{family[0]}' "$JAPANESE_FONT_PATTERN"
+          )"
           JAPANESE_FONT_MATCH="$(
-            fc-match --format='%{family[0]}' 'sans-serif:lang=ja'
+            fc-match --format='%{family[0]}' "$JAPANESE_FONT_PATTERN"
           )"
           JAPANESE_FONT_FILE="$(
-            fc-match --format='%{file}' 'sans-serif:lang=ja'
+            fc-match --format='%{file}' "$JAPANESE_FONT_PATTERN"
+          )"
+          EXPLICIT_NOTO_FONT_FILE="$(
+            fc-match --format='%{file}' 'Noto Sans CJK JP:lang=ja'
           )"
           JAPANESE_FONT_PACKAGE_VERSION="$(
             dpkg-query --show --showformat='${Version}' fonts-noto-cjk
           )"
           JAPANESE_FONT_COUNT="$(fc-list :lang=ja | wc -l)"
+          JAPANESE_FONT_OWNER="$(
+            (dpkg-query --search "$JAPANESE_FONT_FILE" 2>/dev/null || true) \
+              | awk -F: 'NR == 1 { print $1 }'
+          )"
+          printf 'Configured Japanese font family: %s\n' \
+            "$CONFIGURED_JAPANESE_FONT_FAMILY"
           printf 'Resolved Japanese font family: %s\n' "$JAPANESE_FONT_MATCH"
           printf 'Resolved Japanese font file: %s\n' "$JAPANESE_FONT_FILE"
+          printf 'Resolved Japanese font package: %s\n' "$JAPANESE_FONT_OWNER"
           printf 'Japanese font file count: %s\n' "$JAPANESE_FONT_COUNT"
-          if [[ "$JAPANESE_FONT_MATCH" != *"Noto Sans CJK"* ]]; then
-            echo "Japanese sans-serif did not resolve to Noto Sans CJK." >&2
+          if [[ "$CONFIGURED_JAPANESE_FONT_FAMILY" != "Noto Sans CJK JP" ]]; then
+            echo "Japanese sans-serif policy did not prepend Noto Sans CJK JP." >&2
+            exit 1
+          fi
+          if [[ "$JAPANESE_FONT_MATCH" != "Noto Sans CJK JP" ]]; then
+            echo "Japanese sans-serif did not resolve to Noto Sans CJK JP." >&2
             exit 1
           fi
           if [[ ! -f "$JAPANESE_FONT_FILE" ]]; then
             echo "Resolved Japanese font file does not exist." >&2
+            exit 1
+          fi
+          if [[ "$JAPANESE_FONT_FILE" != "$EXPLICIT_NOTO_FONT_FILE" ]]; then
+            echo "Generic and explicit Noto Japanese font files differ." >&2
+            exit 1
+          fi
+          if [[ "$JAPANESE_FONT_OWNER" != "fonts-noto-cjk" ]]; then
+            echo "Resolved Japanese font is not owned by fonts-noto-cjk." >&2
+            exit 1
+          fi
+          if ! fc-query --format='%{family[0]}\n' "$JAPANESE_FONT_FILE" \
+            | grep -Fxq 'Noto Sans CJK JP'; then
+            echo "Resolved Japanese font file lacks the JP family." >&2
+            exit 1
+          fi
+          if ! fc-query --format='%{lang}\n' "$JAPANESE_FONT_FILE" \
+            | grep -Eq '(^|[|[:space:]])ja($|[|[:space:]])'; then
+            echo "Resolved Japanese font file lacks Japanese coverage." >&2
             exit 1
           fi
           if [[ ! "$JAPANESE_FONT_COUNT" =~ ^[[:space:]]*[1-9][0-9]*$ ]]; then

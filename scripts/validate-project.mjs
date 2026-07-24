@@ -33,6 +33,7 @@ const M15_CHECKPOINT_COMMITS = Object.freeze({
 const EXACT_PR_HEAD_CHECKOUT =
   "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
 const M15_RUNTIME_FILES = [
+  '.github/fontconfig/m15-noto-cjk.conf',
   'public/assets/audio/m15/analysis.json',
   M15_AUDIO_FILE,
   'public/assets/images/m15/asset-manifest.json',
@@ -318,6 +319,7 @@ const [
   buildTypes,
   qualityWorkflow,
   browserWorkflow,
+  notoFontConfig,
   headedBrowserSmokeRunner,
   productionSmoke,
 ] = await Promise.all([
@@ -367,6 +369,7 @@ const [
   readText('src/types/build.d.ts'),
   readText('.github/workflows/quality.yml'),
   readText('.github/workflows/browser-smoke.yml'),
+  readText('.github/fontconfig/m15-noto-cjk.conf'),
   readText('scripts/run-headed-browser-smoke.sh'),
   readText('.github/workflows/production-smoke.yml'),
 ]);
@@ -1178,7 +1181,7 @@ for (const marker of [
   'state.get("traceEnabled") is False',
   'render_environment_fingerprint',
   'validate_render_environment_parity',
-  '"Noto Sans CJK" in font_match',
+  'font_match == "Noto Sans CJK JP"',
   'runner_os_image == "ubuntu-24.04"',
   're.fullmatch(r"v22\\.\\d+\\.\\d+", node_version)',
   '"renderEnvironmentContract": environment_contract',
@@ -1805,6 +1808,7 @@ for (const marker of [
   "'PROJECT_STATE.json'",
   "'docs/**'",
   "'tools/evidence/**'",
+  "'.github/fontconfig/**'",
   'M15_PREVIEW_URL: https://',
   'M15_BASELINE_SHA: 29223ee31fd4fc4fbca21a37b01fe89277279647',
   'M15_RUNNER_OS_IMAGE: ubuntu-24.04',
@@ -1815,10 +1819,19 @@ for (const marker of [
   'Install browser, real X11 window manager and Japanese font',
   'fontconfig',
   'fonts-noto-cjk',
+  '.github/fontconfig/m15-noto-cjk.conf',
+  'export FONTCONFIG_FILE="$M15_FONTCONFIG_FILE"',
+  'echo "FONTCONFIG_FILE=$M15_FONTCONFIG_FILE" >> "$GITHUB_ENV"',
+  'Fontconfig policy file:',
+  'CONFIGURED_JAPANESE_FONT_FAMILY',
+  "fc-pattern --config --default \\",
+  "'Noto Sans CJK JP:lang=ja'",
+  'JAPANESE_FONT_OWNER',
+  'fc-query',
   'fc-cache -f -v',
   'render-environment-setup.log',
   'Resolved Japanese font family:',
-  'Japanese sans-serif did not resolve to Noto Sans CJK.',
+  'Japanese sans-serif did not resolve to Noto Sans CJK JP.',
   "'sans-serif:lang=ja'",
   'JAPANESE_FONT_SHA256',
   'M15_JAPANESE_FONT_PACKAGE_VERSION',
@@ -1839,6 +1852,19 @@ for (const marker of [
 ]) {
   if (!browserWorkflow.includes(marker)) {
     failures.push(`Browser Smoke workflow is missing M1.5 viewport/head gate ${marker}.`);
+  }
+}
+for (const marker of [
+  '<include ignore_missing="no">/etc/fonts/fonts.conf</include>',
+  '<test name="family" qual="any" compare="eq">',
+  '<string>sans-serif</string>',
+  '<test name="lang" compare="contains">',
+  '<string>ja</string>',
+  '<edit name="family" mode="prepend_first" binding="strong">',
+  '<string>Noto Sans CJK JP</string>',
+]) {
+  if (!notoFontConfig.includes(marker)) {
+    failures.push(`M1.5 Japanese fontconfig policy is missing ${marker}.`);
   }
 }
 if ((browserWorkflow.match(/trace: 'false'/g)?.length ?? 0) !== 3) {

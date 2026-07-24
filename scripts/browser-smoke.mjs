@@ -101,9 +101,9 @@ if (hostEnvironment.runnerOsImage !== 'ubuntu-24.04') {
     'M15_RUNNER_OS_IMAGE must identify the pinned ubuntu-24.04 image.',
   );
 }
-if (!fontEnvironment.japaneseFontMatch.includes('Noto Sans CJK')) {
+if (fontEnvironment.japaneseFontMatch !== 'Noto Sans CJK JP') {
   throw new Error(
-    'M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK.',
+    'M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK JP.',
   );
 }
 if (!path.isAbsolute(fontEnvironment.japaneseFontFile)) {

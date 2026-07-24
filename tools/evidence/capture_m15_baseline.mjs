@@ -420,10 +420,10 @@ assert.equal(
   'ubuntu-24.04',
   'M15_RUNNER_OS_IMAGE must identify the pinned ubuntu-24.04 image.',
 );
-assert.match(
+assert.equal(
   fontEnvironment.japaneseFontMatch,
-  /Noto Sans CJK/,
-  'M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK.',
+  'Noto Sans CJK JP',
+  'M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK JP.',
 );
 assert.equal(
   path.isAbsolute(fontEnvironment.japaneseFontFile),
