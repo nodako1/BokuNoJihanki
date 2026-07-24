@@ -17,7 +17,14 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import types
 
+pil = types.ModuleType("PIL")
+pil.Image = types.SimpleNamespace()
+pil.ImageDraw = types.SimpleNamespace()
+pil.ImageOps = types.SimpleNamespace()
+pil.__version__ = "test-stub"
+sys.modules["PIL"] = pil
 spec = importlib.util.spec_from_file_location("m15_evidence", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
