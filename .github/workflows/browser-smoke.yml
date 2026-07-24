@@ -332,4 +332,154 @@ jobs:
             diagnostics/preview-${{ matrix.device_id }}
             diagnostics/production-${{ matrix.device_id }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 90
+
+  evidence:
+    name: Assemble exact-head M1.5 Evidence
+    if: github.event_name == 'pull_request'
+    needs:
+      - smoke
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      M15_PREVIEW_URL: https://boku-no-jihanki-git-fix-m1-5-r-8c699e-rutantan88-7611s-projects.vercel.app
+      M15_BASELINE_SHA: 29223ee31fd4fc4fbca21a37b01fe89277279647
+      M15_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout exact pull request head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Evidence analysis dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            ffmpeg \
+            python3-numpy \
+            python3-pil \
+            python3-scipy
+
+      - name: Download same-run Browser Smoke artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: browser-smoke-${{ github.run_id }}-*
+          path: ${{ runner.temp }}/m15-browser-smoke
+          merge-multiple: true
+
+      - name: Generate and assemble exact-head Evidence
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$M15_CANDIDATE_SHA"
+          test -z "$(git status --short)"
+
+          SMOKE_ROOT="$RUNNER_TEMP/m15-browser-smoke"
+          AUDIO_ROOT="$RUNNER_TEMP/m15-audio-$M15_CANDIDATE_SHA"
+          EVIDENCE_ROOT="$RUNNER_TEMP/m15-evidence-$M15_CANDIDATE_SHA"
+
+          resolve_single_run() {
+            local role_dir="$1"
+            local run_pattern="$2"
+            local -a candidates=()
+            test -d "$role_dir"
+            mapfile -t candidates < <(
+              find "$role_dir" \
+                -mindepth 1 -maxdepth 1 \
+                -type d -name "$run_pattern" \
+                -print
+            )
+            if [[ "${#candidates[@]}" -ne 1 ]]; then
+              printf 'Expected one complete run under %s; found %s.\n' \
+                "$role_dir" "${#candidates[@]}" >&2
+              return 1
+            fi
+            printf '%s\n' "${candidates[0]}"
+          }
+
+          BASELINE_DESKTOP="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/baseline-desktop-1280x720" 'baseline-*'
+          )"
+          BASELINE_TOUCH_844="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/baseline-touch-844x390" 'baseline-*'
+          )"
+          BASELINE_TOUCH_932="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/baseline-touch-932x430-dpr3" 'baseline-*'
+          )"
+          LOCAL_DESKTOP="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/local-desktop-1280x720" 'm15-run-*'
+          )"
+          LOCAL_TOUCH_844="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/local-touch-844x390" 'm15-run-*'
+          )"
+          LOCAL_TOUCH_932="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/local-touch-932x430-dpr3" 'm15-run-*'
+          )"
+          PREVIEW_DESKTOP="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/preview-desktop-1280x720" 'm15-run-*'
+          )"
+          PREVIEW_TOUCH_844="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/preview-touch-844x390" 'm15-run-*'
+          )"
+          PREVIEW_TOUCH_932="$(
+            resolve_single_run \
+              "$SMOKE_ROOT/preview-touch-932x430-dpr3" 'm15-run-*'
+          )"
+
+          python3 tools/evidence/generate_m15_audio_evidence.py \
+            --expected-commit "$M15_CANDIDATE_SHA" \
+            --output-dir "$AUDIO_ROOT"
+          python3 tools/evidence/assemble_m15_evidence.py \
+            --baseline-runs \
+              "$BASELINE_DESKTOP" \
+              "$BASELINE_TOUCH_844" \
+              "$BASELINE_TOUCH_932" \
+            --candidate-local-runs \
+              "$LOCAL_DESKTOP" \
+              "$LOCAL_TOUCH_844" \
+              "$LOCAL_TOUCH_932" \
+            --preview-runs \
+              "$PREVIEW_DESKTOP" \
+              "$PREVIEW_TOUCH_844" \
+              "$PREVIEW_TOUCH_932" \
+            --audio-evidence-dir "$AUDIO_ROOT" \
+            --baseline-sha "$M15_BASELINE_SHA" \
+            --candidate-sha "$M15_CANDIDATE_SHA" \
+            --preview-url "$M15_PREVIEW_URL" \
+            --output-dir "$EVIDENCE_ROOT"
+
+          test -s "$EVIDENCE_ROOT/README.md"
+          test -s "$EVIDENCE_ROOT/metrics.json"
+          test -s "$EVIDENCE_ROOT/sha256-manifest.json"
+          test -z "$(git status --short)"
+          {
+            printf '## M1.5 exact-head Evidence\n\n'
+            printf -- '- Candidate SHA: `%s`\n' "$M15_CANDIDATE_SHA"
+            printf -- '- Browser Smoke run: `%s`\n' "$GITHUB_RUN_ID"
+            printf -- '- Bundle manifest SHA-256: `%s`\n' \
+              "$(sha256sum "$EVIDENCE_ROOT/sha256-manifest.json" \
+                | cut -d ' ' -f 1)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload exact-head Evidence bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: m15-evidence-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/m15-evidence-${{ github.event.pull_request.head.sha }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0

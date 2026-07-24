@@ -623,6 +623,18 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
             f"{run.role}/{run.device_id}: {expected_reason} actual gain did not settle.",
         )
     lifecycle = nested(run.state, "evidence", "lifecycle")
+    lifecycle_launch = nested(run.state, "browserLifecycleLaunch")
+    require(
+        lifecycle_launch.get("ignoredPlaywrightDefaultArgs")
+        == [
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+        ]
+        and isinstance(lifecycle_launch.get("reason"), str)
+        and "native Chromium hidden/visible" in lifecycle_launch["reason"],
+        f"{run.role}/{run.device_id}: native browser backgrounding was not enabled.",
+    )
     hidden_visible = nested(lifecycle, "hiddenVisible")
     require(
         hidden_visible.get("method") == "cdp-browser-window-minimize-restore",

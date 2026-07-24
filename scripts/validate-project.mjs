@@ -1146,6 +1146,11 @@ for (const marker of [
   'len(mute_toggles) >= 2',
   'automation = nested(after, "masterGainAutomation")',
   'actual = finite_number(',
+  'lifecycle_launch = nested(run.state, "browserLifecycleLaunch")',
+  '"--disable-background-timer-throttling"',
+  '"--disable-backgrounding-occluded-windows"',
+  '"--disable-renderer-backgrounding"',
+  '"native Chromium hidden/visible" in lifecycle_launch["reason"]',
   'hidden_visible.get("method") == "cdp-browser-window-minimize-restore"',
   'nested(hidden_settled, "browserWindowBounds", "windowState")',
   'nested(visible_settled, "browserWindowBounds", "windowState")',
@@ -1510,6 +1515,13 @@ for (const marker of [
   "'Page.setLifecycleEventsEnabled'",
   "'Page.lifecycleEvent'",
   "'visibilitychange'",
+  'ignoredPlaywrightBackgroundingArgs',
+  'const browserLifecycleLaunch = Object.freeze({',
+  'ignoreDefaultArgs: [...ignoredPlaywrightBackgroundingArgs]',
+  "'--disable-background-timer-throttling'",
+  "'--disable-backgrounding-occluded-windows'",
+  "'--disable-renderer-backgrounding'",
+  'Preserve native Chromium hidden/visible',
   'browser.newBrowserCDPSession()',
   "'Browser.getWindowForTarget'",
   "'Browser.getWindowBounds'",
@@ -1698,6 +1710,15 @@ if (
     + 'instrumented page after closing the commit polling page.',
   );
 }
+if (
+  (browserSmoke.match(/^\s+browserLifecycleLaunch,\s*$/gm)?.length ?? 0)
+  !== 3
+) {
+  failures.push(
+    'M1.5 Browser Smoke must retain its native backgrounding launch policy '
+      + 'in initial, complete, and failed state payloads.',
+  );
+}
 const finalizationOrder = [
   browserSmoke.indexOf('await browser.close().then'),
   browserSmoke.indexOf("statePayload.status = 'complete'"),
@@ -1849,6 +1870,22 @@ for (const marker of [
   'CHROME_PATH="$(command -v google-chrome)"',
   'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
   'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
+  'retention-days: 90',
+  'name: Assemble exact-head M1.5 Evidence',
+  'needs:',
+  '- smoke',
+  'actions/download-artifact@v4',
+  'pattern: browser-smoke-${{ github.run_id }}-*',
+  'merge-multiple: true',
+  'python3 tools/evidence/generate_m15_audio_evidence.py',
+  'python3 tools/evidence/assemble_m15_evidence.py',
+  'local run_pattern="$2"',
+  '-type d -name "$run_pattern"',
+  "'baseline-*'",
+  "'m15-run-*'",
+  '--candidate-sha "$M15_CANDIDATE_SHA"',
+  'm15-evidence-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}',
+  'compression-level: 0',
   'Raw tracing',
   'protected Preview credential',
 ]) {

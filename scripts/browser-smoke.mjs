@@ -81,6 +81,18 @@ const touchEnabled = booleanFromEnv('BROWSER_TOUCH', false);
 const requestedTraceEnabled = booleanFromEnv('BROWSER_TRACE', true);
 let traceEnabled = requestedTraceEnabled;
 const browserHeadless = booleanFromEnv('BROWSER_HEADLESS', true);
+const ignoredPlaywrightBackgroundingArgs = Object.freeze([
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-renderer-backgrounding',
+]);
+const browserLifecycleLaunch = Object.freeze({
+  ignoredPlaywrightDefaultArgs: Object.freeze([
+    ...ignoredPlaywrightBackgroundingArgs,
+  ]),
+  reason:
+    'Preserve native Chromium hidden/visible and background lifecycle behavior.',
+});
 const hostEnvironment = Object.freeze({
   runnerOsImage: (process.env.M15_RUNNER_OS_IMAGE ?? '').trim(),
   platform: process.platform,
@@ -190,6 +202,7 @@ let statePayload = {
   touchEnabled,
   traceEnabled,
   browserHeadless,
+  browserLifecycleLaunch,
   hostEnvironment,
   fontEnvironment,
   outputDir,
@@ -1962,6 +1975,12 @@ try {
   browser = await chromium.launch({
     headless: browserHeadless,
     executablePath: browserExecutablePath,
+    // Playwright normally disables Chromium backgrounding so automation
+    // remains deterministic.  Those switches also prevent a minimized
+    // headed window from entering the real Page Visibility hidden state.
+    // Ignore only those three switches; the smoke test then waits for native
+    // hidden/visible DOM events and the actual audio-gain response.
+    ignoreDefaultArgs: [...ignoredPlaywrightBackgroundingArgs],
     args: [
       '--use-gl=swiftshader',
       '--enable-webgl',
@@ -2476,6 +2495,7 @@ try {
     traceSuppressedForProtectedPreview:
       requestedTraceEnabled && !traceEnabled,
     browserHeadless,
+    browserLifecycleLaunch,
     hostEnvironment,
     fontEnvironment,
     outputDir,
@@ -2538,6 +2558,7 @@ try {
     traceSuppressedForProtectedPreview:
       requestedTraceEnabled && !traceEnabled,
     browserHeadless,
+    browserLifecycleLaunch,
     hostEnvironment,
     fontEnvironment,
     outputDir,
