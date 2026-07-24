@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
 import process from 'node:process';
 
@@ -400,12 +401,11 @@ if (packageJson.version !== '0.1.0') {
   failures.push('package.json version remains 0.1.0 through the M1.5 rebuild.');
 }
 if (
-  packageJson.scripts?.['validate:m15-assets']
-    !== 'python3 tools/art/validate_m15_assets.py'
-  || !packageJson.scripts?.check?.includes('npm run validate:m15-assets')
+  packageJson.scripts?.validate !== 'node scripts/validate-project.mjs'
+  || !packageJson.scripts?.check?.startsWith('npm run validate &&')
 ) {
   failures.push(
-    'npm run check must execute the M1.5 visible-foot asset validator.',
+    'npm run check must execute the project validator before later checks.',
   );
 }
 if (
@@ -2592,6 +2592,26 @@ for (const marker of [
   if (!productionSmoke.includes(marker)) {
     failures.push(`Future Production Smoke must verify M1.5 runtime marker ${marker}.`);
   }
+}
+
+const visibleFootValidation = spawnSync(
+  'python3',
+  ['tools/art/validate_m15_assets.py'],
+  {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  },
+);
+if (visibleFootValidation.status !== 0) {
+  failures.push(
+    'M1.5 visible-foot asset validation failed: '
+    + (
+      visibleFootValidation.stderr.trim()
+      || visibleFootValidation.stdout.trim()
+      || visibleFootValidation.error?.message
+      || `exit ${visibleFootValidation.status}`
+    ),
+  );
 }
 
 if (failures.length) {
