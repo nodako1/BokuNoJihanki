@@ -132,6 +132,7 @@ const evidence = {
   lifecycle: {},
 };
 let browser;
+let browserCdpSession;
 let context;
 let page;
 let cdpSession;
@@ -1405,29 +1406,80 @@ async function verifyVisibilityAndFreezeRecovery() {
   const visibilityEventStartIndex = await page.evaluate(
     () => globalThis.__m15CandidateSmoke?.lifecycleEvents?.length ?? 0,
   );
-  let coverPage = null;
+  const { targetInfo } = await cdpSession.send('Target.getTargetInfo');
+  assert(
+    typeof targetInfo?.targetId === 'string' && targetInfo.targetId,
+    'CDP did not expose the candidate page target ID.',
+  );
+  const windowForTarget = await browserCdpSession.send(
+    'Browser.getWindowForTarget',
+    { targetId: targetInfo.targetId },
+  );
+  assert(
+    Number.isInteger(windowForTarget?.windowId),
+    'CDP did not expose the candidate browser window ID.',
+  );
+  const windowId = windowForTarget.windowId;
+  const originalBounds = await browserCdpSession.send(
+    'Browser.getWindowBounds',
+    { windowId },
+  );
+  const originalGeometry = Object.fromEntries(
+    ['left', 'top', 'width', 'height']
+      .filter((key) => Number.isFinite(originalBounds?.bounds?.[key]))
+      .map((key) => [key, originalBounds.bounds[key]]),
+  );
+  const windowControl = {
+    targetId: targetInfo.targetId,
+    windowId,
+    originalBounds: originalBounds.bounds,
+    minimizeCommand: null,
+    minimizedBounds: null,
+    restoreNormalCommand: null,
+    restoreGeometryCommand: null,
+    restoredBounds: null,
+  };
   let hiddenState = null;
   let visibleState = null;
   let hiddenAudio = null;
   let visibleAudio = null;
   let staleTraversal = null;
+  let restoreAttempted = false;
   try {
-    coverPage = await context.newPage();
-    await coverPage.goto(
-      'data:text/html,<title>M1.5 visibility witness</title>',
-      { waitUntil: 'load' },
+    const minimizeResponse = await browserCdpSession.send(
+      'Browser.setWindowBounds',
+      {
+        windowId,
+        bounds: { windowState: 'minimized' },
+      },
     );
-    await coverPage.bringToFront();
+    windowControl.minimizeCommand = {
+      succeeded: true,
+      response: minimizeResponse,
+    };
     hiddenState = await pollFromHost(
-      'a real hidden tab with settled output gain',
-      () => page.evaluate(() => ({
-        documentHidden: document.hidden,
-        visibilityState: document.visibilityState,
-        audio:
-          globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
-      })),
+      'a minimized browser window with real hidden state and settled output gain',
+      async () => {
+        const [pageState, bounds] = await Promise.all([
+          page.evaluate(() => ({
+            documentHidden: document.hidden,
+            visibilityState: document.visibilityState,
+            audio:
+              globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+          })),
+          browserCdpSession.send(
+            'Browser.getWindowBounds',
+            { windowId },
+          ),
+        ]);
+        return {
+          ...pageState,
+          browserWindowBounds: bounds.bounds,
+        };
+      },
       (snapshot) => (
-        snapshot?.documentHidden === true
+        snapshot?.browserWindowBounds?.windowState === 'minimized'
+        && snapshot.documentHidden === true
         && snapshot.visibilityState === 'hidden'
         && snapshot.audio?.documentHidden === true
         && snapshot.audio?.masterGainAutomation?.target === 0
@@ -1435,6 +1487,7 @@ async function verifyVisibilityAndFreezeRecovery() {
       ),
       12_000,
     );
+    windowControl.minimizedBounds = hiddenState.browserWindowBounds;
     const hidden = hiddenState.audio;
     hiddenAudio = hidden;
     assert(
@@ -1477,17 +1530,55 @@ async function verifyVisibilityAndFreezeRecovery() {
       'Hidden panel tap did not enqueue one observable traversal request.',
     );
 
+    restoreAttempted = true;
+    const restoreNormalResponse = await browserCdpSession.send(
+      'Browser.setWindowBounds',
+      {
+        windowId,
+        bounds: { windowState: 'normal' },
+      },
+    );
+    windowControl.restoreNormalCommand = {
+      succeeded: true,
+      response: restoreNormalResponse,
+    };
+    if (Object.keys(originalGeometry).length === 4) {
+      const restoreGeometryResponse = await browserCdpSession.send(
+        'Browser.setWindowBounds',
+        {
+          windowId,
+          bounds: originalGeometry,
+        },
+      );
+      windowControl.restoreGeometryCommand = {
+        succeeded: true,
+        response: restoreGeometryResponse,
+      };
+    }
     await page.bringToFront();
     visibleState = await pollFromHost(
-      'the original tab to become visible with restored output gain',
-      () => page.evaluate(() => ({
-        documentHidden: document.hidden,
-        visibilityState: document.visibilityState,
-        audio:
-          globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
-      })),
+      'the restored browser window to become visible with restored output gain',
+      async () => {
+        const [pageState, bounds] = await Promise.all([
+          page.evaluate(() => ({
+            documentHidden: document.hidden,
+            visibilityState: document.visibilityState,
+            audio:
+              globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+          })),
+          browserCdpSession.send(
+            'Browser.getWindowBounds',
+            { windowId },
+          ),
+        ]);
+        return {
+          ...pageState,
+          browserWindowBounds: bounds.bounds,
+        };
+      },
       (snapshot) => (
-        snapshot?.documentHidden === false
+        snapshot?.browserWindowBounds?.windowState === 'normal'
+        && snapshot.documentHidden === false
         && snapshot.visibilityState === 'visible'
         && snapshot.audio?.documentHidden === false
         && snapshot.audio?.masterGainAutomation?.target > 0
@@ -1498,6 +1589,7 @@ async function verifyVisibilityAndFreezeRecovery() {
       ),
       12_000,
     );
+    windowControl.restoredBounds = visibleState.browserWindowBounds;
     const visible = await waitForAudioAdvance(beforeHidden);
     visibleAudio = visible;
     await new Promise((resolve) => {
@@ -1532,8 +1624,25 @@ async function verifyVisibilityAndFreezeRecovery() {
       `hidden-visible recovery error: ${visible.lastRecoveryError}.`,
     );
   } finally {
-    if (coverPage && !coverPage.isClosed()) await coverPage.close();
-    if (page && !page.isClosed()) await page.bringToFront();
+    if (!restoreAttempted || windowControl.restoredBounds === null) {
+      await browserCdpSession.send(
+        'Browser.setWindowBounds',
+        {
+          windowId,
+          bounds: { windowState: 'normal' },
+        },
+      ).catch(() => {});
+      if (Object.keys(originalGeometry).length === 4) {
+        await browserCdpSession.send(
+          'Browser.setWindowBounds',
+          {
+            windowId,
+            bounds: originalGeometry,
+          },
+        ).catch(() => {});
+      }
+    }
+    if (page && !page.isClosed()) await page.bringToFront().catch(() => {});
   }
   const visibilityEvents = await page.evaluate(
     (startIndex) => (
@@ -1557,7 +1666,8 @@ async function verifyVisibilityAndFreezeRecovery() {
       + `${JSON.stringify(visibilityEvents)}.`,
   );
   evidence.lifecycle.hiddenVisible = {
-    method: 'playwright-real-tab-activation',
+    method: 'cdp-browser-window-minimize-restore',
+    windowControl,
     beforeHidden,
     hiddenSettledState: hiddenState,
     hidden: hiddenAudio,
@@ -1814,6 +1924,7 @@ try {
       '--ignore-gpu-blocklist',
     ],
   });
+  browserCdpSession = await browser.newBrowserCDPSession();
   context = await browser.newContext({
     viewport,
     deviceScaleFactor,

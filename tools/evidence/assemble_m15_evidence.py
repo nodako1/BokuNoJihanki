@@ -542,8 +542,21 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     lifecycle = nested(run.state, "evidence", "lifecycle")
     hidden_visible = nested(lifecycle, "hiddenVisible")
     require(
-        hidden_visible.get("method") == "playwright-real-tab-activation",
-        f"{run.role}/{run.device_id}: visibility recovery did not use a real tab activation.",
+        hidden_visible.get("method") == "cdp-browser-window-minimize-restore",
+        f"{run.role}/{run.device_id}: visibility recovery did not use a real browser-window lifecycle.",
+    )
+    window_control = nested(hidden_visible, "windowControl")
+    target_id = window_control.get("targetId")
+    window_id = window_control.get("windowId")
+    require(
+        isinstance(target_id, str)
+        and bool(target_id)
+        and isinstance(window_id, int)
+        and not isinstance(window_id, bool)
+        and isinstance(nested(window_control, "originalBounds"), dict)
+        and nested(window_control, "minimizeCommand", "succeeded") is True
+        and nested(window_control, "restoreNormalCommand", "succeeded") is True,
+        f"{run.role}/{run.device_id}: browser-window CDP commands are incomplete.",
     )
     visibility_sources = [
         nested(hidden_visible, name, "sourceId")
@@ -566,7 +579,11 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         f"{run.role}/{run.device_id}: hidden actual gain",
     )
     require(
-        hidden_settled.get("documentHidden") is True
+        nested(hidden_settled, "browserWindowBounds", "windowState")
+        == "minimized"
+        and nested(window_control, "minimizedBounds")
+        == nested(hidden_settled, "browserWindowBounds")
+        and hidden_settled.get("documentHidden") is True
         and hidden_settled.get("visibilityState") == "hidden"
         and nested(hidden_settled, "audio", "documentHidden") is True
         and hidden_audio.get("documentHidden") is True
@@ -587,7 +604,11 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         f"{run.role}/{run.device_id}: visible actual gain",
     )
     require(
-        visible_settled.get("documentHidden") is False
+        nested(visible_settled, "browserWindowBounds", "windowState")
+        == "normal"
+        and nested(window_control, "restoredBounds")
+        == nested(visible_settled, "browserWindowBounds")
+        and visible_settled.get("documentHidden") is False
         and visible_settled.get("visibilityState") == "visible"
         and nested(visible_settled, "audio", "documentHidden") is False
         and visible_audio.get("documentHidden") is False
