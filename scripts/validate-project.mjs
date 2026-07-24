@@ -47,7 +47,9 @@ const M15_RUNTIME_FILES = [
   'src/ui/areaPanelPlacement.d.mts',
   'src/game/systems/audioEngine.ts',
   'tests/m15-audio-contract.test.mjs',
+  'tests/m15-evidence-environment.test.mjs',
   'tests/m15-geometry-panel-contract.test.mjs',
+  'tests/m15-headed-runner.test.mjs',
   'tests/m15-input-protection.test.mjs',
   'tools/art/generate_m15_assets.py',
   'tools/art/validate_m15_assets.py',
@@ -143,6 +145,7 @@ const FINAL_RELEASE_FILES = [
   '.vercel-production-retry',
   '.github/workflows/quality.yml',
   '.github/workflows/browser-smoke.yml',
+  'scripts/run-headed-browser-smoke.sh',
   '.github/workflows/production-smoke.yml',
   'PROJECT_STATE.json',
   'README.md',
@@ -315,6 +318,7 @@ const [
   buildTypes,
   qualityWorkflow,
   browserWorkflow,
+  headedBrowserSmokeRunner,
   productionSmoke,
 ] = await Promise.all([
   readJson('package.json'),
@@ -363,6 +367,7 @@ const [
   readText('src/types/build.d.ts'),
   readText('.github/workflows/quality.yml'),
   readText('.github/workflows/browser-smoke.yml'),
+  readText('scripts/run-headed-browser-smoke.sh'),
   readText('.github/workflows/production-smoke.yml'),
 ]);
 
@@ -907,6 +912,16 @@ for (const marker of [
   'BASELINE_DEFECTS_OBSERVED_NOT_A_CANDIDATE_PASS',
   'candidatePass: false',
   'context.tracing.start',
+  "booleanFromEnvironment('BROWSER_TRACE', true)",
+  "booleanFromEnvironment('BROWSER_HEADLESS', true)",
+  'if (traceEnabled)',
+  'let traceFinalized = !tracingStarted',
+  "requiredEnvironment('M15_JAPANESE_FONT_MATCH')",
+  "requiredEnvironment('M15_JAPANESE_FONT_SHA256')",
+  "requiredEnvironment('M15_RUNNER_OS_IMAGE')",
+  'browserExecutablePath',
+  'hostEnvironment',
+  'fontEnvironment',
   "'state.json'",
   "'runtime.log'",
   "'trace.zip'",
@@ -1133,6 +1148,12 @@ for (const marker of [
   'nested(visible_settled, "browserWindowBounds", "windowState")',
   'nested(window_control, "minimizeCommand", "succeeded") is True',
   'nested(window_control, "restoreNormalCommand", "succeeded") is True',
+  'nested(window_control, "restoreGeometryCommand", "succeeded")',
+  'geometry_tolerance == 2',
+  'original_window_bounds.get("windowState") == "normal"',
+  'restored_window_bounds.get("windowState") == "normal"',
+  'original_geometry["width"] > 0',
+  'abs(restored_geometry[key] - original_geometry[key])',
   'hidden_settled.get("visibilityState") == "hidden"',
   'visible_settled.get("visibilityState") == "visible"',
   'visible_event_index > hidden_event_index',
@@ -1154,6 +1175,13 @@ for (const marker of [
   'recomputed_max_gap >= minimum_gap',
   'post_active_input = nested(frozen, "postActiveInput")',
   'state.get("status") == "complete"',
+  'state.get("traceEnabled") is False',
+  'render_environment_fingerprint',
+  'validate_render_environment_parity',
+  '"Noto Sans CJK" in font_match',
+  'runner_os_image == "ubuntu-24.04"',
+  're.fullmatch(r"v22\\.\\d+\\.\\d+", node_version)',
+  '"renderEnvironmentContract": environment_contract',
   'validate_audio_directory',
   'validate_tracked_assets',
   'assert_phase_and_ground_pairing',
@@ -1484,12 +1512,18 @@ for (const marker of [
   "'Browser.getWindowBounds'",
   "'Browser.setWindowBounds'",
   "bounds: { windowState: 'minimized' }",
-  "bounds: { windowState: 'normal' }",
+  "windowState: 'normal'",
   'await page.bringToFront();',
   'visibilityState: document.visibilityState',
   "method: 'cdp-browser-window-minimize-restore'",
   "snapshot?.browserWindowBounds?.windowState === 'minimized'",
   "snapshot?.browserWindowBounds?.windowState === 'normal'",
+  "originalBounds?.bounds?.windowState === 'normal'",
+  "windowState: 'normal'",
+  'combinedWithGeometry: true',
+  'combinedWithNormal: true',
+  'geometryRestoreToleranceDip = 2',
+  'Object.entries(originalGeometry).every',
   "hiddenPanelClick.visibilityState === 'hidden'",
   'hiddenPanelClick.requestCountAfter',
   "hiddenPanelClick.traversalRequest?.visibilityState === 'hidden'",
@@ -1772,9 +1806,28 @@ for (const marker of [
   "'docs/**'",
   "'tools/evidence/**'",
   'M15_PREVIEW_URL: https://',
+  'M15_BASELINE_SHA: 29223ee31fd4fc4fbca21a37b01fe89277279647',
+  'M15_RUNNER_OS_IMAGE: ubuntu-24.04',
   "BROWSER_HEADLESS: 'false'",
-  'timeout-minutes: 60',
+  'timeout-minutes: 90',
+  'fetch-depth: 0',
   'Select headed Google Chrome with AAC support',
+  'Install browser, real X11 window manager and Japanese font',
+  'fontconfig',
+  'fonts-noto-cjk',
+  'sudo fc-cache -f',
+  "'sans-serif:lang=ja'",
+  'JAPANESE_FONT_SHA256',
+  'M15_JAPANESE_FONT_PACKAGE_VERSION',
+  'Prepare immutable baseline build',
+  'git diff --quiet "$M15_BASELINE_SHA" -- package.json package-lock.json',
+  'git archive --format=tar "$M15_BASELINE_SHA"',
+  'VERCEL_GIT_COMMIT_SHA="$M15_BASELINE_SHA"',
+  'Capture exact baseline in candidate browser environment',
+  'node tools/evidence/capture_m15_baseline.mjs',
+  'diagnostics/baseline-${{ matrix.device_id }}',
+  'runs-on: ubuntu-24.04',
+  "dpkg-query --show \\",
   'CHROME_PATH="$(command -v google-chrome)"',
   'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
   'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
@@ -1790,12 +1843,42 @@ if ((browserWorkflow.match(/trace: 'false'/g)?.length ?? 0) !== 3) {
 }
 if (
   (browserWorkflow.match(
-    /run: xvfb-run -a node scripts\/browser-smoke\.mjs/g,
+    /run: xvfb-run -a bash scripts\/run-headed-browser-smoke\.sh/g,
   )?.length ?? 0) !== 3
 ) {
   failures.push(
-    'M1.5 Browser Smoke must run headed Chromium under Xvfb for local, '
-      + 'Preview, and Production lifecycle measurements.',
+    'M1.5 Browser Smoke must run headed Chromium under Xvfb and a real '
+      + 'window manager for local, Preview, and Production lifecycle measurements.',
+  );
+}
+for (const marker of [
+  'openbox --sm-disable',
+  'xprop -root _NET_SUPPORTING_WM_CHECK',
+  'xprop -id "$candidate_window_id"',
+  'candidate_support_window_id="${BASH_REMATCH[1]}"',
+  '[[ "$candidate_support_window_id" == "$candidate_window_id" ]]',
+  'kill -0 "$window_manager_pid"',
+  'window_support_property',
+  'window_name_property',
+  'window-manager-environment.txt',
+  'M15_RUNNER_OS_IMAGE',
+  'M15_JAPANESE_FONT_MATCH',
+  'M15_JAPANESE_FONT_SHA256',
+  'window_manager_ready=true',
+  'smoke_command=("$@")',
+  '"${smoke_command[@]}"',
+  'set +e',
+  'smoke_status=$?',
+  'exit "$smoke_status"',
+  'node scripts/browser-smoke.mjs',
+]) {
+  if (!headedBrowserSmokeRunner.includes(marker)) {
+    failures.push(`Headed Browser Smoke runner is missing ${marker}.`);
+  }
+}
+if (/document\.(?:hidden|visibilityState)/.test(headedBrowserSmokeRunner)) {
+  failures.push(
+    'Headed Browser Smoke runner must not simulate document visibility.',
   );
 }
 const exactPullRequestCommit =
@@ -1809,6 +1892,12 @@ if (
     'Browser Smoke workflow must bind both local and Preview runs to the exact PR head.',
   );
 }
+const prepareBaselineStep = browserWorkflow.indexOf(
+  '- name: Prepare immutable baseline build',
+);
+const baselineCaptureStep = browserWorkflow.indexOf(
+  '- name: Capture exact baseline in candidate browser environment',
+);
 const localSmokeStep = browserWorkflow.indexOf(
   '- name: Test exact local pull request build',
 );
@@ -1819,14 +1908,35 @@ const productionSmokeStep = browserWorkflow.indexOf(
   '- name: Test exact deployed Production',
 );
 if (
-  localSmokeStep < 0
+  prepareBaselineStep < 0
+  || baselineCaptureStep <= prepareBaselineStep
+  || localSmokeStep <= baselineCaptureStep
   || previewSmokeStep <= localSmokeStep
   || productionSmokeStep <= previewSmokeStep
 ) {
   failures.push(
-    'Browser Smoke workflow must run the local candidate before the exact Vercel Preview.',
+    'Browser Smoke workflow must build/capture the immutable baseline before '
+      + 'the local candidate and exact Vercel Preview.',
   );
 } else {
+  const baselineStepSource = browserWorkflow.slice(
+    baselineCaptureStep,
+    localSmokeStep,
+  );
+  for (const marker of [
+    'EXPECTED_COMMIT: ${{ env.M15_BASELINE_SHA }}',
+    'BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}',
+    'BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}',
+    'BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}',
+    'BROWSER_TOUCH: ${{ matrix.touch }}',
+    'BROWSER_TRACE: ${{ matrix.trace }}',
+    'xvfb-run -a bash scripts/run-headed-browser-smoke.sh',
+    'node tools/evidence/capture_m15_baseline.mjs',
+  ]) {
+    if (!baselineStepSource.includes(marker)) {
+      failures.push(`Browser Smoke baseline matrix step is missing ${marker}.`);
+    }
+  }
   const localStepSource = browserWorkflow.slice(localSmokeStep, previewSmokeStep);
   const previewStepSource = browserWorkflow.slice(
     previewSmokeStep,

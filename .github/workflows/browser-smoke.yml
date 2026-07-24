@@ -15,6 +15,7 @@ on:
       - 'package-lock.json'
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
+      - 'scripts/run-headed-browser-smoke.sh'
       - 'src/**'
       - 'tools/evidence/**'
       - 'vercel.json'
@@ -33,6 +34,7 @@ on:
       - 'package-lock.json'
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
+      - 'scripts/run-headed-browser-smoke.sh'
       - 'src/**'
       - 'tools/evidence/**'
       - 'vercel.json'
@@ -50,8 +52,8 @@ concurrency:
 jobs:
   smoke:
     name: Render and operate M1.5 (${{ matrix.device_id }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -79,6 +81,8 @@ jobs:
             trace: 'false'
     env:
       M15_PREVIEW_URL: https://boku-no-jihanki-git-fix-m1-5-r-8c699e-rutantan88-7611s-projects.vercel.app
+      M15_BASELINE_SHA: 29223ee31fd4fc4fbca21a37b01fe89277279647
+      M15_RUNNER_OS_IMAGE: ubuntu-24.04
       BROWSER_HEADLESS: 'false'
 
     steps:
@@ -86,6 +90,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -101,10 +106,47 @@ jobs:
           VERCEL_GIT_COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: npm run build
 
-      - name: Install Playwright Chromium
+      - name: Install browser, real X11 window manager and Japanese font
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1
           npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            fontconfig \
+            fonts-noto-cjk \
+            openbox \
+            x11-utils
+          sudo fc-cache -f
+          JAPANESE_FONT_MATCH="$(
+            fc-match --format='%{family[0]}' 'sans-serif:lang=ja'
+          )"
+          JAPANESE_FONT_FILE="$(
+            fc-match --format='%{file}' 'sans-serif:lang=ja'
+          )"
+          JAPANESE_FONT_PACKAGE_VERSION="$(
+            dpkg-query --show --showformat='${Version}' fonts-noto-cjk
+          )"
+          JAPANESE_FONT_COUNT="$(fc-list :lang=ja | wc -l)"
+          [[ "$JAPANESE_FONT_MATCH" == *"Noto Sans CJK"* ]]
+          test -f "$JAPANESE_FONT_FILE"
+          test "$JAPANESE_FONT_COUNT" -gt 0
+          JAPANESE_FONT_SHA256="$(
+            sha256sum "$JAPANESE_FONT_FILE" | cut -d ' ' -f 1
+          )"
+          echo "M15_JAPANESE_FONT_MATCH=$JAPANESE_FONT_MATCH" >> "$GITHUB_ENV"
+          echo "M15_JAPANESE_FONT_FILE=$JAPANESE_FONT_FILE" >> "$GITHUB_ENV"
+          echo "M15_JAPANESE_FONT_PACKAGE_VERSION=$JAPANESE_FONT_PACKAGE_VERSION" \
+            >> "$GITHUB_ENV"
+          echo "M15_JAPANESE_FONT_SHA256=$JAPANESE_FONT_SHA256" >> "$GITHUB_ENV"
+          openbox --version
+          dpkg-query --show \
+            --showformat='${binary:Package}\t${Version}\n' \
+            fontconfig fonts-noto-cjk openbox x11-utils xvfb
+          printf 'Japanese font: %s\nFile: %s\nSHA-256: %s\nCount: %s\n' \
+            "$JAPANESE_FONT_MATCH" \
+            "$JAPANESE_FONT_FILE" \
+            "$JAPANESE_FONT_SHA256" \
+            "$JAPANESE_FONT_COUNT"
 
       - name: Select headed Google Chrome with AAC support
         run: |
@@ -112,6 +154,50 @@ jobs:
           test -x "$CHROME_PATH"
           echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
           "$CHROME_PATH" --version
+
+      - name: Prepare immutable baseline build
+        if: github.event_name == 'pull_request'
+        run: |
+          test "$(git rev-parse "$M15_BASELINE_SHA^{commit}")" = "$M15_BASELINE_SHA"
+          git diff --quiet "$M15_BASELINE_SHA" -- package.json package-lock.json
+          BASELINE_ROOT="$RUNNER_TEMP/m15-baseline-${{ matrix.device_id }}"
+          mkdir -p "$BASELINE_ROOT"
+          git archive --format=tar "$M15_BASELINE_SHA" \
+            | tar -xf - -C "$BASELINE_ROOT"
+          test ! -e "$BASELINE_ROOT/node_modules"
+          ln -s "$GITHUB_WORKSPACE/node_modules" "$BASELINE_ROOT/node_modules"
+          VERCEL_GIT_COMMIT_SHA="$M15_BASELINE_SHA" \
+            npm --prefix "$BASELINE_ROOT" run build
+          echo "M15_BASELINE_ROOT=$BASELINE_ROOT" >> "$GITHUB_ENV"
+
+      - name: Capture exact baseline in candidate browser environment
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_URL: http://127.0.0.1:4174
+          EXPECTED_COMMIT: ${{ env.M15_BASELINE_SHA }}
+          BROWSER_ARTIFACT_DIR: diagnostics/baseline-${{ matrix.device_id }}
+          BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}
+          BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}
+          BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}
+          BROWSER_TOUCH: ${{ matrix.touch }}
+          BROWSER_TRACE: ${{ matrix.trace }}
+        run: |
+          mkdir -p "$BROWSER_ARTIFACT_DIR"
+          nohup npm --prefix "$BASELINE_ROOT" run preview -- \
+            --host 127.0.0.1 --port 4174 \
+            > "$BROWSER_ARTIFACT_DIR/vite-preview.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "$BASE_URL/" > /dev/null; then
+              break
+            fi
+            if [[ "$attempt" -eq 30 ]]; then
+              cat "$BROWSER_ARTIFACT_DIR/vite-preview.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          xvfb-run -a bash scripts/run-headed-browser-smoke.sh \
+            node tools/evidence/capture_m15_baseline.mjs
 
       - name: Start local production build
         if: github.event_name == 'pull_request'
@@ -138,7 +224,7 @@ jobs:
           BROWSER_TOUCH: ${{ matrix.touch }}
           BROWSER_TRACE: ${{ matrix.trace }}
           PRODUCTION_WAIT_MS: '30000'
-        run: xvfb-run -a node scripts/browser-smoke.mjs
+        run: xvfb-run -a bash scripts/run-headed-browser-smoke.sh
 
       - name: Test exact Vercel Preview
         if: github.event_name == 'pull_request'
@@ -153,7 +239,7 @@ jobs:
           BROWSER_TOUCH: ${{ matrix.touch }}
           BROWSER_TRACE: ${{ matrix.trace }}
           PRODUCTION_WAIT_MS: '900000'
-        run: xvfb-run -a node scripts/browser-smoke.mjs
+        run: xvfb-run -a bash scripts/run-headed-browser-smoke.sh
 
       - name: Test exact deployed Production
         if: github.event_name != 'pull_request'
@@ -167,7 +253,7 @@ jobs:
           BROWSER_TOUCH: ${{ matrix.touch }}
           BROWSER_TRACE: ${{ matrix.trace }}
           PRODUCTION_WAIT_MS: '900000'
-        run: xvfb-run -a node scripts/browser-smoke.mjs
+        run: xvfb-run -a bash scripts/run-headed-browser-smoke.sh
 
       - name: Upload screenshots, logs and trace
         if: always()
@@ -175,6 +261,7 @@ jobs:
         with:
           name: browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}
           path: |
+            diagnostics/baseline-${{ matrix.device_id }}
             diagnostics/local-${{ matrix.device_id }}
             diagnostics/preview-${{ matrix.device_id }}
             diagnostics/production-${{ matrix.device_id }}

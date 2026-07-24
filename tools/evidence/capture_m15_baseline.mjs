@@ -400,6 +400,41 @@ const deviceScaleFactor = positiveNumberFromEnvironment(
   1,
 );
 const touchEnabled = booleanFromEnvironment('BROWSER_TOUCH', false);
+const traceEnabled = booleanFromEnvironment('BROWSER_TRACE', true);
+const browserHeadless = booleanFromEnvironment('BROWSER_HEADLESS', true);
+const hostEnvironment = Object.freeze({
+  runnerOsImage: requiredEnvironment('M15_RUNNER_OS_IMAGE'),
+  platform: process.platform,
+  architecture: process.arch,
+});
+const fontEnvironment = Object.freeze({
+  japaneseFontMatch: requiredEnvironment('M15_JAPANESE_FONT_MATCH'),
+  japaneseFontFile: requiredEnvironment('M15_JAPANESE_FONT_FILE'),
+  japaneseFontPackageVersion: requiredEnvironment(
+    'M15_JAPANESE_FONT_PACKAGE_VERSION',
+  ),
+  japaneseFontSha256: requiredEnvironment('M15_JAPANESE_FONT_SHA256'),
+});
+assert.equal(
+  hostEnvironment.runnerOsImage,
+  'ubuntu-24.04',
+  'M15_RUNNER_OS_IMAGE must identify the pinned ubuntu-24.04 image.',
+);
+assert.match(
+  fontEnvironment.japaneseFontMatch,
+  /Noto Sans CJK/,
+  'M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK.',
+);
+assert.equal(
+  path.isAbsolute(fontEnvironment.japaneseFontFile),
+  true,
+  'M15_JAPANESE_FONT_FILE must be an absolute path.',
+);
+assert.match(
+  fontEnvironment.japaneseFontSha256,
+  /^[0-9a-f]{64}$/,
+  'M15_JAPANESE_FONT_SHA256 must be a complete SHA-256.',
+);
 
 fs.mkdirSync(browserArtifactRoot, { recursive: true });
 const outputDirectory = fs.mkdtempSync(
@@ -436,10 +471,15 @@ let cdpSession;
 let inputController;
 let failure;
 let captureComplete = false;
+let tracingStarted = false;
 let statePayload = {
   schemaVersion: 1,
   kind: 'M1.5-baseline-capture',
   expectedCommit,
+  browserHeadless,
+  traceEnabled,
+  hostEnvironment,
+  fontEnvironment,
   outputDirectory,
 };
 
@@ -1468,7 +1508,7 @@ try {
   addAuthoredRouteDefects();
   const fixtureCoordinateParity = verifyFixtureCoordinateParity();
   browser = await chromium.launch({
-    headless: true,
+    headless: browserHeadless,
     executablePath: browserExecutablePath,
     args: [
       '--use-gl=swiftshader',
@@ -1508,11 +1548,14 @@ try {
       if (state.prompts.length > 400) state.prompts.shift();
     });
   });
-  await context.tracing.start({
-    screenshots: true,
-    snapshots: true,
-    sources: false,
-  });
+  if (traceEnabled) {
+    await context.tracing.start({
+      screenshots: true,
+      snapshots: true,
+      sources: false,
+    });
+    tracingStarted = true;
+  }
   page = await context.newPage();
   cdpSession = await context.newCDPSession(page);
   inputController = createInputController();
@@ -1677,6 +1720,10 @@ try {
     viewport,
     deviceScaleFactor,
     touchEnabled,
+    browserHeadless,
+    traceEnabled,
+    hostEnvironment,
+    fontEnvironment,
     inputEvidence: {
       horizontalMovement: touchEnabled
         ? 'CDP real touch joystick drag'
@@ -1689,6 +1736,7 @@ try {
     runtime: {
       nodeVersion: process.version,
       browserVersion: browser.version(),
+      browserExecutablePath,
       baselineRoot,
       baselineSourceCommit: baselineContract.sourceCommit,
       baselineVerifiedTreeSha: baselineContract.verifiedTreeSha,
@@ -1750,6 +1798,10 @@ try {
     viewport,
     deviceScaleFactor,
     touchEnabled,
+    browserHeadless,
+    traceEnabled,
+    hostEnvironment,
+    fontEnvironment,
     outputDirectory,
     measurementPositioning: evidence.measurementPositioning,
     baselineContract: baselineContract
@@ -1771,8 +1823,8 @@ try {
     failure: error?.stack ?? String(error),
   };
 } finally {
-  let traceFinalized = context === undefined;
-  if (context) {
+  let traceFinalized = !tracingStarted;
+  if (context && tracingStarted) {
     await context.tracing.stop({
       path: path.join(outputDirectory, 'trace.zip'),
     }).then(() => {

@@ -81,6 +81,40 @@ const touchEnabled = booleanFromEnv('BROWSER_TOUCH', false);
 const requestedTraceEnabled = booleanFromEnv('BROWSER_TRACE', true);
 let traceEnabled = requestedTraceEnabled;
 const browserHeadless = booleanFromEnv('BROWSER_HEADLESS', true);
+const hostEnvironment = Object.freeze({
+  runnerOsImage: (process.env.M15_RUNNER_OS_IMAGE ?? '').trim(),
+  platform: process.platform,
+  architecture: process.arch,
+});
+const fontEnvironment = Object.freeze({
+  japaneseFontMatch: (process.env.M15_JAPANESE_FONT_MATCH ?? '').trim(),
+  japaneseFontFile: (process.env.M15_JAPANESE_FONT_FILE ?? '').trim(),
+  japaneseFontPackageVersion: (
+    process.env.M15_JAPANESE_FONT_PACKAGE_VERSION ?? ''
+  ).trim(),
+  japaneseFontSha256: (
+    process.env.M15_JAPANESE_FONT_SHA256 ?? ''
+  ).trim(),
+});
+if (hostEnvironment.runnerOsImage !== 'ubuntu-24.04') {
+  throw new Error(
+    'M15_RUNNER_OS_IMAGE must identify the pinned ubuntu-24.04 image.',
+  );
+}
+if (!fontEnvironment.japaneseFontMatch.includes('Noto Sans CJK')) {
+  throw new Error(
+    'M15_JAPANESE_FONT_MATCH must resolve to Noto Sans CJK.',
+  );
+}
+if (!path.isAbsolute(fontEnvironment.japaneseFontFile)) {
+  throw new Error('M15_JAPANESE_FONT_FILE must be an absolute path.');
+}
+if (!fontEnvironment.japaneseFontPackageVersion) {
+  throw new Error('M15_JAPANESE_FONT_PACKAGE_VERSION is required.');
+}
+if (!/^[0-9a-f]{64}$/.test(fontEnvironment.japaneseFontSha256)) {
+  throw new Error('M15_JAPANESE_FONT_SHA256 must be a complete SHA-256.');
+}
 fs.mkdirSync(configuredOutputDir, { recursive: true });
 const outputDir = fs.mkdtempSync(
   path.join(configuredOutputDir, 'm15-run-'),
@@ -156,6 +190,8 @@ let statePayload = {
   touchEnabled,
   traceEnabled,
   browserHeadless,
+  hostEnvironment,
+  fontEnvironment,
   outputDir,
   previewAccess,
 };
@@ -1429,10 +1465,22 @@ async function verifyVisibilityAndFreezeRecovery() {
       .filter((key) => Number.isFinite(originalBounds?.bounds?.[key]))
       .map((key) => [key, originalBounds.bounds[key]]),
   );
+  const geometryRestoreToleranceDip = 2;
+  assert(
+    Object.keys(originalGeometry).length === 4,
+    'CDP did not expose complete original browser window geometry.',
+  );
+  assert(
+    originalBounds?.bounds?.windowState === 'normal'
+      && originalGeometry.width > 0
+      && originalGeometry.height > 0,
+    'CDP did not expose a normal browser window with positive geometry.',
+  );
   const windowControl = {
     targetId: targetInfo.targetId,
     windowId,
     originalBounds: originalBounds.bounds,
+    geometryRestoreToleranceDip,
     minimizeCommand: null,
     minimizedBounds: null,
     restoreNormalCommand: null,
@@ -1531,30 +1579,29 @@ async function verifyVisibilityAndFreezeRecovery() {
     );
 
     restoreAttempted = true;
-    const restoreNormalResponse = await browserCdpSession.send(
+    const restoreBounds = {
+      ...originalGeometry,
+      windowState: 'normal',
+    };
+    const restoreResponse = await browserCdpSession.send(
       'Browser.setWindowBounds',
       {
         windowId,
-        bounds: { windowState: 'normal' },
+        bounds: restoreBounds,
       },
     );
     windowControl.restoreNormalCommand = {
       succeeded: true,
-      response: restoreNormalResponse,
+      combinedWithGeometry: true,
+      bounds: restoreBounds,
+      response: restoreResponse,
     };
-    if (Object.keys(originalGeometry).length === 4) {
-      const restoreGeometryResponse = await browserCdpSession.send(
-        'Browser.setWindowBounds',
-        {
-          windowId,
-          bounds: originalGeometry,
-        },
-      );
-      windowControl.restoreGeometryCommand = {
-        succeeded: true,
-        response: restoreGeometryResponse,
-      };
-    }
+    windowControl.restoreGeometryCommand = {
+      succeeded: true,
+      combinedWithNormal: true,
+      bounds: restoreBounds,
+      response: restoreResponse,
+    };
     await page.bringToFront();
     visibleState = await pollFromHost(
       'the restored browser window to become visible with restored output gain',
@@ -1578,6 +1625,10 @@ async function verifyVisibilityAndFreezeRecovery() {
       },
       (snapshot) => (
         snapshot?.browserWindowBounds?.windowState === 'normal'
+        && Object.entries(originalGeometry).every(([key, value]) => (
+          Math.abs(snapshot.browserWindowBounds[key] - value)
+            <= geometryRestoreToleranceDip
+        ))
         && snapshot.documentHidden === false
         && snapshot.visibilityState === 'visible'
         && snapshot.audio?.documentHidden === false
@@ -1629,18 +1680,12 @@ async function verifyVisibilityAndFreezeRecovery() {
         'Browser.setWindowBounds',
         {
           windowId,
-          bounds: { windowState: 'normal' },
+          bounds: {
+            ...originalGeometry,
+            windowState: 'normal',
+          },
         },
       ).catch(() => {});
-      if (Object.keys(originalGeometry).length === 4) {
-        await browserCdpSession.send(
-          'Browser.setWindowBounds',
-          {
-            windowId,
-            bounds: originalGeometry,
-          },
-        ).catch(() => {});
-      }
     }
     if (page && !page.isClosed()) await page.bringToFront().catch(() => {});
   }
@@ -2431,11 +2476,14 @@ try {
     traceSuppressedForProtectedPreview:
       requestedTraceEnabled && !traceEnabled,
     browserHeadless,
+    hostEnvironment,
+    fontEnvironment,
     outputDir,
     previewAccess,
     runtime: {
       nodeVersion: process.version,
       browserVersion: browser.version(),
+      browserExecutablePath,
       actualBrowserViewport,
       developerHudRect,
       initial,
@@ -2490,6 +2538,8 @@ try {
     traceSuppressedForProtectedPreview:
       requestedTraceEnabled && !traceEnabled,
     browserHeadless,
+    hostEnvironment,
+    fontEnvironment,
     outputDir,
     previewAccess,
     evidence,

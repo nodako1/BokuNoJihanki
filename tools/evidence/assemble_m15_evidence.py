@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import platform
+import re
 import shlex
 import shutil
 import subprocess
@@ -285,6 +286,85 @@ def require_boolean_map(mapping: Any, context: str) -> None:
     require(not failed, f"{context} contains failed checks: {failed}")
 
 
+def render_environment_fingerprint(run: Run) -> dict[str, Any]:
+    state = run.state
+    runtime = state.get("runtime")
+    host = state.get("hostEnvironment")
+    font = state.get("fontEnvironment")
+    require(
+        isinstance(runtime, dict)
+        and isinstance(host, dict)
+        and isinstance(font, dict),
+        f"{run.role}/{run.device_id}: render environment metadata is missing.",
+    )
+    node_version = runtime.get("nodeVersion")
+    browser_version = runtime.get("browserVersion")
+    browser_executable = runtime.get("browserExecutablePath")
+    runner_os_image = host.get("runnerOsImage")
+    platform_name = host.get("platform")
+    architecture = host.get("architecture")
+    font_match = font.get("japaneseFontMatch")
+    font_file = font.get("japaneseFontFile")
+    font_package_version = font.get("japaneseFontPackageVersion")
+    font_sha256 = font.get("japaneseFontSha256")
+    require(
+        isinstance(node_version, str) and re.fullmatch(r"v22\.\d+\.\d+", node_version),
+        f"{run.role}/{run.device_id}: exact Node 22 version is missing.",
+    )
+    require(
+        isinstance(browser_version, str) and bool(browser_version.strip()),
+        f"{run.role}/{run.device_id}: exact browser version is missing.",
+    )
+    require(
+        isinstance(browser_executable, str)
+        and Path(browser_executable).is_absolute(),
+        f"{run.role}/{run.device_id}: browser executable path is invalid.",
+    )
+    require(
+        runner_os_image == "ubuntu-24.04"
+        and platform_name == "linux"
+        and architecture == "x64",
+        f"{run.role}/{run.device_id}: pinned Linux render host is invalid.",
+    )
+    require(
+        isinstance(font_match, str) and "Noto Sans CJK" in font_match,
+        f"{run.role}/{run.device_id}: Japanese font did not resolve to Noto Sans CJK.",
+    )
+    require(
+        isinstance(font_file, str) and Path(font_file).is_absolute(),
+        f"{run.role}/{run.device_id}: resolved Japanese font file is invalid.",
+    )
+    require(
+        isinstance(font_package_version, str)
+        and bool(font_package_version.strip()),
+        f"{run.role}/{run.device_id}: Japanese font package version is missing.",
+    )
+    require(
+        isinstance(font_sha256, str)
+        and re.fullmatch(r"[0-9a-f]{64}", font_sha256) is not None,
+        f"{run.role}/{run.device_id}: Japanese font SHA-256 is invalid.",
+    )
+    return {
+        "nodeVersion": node_version,
+        "browserVersion": browser_version,
+        "browserExecutablePath": browser_executable,
+        "hostEnvironment": host,
+        "fontEnvironment": font,
+    }
+
+
+def validate_render_environment_parity(runs: Sequence[Run]) -> dict[str, Any]:
+    require(bool(runs), "At least one render run is required.")
+    contract = render_environment_fingerprint(runs[0])
+    for run in runs[1:]:
+        require(
+            render_environment_fingerprint(run) == contract,
+            f"{run.role}/{run.device_id}: render environment differs from the "
+            "other baseline/local/Preview runs.",
+        )
+    return contract
+
+
 def measurement_ground_y(measurement: dict[str, Any], *, baseline: bool) -> float:
     if baseline:
         return float(nested(measurement, "independentVisualSample", "y"))
@@ -363,14 +443,17 @@ def panel_entries(run: Run) -> dict[tuple[str, str, str], tuple[dict[str, Any], 
 
 def validate_baseline(run: Run, baseline_sha: str) -> None:
     state = run.state
+    render_environment_fingerprint(run)
     require(state.get("kind") == "M1.5-baseline-capture", f"{run.role}/{run.device_id}: wrong baseline kind.")
     require(state.get("captureStatus") == "complete", f"{run.role}/{run.device_id}: baseline capture is not complete.")
     require(state.get("expectedCommit") == baseline_sha, f"{run.role}/{run.device_id}: baseline SHA mismatch.")
     require(
         state.get("observedCommit") == baseline_sha
+        and state.get("browserHeadless") is False
+        and state.get("traceEnabled") is False
         and nested(state, "finalization", "browserClosed") is True
         and nested(state, "finalization", "traceFinalized") is True,
-        f"{run.role}/{run.device_id}: baseline finalization or observed SHA is invalid.",
+        f"{run.role}/{run.device_id}: baseline render mode, finalization, or observed SHA is invalid.",
     )
     require(
         nested(state, "runtime", "baselineSourceCommit") == baseline_sha,
@@ -548,6 +631,10 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     window_control = nested(hidden_visible, "windowControl")
     target_id = window_control.get("targetId")
     window_id = window_control.get("windowId")
+    geometry_tolerance = finite_number(
+        window_control.get("geometryRestoreToleranceDip"),
+        f"{run.role}/{run.device_id}: browser-window geometry restore tolerance",
+    )
     require(
         isinstance(target_id, str)
         and bool(target_id)
@@ -557,6 +644,40 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         and nested(window_control, "minimizeCommand", "succeeded") is True
         and nested(window_control, "restoreNormalCommand", "succeeded") is True,
         f"{run.role}/{run.device_id}: browser-window CDP commands are incomplete.",
+    )
+    original_window_bounds = nested(window_control, "originalBounds")
+    restored_window_bounds = nested(window_control, "restoredBounds")
+    geometry_keys = ("left", "top", "width", "height")
+    original_geometry = {
+        key: finite_number(
+            original_window_bounds.get(key),
+            f"{run.role}/{run.device_id}: original browser-window {key}",
+        )
+        for key in geometry_keys
+    }
+    restored_geometry = {
+        key: finite_number(
+            restored_window_bounds.get(key),
+            f"{run.role}/{run.device_id}: restored browser-window {key}",
+        )
+        for key in geometry_keys
+    }
+    require(
+        geometry_tolerance == 2
+        and original_window_bounds.get("windowState") == "normal"
+        and restored_window_bounds.get("windowState") == "normal"
+        and original_geometry["width"] > 0
+        and original_geometry["height"] > 0
+        and restored_geometry["width"] > 0
+        and restored_geometry["height"] > 0
+        and nested(window_control, "restoreGeometryCommand", "succeeded")
+        is True
+        and all(
+            abs(restored_geometry[key] - original_geometry[key])
+            <= geometry_tolerance
+            for key in geometry_keys
+        ),
+        f"{run.role}/{run.device_id}: browser-window geometry was not restored.",
     )
     visibility_sources = [
         nested(hidden_visible, name, "sourceId")
@@ -864,6 +985,7 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
 
 def validate_candidate(run: Run, candidate_sha: str) -> None:
     state = run.state
+    render_environment_fingerprint(run)
     require(state.get("revision") == "M1.5", f"{run.role}/{run.device_id}: wrong candidate revision.")
     require(state.get("expectedCommit") == candidate_sha, f"{run.role}/{run.device_id}: candidate SHA mismatch.")
     require(
@@ -877,6 +999,10 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
     require(
         state.get("browserHeadless") is False,
         f"{run.role}/{run.device_id}: formal Browser Evidence must use a headed browser.",
+    )
+    require(
+        state.get("traceEnabled") is False,
+        f"{run.role}/{run.device_id}: formal Browser Evidence must disable raw tracing.",
     )
     require(not state.get("pageErrors"), f"{run.role}/{run.device_id}: page errors are non-zero.")
     require(not state.get("failedRequests"), f"{run.role}/{run.device_id}: failed requests are non-zero.")
@@ -1939,8 +2065,12 @@ def run_metrics(run: Run) -> dict[str, Any]:
         "deviceScaleFactor": state.get("deviceScaleFactor"),
         "touchEnabled": state.get("touchEnabled"),
         "browserHeadless": state.get("browserHeadless"),
+        "traceEnabled": state.get("traceEnabled"),
+        "hostEnvironment": state.get("hostEnvironment"),
+        "fontEnvironment": state.get("fontEnvironment"),
         "nodeVersion": runtime.get("nodeVersion"),
         "browserVersion": runtime.get("browserVersion"),
+        "browserExecutablePath": runtime.get("browserExecutablePath"),
         "runtimeLog": (
             {"path": str(log_path), **file_record(log_path)}
             if log_path.is_file() and not log_path.is_symlink()
@@ -2066,6 +2196,7 @@ def build_readme(
     image_rights = tracked["manifest"]["rights"]
     image_generation_rights = tracked["generation"]["rights"]
     audio_rights = tracked["audioProvenance"]["license"]
+    render_environment = metrics["renderEnvironmentContract"]
     visible_metrics = {key: value for key, value in metrics.items() if not key.startswith("_")}
     return "\n".join(
         [
@@ -2080,6 +2211,13 @@ def build_readme(
             f"- Baseline SHA: `{visible_metrics['baselineSha']}`",
             f"- Candidate SHA: `{visible_metrics['candidateSha']}`",
             f"- Preview: [{visible_metrics['previewUrl']}]({visible_metrics['previewUrl']})",
+            f"- Render OS: `{render_environment['hostEnvironment']['runnerOsImage']}` "
+            f"({render_environment['hostEnvironment']['platform']}/"
+            f"{render_environment['hostEnvironment']['architecture']})",
+            f"- Japanese font: `{render_environment['fontEnvironment']['japaneseFontMatch']}` "
+            f"from package `{render_environment['fontEnvironment']['japaneseFontPackageVersion']}`",
+            f"- Japanese font SHA-256: "
+            f"`{render_environment['fontEnvironment']['japaneseFontSha256']}`",
             "",
             "## Capture matrix",
             "",
@@ -2232,6 +2370,12 @@ def main(arguments: Sequence[str] | None = None) -> None:
         candidate_sha,
         baseline=False,
     )
+    formal_runs = [
+        *baseline_runs.values(),
+        *local_runs.values(),
+        *preview_runs.values(),
+    ]
+    environment_contract = validate_render_environment_parity(formal_runs)
     for run in baseline_runs.values():
         require(is_loopback_url(canonical_url(run.state["baseUrl"], "baseline baseUrl")), f"{run.role}/{run.device_id}: baseline was not captured locally.")
     for run in local_runs.values():
@@ -2368,6 +2512,7 @@ def main(arguments: Sequence[str] | None = None) -> None:
         "baselineSha": baseline_sha,
         "candidateSha": candidate_sha,
         "previewUrl": preview_url,
+        "renderEnvironmentContract": environment_contract,
         "viewportContract": [
             {
                 "deviceId": device_id,
