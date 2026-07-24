@@ -47,10 +47,14 @@ const M15_RUNTIME_FILES = [
   'src/ui/areaPanelPlacement.mjs',
   'src/ui/areaPanelPlacement.d.mts',
   'src/game/systems/audioEngine.ts',
+  'scripts/m15-heartbeat-contract.mjs',
   'scripts/prepare-playwright-native-visibility.mjs',
   'scripts/x11-tab-visibility.mjs',
   'tests/m15-audio-contract.test.mjs',
+  'tests/m15-asset-validator.test.mjs',
   'tests/m15-evidence-environment.test.mjs',
+  'tests/m15-evidence-phase-coordinate.test.mjs',
+  'tests/m15-heartbeat-contract.test.mjs',
   'tests/m15-geometry-panel-contract.test.mjs',
   'tests/m15-headed-runner.test.mjs',
   'tests/m15-input-protection.test.mjs',
@@ -394,6 +398,15 @@ if (packageJson.name !== 'boku-no-jihanki') {
 }
 if (packageJson.version !== '0.1.0') {
   failures.push('package.json version remains 0.1.0 through the M1.5 rebuild.');
+}
+if (
+  packageJson.scripts?.['validate:m15-assets']
+    !== 'python3 tools/art/validate_m15_assets.py'
+  || !packageJson.scripts?.check?.includes('npm run validate:m15-assets')
+) {
+  failures.push(
+    'npm run check must execute the M1.5 visible-foot asset validator.',
+  );
 }
 if (
   packageLock.version !== packageJson.version
@@ -924,6 +937,8 @@ for (const marker of [
   'evidence.panelMatrix.length, 12',
   'Baseline 3-area x 4-phase capture is incomplete.',
   'sourceSpawnSequence',
+  'area.spawnPoints[spawnId]',
+  'runtimeSpawnY',
   'independentVisualFixture: M15_BASELINE_GEOMETRY_FIXTURE',
   'painted-entrance-trigger-misalignment',
   'runtime-trigger-without-painted-route',
@@ -1362,7 +1377,16 @@ for (const marker of [
   '"renderEnvironmentContract": environment_contract',
   'validate_audio_directory',
   'validate_tracked_assets',
+  'validate_phase_coordinate(',
   'assert_phase_and_ground_pairing',
+  'preview_runs,',
+  'REQUIRED_PANEL_OBSTACLE_SELECTORS',
+  'EXPECTED_SPAWN_MEASUREMENTS',
+  'EXPECTED_BASELINE_SPAWN_MEASUREMENTS',
+  'validate_player_foot_evidence(',
+  '"player-foot-alpha.json"',
+  'state["pageErrors"] == []',
+  'state["failedRequests"] == []',
   'All input validation is complete before the first output byte is written.',
   'Refusing non-empty Evidence output directory',
   '"sha256-manifest.json"',
@@ -1819,9 +1843,15 @@ for (const marker of [
   'requiredAggregatePanelStatesAcrossThreeViewports: 36',
   'triggerBoundaryWorldX',
   'PANEL_TRIGGER_INSET_WORLD_PX = 8',
+  "samplingSemantics: 'inside-inclusive-trigger-edge'",
   'entrance.triggerRange.minX + PANEL_TRIGGER_INSET_WORLD_PX',
   'entrance.triggerRange.maxX - PANEL_TRIGGER_INSET_WORLD_PX',
   'fixtureGroundMeasurement',
+  'fixtureSample',
+  'fixtureSpawn',
+  'spawnId,',
+  'phaseAnchor.x',
+  'PHASE_CAPTURE_POSITION',
   "'boku-no-jihanki:player-screen-geometry'",
   'lastPlayerGeometry',
   'renderedFootScreenY',
@@ -1910,14 +1940,15 @@ for (const marker of [
   'frozen-active recovery changed the logical mute setting.',
   'frozen-active recovery error:',
   'heartbeatSuspension',
-  'calibratedGaps',
+  'evaluateM15HeartbeatCalibration',
+  'calibration.maximumObservedGapMs',
   'innerFrozenCallbacks.length === 0',
   'postActiveCallbacks.length >= 1',
   'minimumSuspensionGapMs',
   'setTimeout(resolve, 3_200)',
   'frozenSettleMarginMs = 400',
   'activeSettleMarginMs = 100',
-  'Math.floor(frozenWallDurationMs * 0.78)',
+  'minimumM15SuspensionGapMs({',
   'frozenAcceptedAt,',
   'activeRequestedAt,',
   'const postActiveInput = await exerciseWalk(',
@@ -2152,6 +2183,16 @@ for (const [workflowName, workflow] of [
     failures.push(`${workflowName} workflow must use Node.js 22.`);
   }
 }
+for (const marker of [
+  'Install M1.5 visual asset validation dependencies',
+  'python3-numpy',
+  'python3-pil',
+  'npm run check',
+]) {
+  if (!qualityWorkflow.includes(marker)) {
+    failures.push(`Quality workflow is missing ${marker}.`);
+  }
+}
 const workflowDeviceIds = [...browserWorkflow.matchAll(
   /^\s+- device_id:\s+(\S+)\s*$/gm,
 )].map((match) => match[1]);
@@ -2276,12 +2317,15 @@ for (const marker of [
   'pattern: browser-smoke-${{ github.run_id }}-*',
   'merge-multiple: true',
   'python3 tools/evidence/generate_m15_audio_evidence.py',
+  'python3 tools/art/validate_m15_assets.py',
   'python3 tools/evidence/assemble_m15_evidence.py',
   'local run_pattern="$2"',
   '-type d -name "$run_pattern"',
   "'baseline-*'",
   "'m15-run-*'",
   '--candidate-sha "$M15_CANDIDATE_SHA"',
+  '--expected-commit "$M15_CANDIDATE_SHA"',
+  '--player-foot-evidence-file "$PLAYER_FOOT_EVIDENCE"',
   'm15-evidence-${{ github.run_id }}-${{ github.event.pull_request.head.sha }}',
   'compression-level: 0',
   'Raw tracing',

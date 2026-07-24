@@ -38,12 +38,43 @@ POSITIONS = ("left", "center", "right")
 DIRECTIONS = ("up", "down")
 FACINGS = ("left", "right")
 PANEL_SAMPLES = ("start", "center", "end")
+PANEL_TRIGGER_INSET_WORLD_PX = 8
+REQUIRED_PANEL_OBSTACLE_SELECTORS = frozenset(
+    {
+        ".game-date-chip",
+        ".game-actions",
+        ".virtual-joystick",
+        ".control-hint",
+        ".build-badge",
+    },
+)
+PHASE_CAPTURE_POSITION = "left"
+PHASE_CAPTURE_FACING = "right"
+PHASE_CAPTURE_TOLERANCE_WORLD_PX = 4
+PHASE_CAPTURE_PAIR_TOLERANCE_WORLD_PX = 4
+PHASE_CAPTURE_FIXTURE = "src/game/areas/m15GeometryFixture.mjs"
 EXPECTED_SOURCE_SPAWNS = (
     "life-road/from-home",
     "home-street/from-life",
     "life-road/from-home",
     "upper-vending-lane/from-life",
     "life-road/from-upper",
+)
+EXPECTED_SPAWN_MEASUREMENTS = (
+    ("home-street", "start", "spawn-start"),
+    ("life-road", "from-home", "spawn-from-home"),
+    ("home-street", "from-life", "spawn-from-life"),
+    ("life-road", "from-home", "spawn-from-home-repeat"),
+    ("upper-vending-lane", "from-life", "spawn-from-life"),
+    ("life-road", "from-upper", "spawn-from-upper"),
+)
+EXPECTED_BASELINE_SPAWN_MEASUREMENTS = (
+    ("home-street", "start", "spawn-start"),
+    ("life-road", "from-home", "spawn-from-home"),
+    ("home-street", "from-life", "spawn-from-life"),
+    ("life-road", "from-home", "spawn-from-home"),
+    ("upper-vending-lane", "from-life", "spawn-from-life"),
+    ("life-road", "from-upper", "spawn-from-upper"),
 )
 EXPECTED_VIEWPORTS = {
     (1280, 720, 1.0, False): "desktop-1280x720-dpr1",
@@ -81,6 +112,10 @@ M15_PLAYWRIGHT_ORIGINAL_SHA256 = (
 M15_PLAYWRIGHT_PATCHED_SHA256 = (
     "e0ec5890e92413dbb0599f3ed12b0b463fbd81cad62d3b2642dd4554e5d0efea"
 )
+M15_HEARTBEAT_INTERVAL_MS = 40
+M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT = 8
+M15_HEARTBEAT_CALIBRATION_MAX_GAP_MS = 750
+M15_HEARTBEAT_FREEZE_SEPARATION_RATIO = 4
 
 
 class EvidenceError(RuntimeError):
@@ -116,6 +151,37 @@ def finite_number(value: Any, name: str) -> float:
         f"{name} must be a finite number.",
     )
     return float(value)
+
+
+def validate_positive_rect(value: Any, name: str) -> dict[str, float]:
+    require(isinstance(value, dict), f"{name} must be a rectangle object.")
+    rectangle = {
+        key: finite_number(value.get(key), f"{name}.{key}")
+        for key in ("left", "top", "width", "height")
+    }
+    require(
+        rectangle["width"] > 0 and rectangle["height"] > 0,
+        f"{name} must have positive dimensions.",
+    )
+    if "right" in value:
+        require(
+            math.isclose(
+                finite_number(value["right"], f"{name}.right"),
+                rectangle["left"] + rectangle["width"],
+                abs_tol=0.05,
+            ),
+            f"{name}.right does not match left + width.",
+        )
+    if "bottom" in value:
+        require(
+            math.isclose(
+                finite_number(value["bottom"], f"{name}.bottom"),
+                rectangle["top"] + rectangle["height"],
+                abs_tol=0.05,
+            ),
+            f"{name}.bottom does not match top + height.",
+        )
+    return rectangle
 
 
 def strict_json_load(path: Path) -> dict[str, Any]:
@@ -571,6 +637,95 @@ def phase_entry(run: Run, area_id: str, phase: str, *, baseline: bool) -> tuple[
     return entry, screenshot
 
 
+def phase_anchor_world_x(run: Run, area_id: str, *, baseline: bool) -> float:
+    samples = (
+        nested(
+            run.state,
+            "candidateFixtureCoordinateParity",
+            area_id,
+            "candidateSamples",
+        )
+        if baseline
+        else nested(
+            run.state,
+            "geometryFixture",
+            "areas",
+            area_id,
+            "ground",
+            "samples",
+        )
+    )
+    require(
+        isinstance(samples, list),
+        f"{run.role}/{run.device_id}: {area_id} phase anchor samples are missing.",
+    )
+    matches = [
+        sample
+        for sample in samples
+        if isinstance(sample, dict)
+        and sample.get("position") == PHASE_CAPTURE_POSITION
+    ]
+    require(
+        len(matches) == 1,
+        f"{run.role}/{run.device_id}: {area_id} phase anchor is ambiguous.",
+    )
+    return finite_number(
+        matches[0].get("x"),
+        f"{run.role}/{run.device_id}: {area_id} phase anchor X",
+    )
+
+
+def validate_phase_coordinate(
+    run: Run,
+    area_id: str,
+    phase: str,
+    entry: dict[str, Any],
+    *,
+    baseline: bool,
+) -> dict[str, float]:
+    coordinate = nested(entry, "coordinate")
+    expected_target = phase_anchor_world_x(run, area_id, baseline=baseline)
+    target = finite_number(
+        coordinate.get("targetWorldX"),
+        f"{run.role}/{run.device_id}: {area_id}/{phase} phase target X",
+    )
+    actual = finite_number(
+        coordinate.get("actualWorldX"),
+        f"{run.role}/{run.device_id}: {area_id}/{phase} phase actual X",
+    )
+    tolerance = finite_number(
+        coordinate.get("toleranceWorldPx"),
+        f"{run.role}/{run.device_id}: {area_id}/{phase} phase tolerance",
+    )
+    snapshot_x = finite_number(
+        nested(entry, "snapshot", "playerX"),
+        f"{run.role}/{run.device_id}: {area_id}/{phase} snapshot X",
+    )
+    require(
+        coordinate.get("sourceFixture") == PHASE_CAPTURE_FIXTURE
+        and coordinate.get("sourcePath")
+        == f"areas.{area_id}.ground.samples[{PHASE_CAPTURE_POSITION}]"
+        and coordinate.get("position") == PHASE_CAPTURE_POSITION
+        and coordinate.get("facing") == PHASE_CAPTURE_FACING
+        and nested(entry, "snapshot", "facing") == PHASE_CAPTURE_FACING,
+        f"{run.role}/{run.device_id}: {area_id}/{phase} phase coordinate "
+        "provenance or facing is invalid.",
+    )
+    require(
+        target == expected_target
+        and tolerance == PHASE_CAPTURE_TOLERANCE_WORLD_PX
+        and actual == snapshot_x
+        and abs(actual - target) <= tolerance,
+        f"{run.role}/{run.device_id}: {area_id}/{phase} phase world "
+        "coordinate is not fixture-anchored.",
+    )
+    return {
+        "targetWorldX": target,
+        "actualWorldX": actual,
+        "toleranceWorldPx": tolerance,
+    }
+
+
 def panel_entries(run: Run) -> dict[tuple[str, str, str], tuple[dict[str, Any], Path]]:
     raw_entries = nested(run.state, "evidence", "panelMatrix")
     require(isinstance(raw_entries, list) and len(raw_entries) == 12, f"{run.role}/{run.device_id}: panel matrix must contain 12 states.")
@@ -613,8 +768,16 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
         nested(state, "runtime", "baselineSourceCommit") == baseline_sha,
         f"{run.role}/{run.device_id}: verified baseline source SHA mismatch.",
     )
-    require(not state.get("pageErrors"), f"{run.role}/{run.device_id}: baseline page errors are non-zero.")
-    require(not state.get("failedRequests"), f"{run.role}/{run.device_id}: baseline failed requests are non-zero.")
+    require(
+        isinstance(state.get("pageErrors"), list)
+        and state["pageErrors"] == [],
+        f"{run.role}/{run.device_id}: baseline page errors are missing or non-zero.",
+    )
+    require(
+        isinstance(state.get("failedRequests"), list)
+        and state["failedRequests"] == [],
+        f"{run.role}/{run.device_id}: baseline failed requests are missing or non-zero.",
+    )
     quality = nested(state, "qualityAssessment")
     require(
         quality.get("status") == "BASELINE_DEFECTS_OBSERVED_NOT_A_CANDIDATE_PASS"
@@ -643,14 +806,116 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
         all(value.get("xCoordinatesMatch") is True for value in parity.values()),
         f"{run.role}/{run.device_id}: baseline/candidate sample X parity failed.",
     )
+    spawn_measurements = nested(state, "evidence", "spawnMeasurements")
+    require(
+        isinstance(spawn_measurements, list)
+        and len(spawn_measurements) == len(EXPECTED_BASELINE_SPAWN_MEASUREMENTS),
+        f"{run.role}/{run.device_id}: baseline must contain exactly six "
+        "spawn measurements.",
+    )
+    for measurement, expected in zip(
+        spawn_measurements,
+        EXPECTED_BASELINE_SPAWN_MEASUREMENTS,
+        strict=True,
+    ):
+        expected_area, expected_spawn_id, expected_position = expected
+        runtime_spawns = nested(
+            state,
+            "runtimeContract",
+            "areas",
+            expected_area,
+            "spawnPoints",
+        )
+        require(
+            isinstance(runtime_spawns, dict),
+            f"{run.role}/{run.device_id}: baseline {expected_area} runtime "
+            "spawn contract is missing.",
+        )
+        expected_runtime_spawn = runtime_spawns.get(expected_spawn_id)
+        expected_runtime_ground_y = finite_number(
+            nested(
+                state,
+                "runtimeContract",
+                "areas",
+                expected_area,
+                "groundY",
+            ),
+            f"{run.role}/{run.device_id}: baseline {expected_area} "
+            "runtime ground Y",
+        )
+        require(
+            isinstance(expected_runtime_spawn, dict)
+            and expected_runtime_spawn.get("id") == expected_spawn_id,
+            f"{run.role}/{run.device_id}: baseline {expected_area}/"
+            f"{expected_spawn_id} runtime spawn is missing.",
+        )
+        snapshot = nested(measurement, "runtimeSnapshot")
+        require(
+            measurement.get("spawn") is True
+            and measurement.get("areaId") == expected_area
+            and measurement.get("position") == expected_position
+            and measurement.get("spawnId") == expected_spawn_id
+            and measurement.get("runtimeSpawn") == expected_runtime_spawn
+            and measurement.get("runtimeSpawnY")
+            == expected_runtime_ground_y
+            and snapshot.get("area") == expected_area
+            and snapshot.get("spawnId") == expected_spawn_id
+            and snapshot.get("facing")
+            == expected_runtime_spawn.get("facing")
+            and abs(
+                finite_number(
+                    snapshot.get("playerX"),
+                    f"{run.role}/{run.device_id}: baseline "
+                    f"{expected_position} X",
+                )
+                - finite_number(
+                    expected_runtime_spawn.get("x"),
+                    f"{run.role}/{run.device_id}: baseline "
+                    f"{expected_spawn_id} contract X",
+                )
+            )
+            <= 1
+            and abs(
+                finite_number(
+                    snapshot.get("playerY"),
+                    f"{run.role}/{run.device_id}: baseline "
+                    f"{expected_position} Y",
+                )
+                - expected_runtime_ground_y
+            )
+            <= 1,
+            f"{run.role}/{run.device_id}: baseline {expected_position} is "
+            "not bound to its runtime spawn contract.",
+        )
 
     fixture = nested(state, "independentVisualFixture")
     require(fixture.get("baselineCommit") == baseline_sha, f"{run.role}/{run.device_id}: baseline visual fixture SHA mismatch.")
     for area_id in AREA_IDS:
         for position in POSITIONS:
             measurement, _ = baseline_ground_entry(run, area_id, position)
+            sample = nested(measurement, "independentVisualSample")
+            actual_x = finite_number(
+                nested(measurement, "runtimeSnapshot", "playerX"),
+                f"{run.role}/{run.device_id}: {area_id}/{position} player X",
+            )
             require(
-                nested(measurement, "independentVisualSample", "position") == position,
+                sample.get("position") == position
+                and abs(
+                    actual_x
+                    - finite_number(
+                        sample.get("x"),
+                        f"{run.role}/{run.device_id}: "
+                        f"{area_id}/{position} fixture X",
+                    )
+                )
+                <= finite_number(
+                    nested(
+                        state,
+                        "measurementPositioning",
+                        "targetToleranceWorldPx",
+                    ),
+                    f"{run.role}/{run.device_id}: baseline X tolerance",
+                ),
                 f"{run.role}/{run.device_id}: baseline position annotation mismatch.",
             )
         for phase in PHASES:
@@ -658,6 +923,13 @@ def validate_baseline(run: Run, baseline_sha: str) -> None:
             require(
                 entry.get("minutes") in {360, 720, 990, 1200},
                 f"{run.role}/{run.device_id}: invalid phase clock value.",
+            )
+            validate_phase_coordinate(
+                run,
+                area_id,
+                phase,
+                entry,
+                baseline=True,
             )
     panel_entries(run)
     same_coordinates = nested(state, "evidence", "sameCoordinateComparisons")
@@ -1626,6 +1898,85 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         f"{run.role}/{run.device_id}: actual master gain did not recover after CDP active.",
     )
     heartbeat = nested(frozen, "heartbeatSuspension")
+    calibration = nested(heartbeat, "calibration")
+    calibration_gaps = calibration.get("sampledGaps")
+    calibration_raw = nested(calibration, "heartbeat")
+    calibration_callbacks = calibration_raw.get("callbackWallMs")
+    calibration_started_ticks = calibration.get("startedTicks")
+    calibration_finished_ticks = calibration.get("finishedTicks")
+    require(
+        isinstance(calibration_started_ticks, int)
+        and not isinstance(calibration_started_ticks, bool)
+        and isinstance(calibration_finished_ticks, int)
+        and not isinstance(calibration_finished_ticks, bool)
+        and isinstance(calibration_gaps, list)
+        and len(calibration_gaps)
+        == M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT
+        and all(
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and 0 < float(value) <= M15_HEARTBEAT_CALIBRATION_MAX_GAP_MS
+            for value in calibration_gaps
+        )
+        and isinstance(calibration_callbacks, list)
+        and len(calibration_callbacks)
+        >= M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT,
+        f"{run.role}/{run.device_id}: foreground heartbeat calibration "
+        "samples are malformed.",
+    )
+    calibration_maximum_gap = max(float(value) for value in calibration_gaps)
+    calibration_minimum_gap = min(float(value) for value in calibration_gaps)
+    calibration_started_wall = finite_number(
+        calibration.get("startedWallMs"),
+        f"{run.role}/{run.device_id}: heartbeat calibration start",
+    )
+    calibration_finished_wall = finite_number(
+        calibration.get("finishedWallMs"),
+        f"{run.role}/{run.device_id}: heartbeat calibration finish",
+    )
+    require(
+        calibration.get("expectedIntervalMs") == M15_HEARTBEAT_INTERVAL_MS
+        and calibration.get("requiredSampleCount")
+        == M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT
+        and calibration.get("maximumAllowedGapMs")
+        == M15_HEARTBEAT_CALIBRATION_MAX_GAP_MS
+        and calibration.get("freezeSeparationRatio")
+        == M15_HEARTBEAT_FREEZE_SEPARATION_RATIO
+        and calibration.get("tickDelta")
+        == calibration_finished_ticks - calibration_started_ticks
+        and calibration.get("tickDelta")
+        >= M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT
+        and math.isclose(
+            finite_number(
+                calibration.get("maximumObservedGapMs"),
+                f"{run.role}/{run.device_id}: calibration maximum gap",
+            ),
+            calibration_maximum_gap,
+            abs_tol=1,
+        )
+        and math.isclose(
+            finite_number(
+                calibration.get("minimumObservedGapMs"),
+                f"{run.role}/{run.device_id}: calibration minimum gap",
+            ),
+            calibration_minimum_gap,
+            abs_tol=1,
+        )
+        and calibration_gaps
+        == calibration_raw.get("recentGapsMs", [])[
+            -M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT:
+        ]
+        and calibration_callbacks == sorted(calibration_callbacks)
+        and all(
+            calibration_started_wall <= float(value)
+            <= calibration_finished_wall
+            for value in calibration_callbacks
+        )
+        and calibration.get("verified") is True,
+        f"{run.role}/{run.device_id}: foreground heartbeat calibration "
+        "is not fresh or fail-closed.",
+    )
     after_heartbeat = nested(heartbeat, "afterResume")
     callback_values = after_heartbeat.get("callbackWallMs")
     before_heartbeat = nested(heartbeat, "beforeFreeze")
@@ -1712,7 +2063,14 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         for index, value in enumerate(callback_values)
     ]
     recomputed_max_gap = max(recomputed_gaps, default=0.0)
-    expected_minimum_gap = max(2_500, math.floor(frozen_duration * 0.78))
+    expected_minimum_gap = max(
+        2_500,
+        math.floor(frozen_duration * 0.78),
+        math.ceil(
+            calibration_maximum_gap
+            * M15_HEARTBEAT_FREEZE_SEPARATION_RATIO
+        ),
+    )
     require(
         frozen_duration >= 3_000
         and frozen_settle_margin == 400
@@ -1811,8 +2169,16 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
         state.get("traceEnabled") is False,
         f"{run.role}/{run.device_id}: formal Browser Evidence must disable raw tracing.",
     )
-    require(not state.get("pageErrors"), f"{run.role}/{run.device_id}: page errors are non-zero.")
-    require(not state.get("failedRequests"), f"{run.role}/{run.device_id}: failed requests are non-zero.")
+    require(
+        isinstance(state.get("pageErrors"), list)
+        and state["pageErrors"] == [],
+        f"{run.role}/{run.device_id}: page errors are missing or non-zero.",
+    )
+    require(
+        isinstance(state.get("failedRequests"), list)
+        and state["failedRequests"] == [],
+        f"{run.role}/{run.device_id}: failed requests are missing or non-zero.",
+    )
     require(
         state.get("status") == "complete"
         and nested(state, "finalization", "browserClosed") is True
@@ -1853,14 +2219,97 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
     evidence = nested(state, "evidence")
     spawns = nested(evidence, "spawns")
     require(isinstance(spawns, list) and len(spawns) == 6, f"{run.role}/{run.device_id}: expected six spawn measurements.")
-    for measurement in spawns:
+    for measurement, expected in zip(
+        spawns,
+        EXPECTED_SPAWN_MEASUREMENTS,
+        strict=True,
+    ):
+        expected_area, expected_spawn_id, expected_position = expected
         validate_candidate_measurement(run, measurement, spawn=True)
+        fixture_spawn = nested(
+            fixture,
+            "areas",
+            expected_area,
+            "spawns",
+            expected_spawn_id,
+        )
+        snapshot = nested(measurement, "snapshot")
+        require(
+            measurement.get("areaId") == expected_area
+            and measurement.get("position") == expected_position
+            and measurement.get("spawnId") == expected_spawn_id
+            and measurement.get("fixtureSpawn") == fixture_spawn
+            and snapshot.get("area") == expected_area
+            and snapshot.get("spawnId") == expected_spawn_id
+            and snapshot.get("facing") == fixture_spawn.get("facing")
+            and abs(
+                finite_number(
+                    snapshot.get("playerX"),
+                    f"{run.role}/{run.device_id}: {expected_position} X",
+                )
+                - finite_number(
+                    fixture_spawn.get("x"),
+                    f"{run.role}/{run.device_id}: "
+                    f"{expected_spawn_id} fixture X",
+                )
+            )
+            <= 1
+            and abs(
+                finite_number(
+                    snapshot.get("playerY"),
+                    f"{run.role}/{run.device_id}: {expected_position} Y",
+                )
+                - finite_number(
+                    fixture_spawn.get("y"),
+                    f"{run.role}/{run.device_id}: "
+                    f"{expected_spawn_id} fixture Y",
+                )
+            )
+            <= 1,
+            f"{run.role}/{run.device_id}: {expected_position} is not "
+            "bound to its fixture spawn.",
+        )
 
     for area_id in AREA_IDS:
         area_positions = nested(evidence, "areaPositions", area_id)
         for position in POSITIONS:
             measurement, _ = candidate_ground_entry(run, area_id, position)
-            require(measurement.get("position") == position, f"{run.role}/{run.device_id}: position label mismatch.")
+            fixture_sample_matches = [
+                sample
+                for sample in nested(
+                    fixture,
+                    "areas",
+                    area_id,
+                    "ground",
+                    "samples",
+                )
+                if sample.get("position") == position
+            ]
+            require(
+                len(fixture_sample_matches) == 1,
+                f"{run.role}/{run.device_id}: {area_id}/{position} "
+                "fixture sample is ambiguous.",
+            )
+            fixture_sample = fixture_sample_matches[0]
+            require(
+                measurement.get("position") == position
+                and measurement.get("fixtureSample") == fixture_sample
+                and abs(
+                    finite_number(
+                        nested(measurement, "snapshot", "playerX"),
+                        f"{run.role}/{run.device_id}: "
+                        f"{area_id}/{position} player X",
+                    )
+                    - finite_number(
+                        fixture_sample.get("x"),
+                        f"{run.role}/{run.device_id}: "
+                        f"{area_id}/{position} fixture X",
+                    )
+                )
+                <= 4,
+                f"{run.role}/{run.device_id}: {area_id}/{position} "
+                "position is not fixture-anchored.",
+            )
             validate_candidate_measurement(run, measurement, spawn=False)
         for direction_name in ("walkLeft", "walkRight"):
             walk = nested(area_positions, direction_name)
@@ -1883,6 +2332,13 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
                 == nested(fixture, "areas", area_id, "assets", "backgroundSha256", phase),
                 f"{run.role}/{run.device_id}: {area_id}/{phase} background hash is not fixture-backed.",
             )
+            validate_phase_coordinate(
+                run,
+                area_id,
+                phase,
+                entry,
+                baseline=False,
+            )
         debug = nested(evidence, "debugGeometry", area_id)
         safe_run_file(run, nested(debug, "screenshot"), png=True)
         for fixture_key in ("ground", "spawns", "branchEntrances"):
@@ -1893,8 +2349,20 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
             )
 
     panel = panel_entries(run)
-    for (direction, _, _), (entry, _) in panel.items():
+    for (direction, sample_name, _), (entry, _) in panel.items():
         geometry = nested(entry, "geometry")
+        validate_positive_rect(
+            geometry.get("panelRect"),
+            f"{run.role}/{run.device_id}: panel rectangle",
+        )
+        validate_positive_rect(
+            geometry.get("playerRect"),
+            f"{run.role}/{run.device_id}: player rectangle",
+        )
+        validate_positive_rect(
+            geometry.get("footRect"),
+            f"{run.role}/{run.device_id}: player foot rectangle",
+        )
         require(float(geometry.get("playerIntersection", math.inf)) == 0, f"{run.role}/{run.device_id}: panel overlaps player.")
         require(float(geometry.get("playerDistance", -math.inf)) >= 12, f"{run.role}/{run.device_id}: panel/player gap is below 12 CSS px.")
         panel_rect = nested(geometry, "panelRect")
@@ -1906,7 +2374,41 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
         obstacles = geometry.get("obstacleMetrics")
         require(
             isinstance(obstacles, list)
-            and all(float(metric.get("intersectionArea", math.inf)) == 0 for metric in obstacles),
+            and {
+                metric.get("selector")
+                for metric in obstacles
+                if isinstance(metric, dict)
+            }
+            == REQUIRED_PANEL_OBSTACLE_SELECTORS
+            and len(obstacles) == len(REQUIRED_PANEL_OBSTACLE_SELECTORS),
+            f"{run.role}/{run.device_id}: panel Evidence does not contain "
+            "the exact required HUD/control rectangles.",
+        )
+        for metric in obstacles:
+            selector = metric.get("selector")
+            validate_positive_rect(
+                metric.get("rect"),
+                f"{run.role}/{run.device_id}: {selector} rectangle",
+            )
+            require(
+                finite_number(
+                    metric.get("intersectionArea"),
+                    f"{run.role}/{run.device_id}: {selector} intersection",
+                )
+                == 0
+                and finite_number(
+                    metric.get("distance"),
+                    f"{run.role}/{run.device_id}: {selector} distance",
+                )
+                >= 0,
+                f"{run.role}/{run.device_id}: panel overlaps or omits "
+                f"distance for {selector}.",
+            )
+        require(
+            all(
+                float(metric.get("intersectionArea", math.inf)) == 0
+                for metric in obstacles
+            ),
             f"{run.role}/{run.device_id}: panel overlaps a HUD/control obstacle.",
         )
         require(entry.get("touchEnabled") is run.viewport_key[3], f"{run.role}/{run.device_id}: panel touch metadata mismatch.")
@@ -1929,6 +2431,52 @@ def validate_candidate(run: Run, candidate_sha: str) -> None:
                 "centerDeltaX",
             }.issubset(recorded_entrance),
             f"{run.role}/{run.device_id}: panel entrance is not fixture-backed.",
+        )
+        trigger_sample = nested(entry, "triggerSample")
+        trigger_range = entrance["triggerRange"]
+        expected_trigger_sample = {
+            "start": {
+                "samplingSemantics": "inside-inclusive-trigger-edge",
+                "insetWorldPx": PANEL_TRIGGER_INSET_WORLD_PX,
+                "triggerBoundaryWorldX": trigger_range["minX"],
+                "fixtureWorldX":
+                    trigger_range["minX"] + PANEL_TRIGGER_INSET_WORLD_PX,
+                "targetWorldX":
+                    trigger_range["minX"] + PANEL_TRIGGER_INSET_WORLD_PX,
+            },
+            "center": {
+                "samplingSemantics": "trigger-center",
+                "insetWorldPx": 0,
+                "triggerBoundaryWorldX": entrance["triggerCenterX"],
+                "fixtureWorldX": entrance["triggerCenterX"],
+                "targetWorldX": entrance["triggerCenterX"],
+            },
+            "end": {
+                "samplingSemantics": "inside-inclusive-trigger-edge",
+                "insetWorldPx": PANEL_TRIGGER_INSET_WORLD_PX,
+                "triggerBoundaryWorldX": trigger_range["maxX"],
+                "fixtureWorldX":
+                    trigger_range["maxX"] - PANEL_TRIGGER_INSET_WORLD_PX,
+                "targetWorldX":
+                    trigger_range["maxX"] - PANEL_TRIGGER_INSET_WORLD_PX,
+            },
+        }[sample_name]
+        require(
+            trigger_sample.get("name") == sample_name
+            and all(
+                trigger_sample.get(key) == value
+                for key, value in expected_trigger_sample.items()
+            )
+            and abs(
+                finite_number(
+                    entry.get("actualPlayerWorldX"),
+                    f"{run.role}/{run.device_id}: panel actual player X",
+                )
+                - float(expected_trigger_sample["fixtureWorldX"])
+            )
+            <= 5,
+            f"{run.role}/{run.device_id}: {direction}/{sample_name} panel "
+            "is not sampled at the fixture-backed trigger edge/center.",
         )
         require(
             float(entrance.get("centerDeltaX", math.inf))
@@ -1998,12 +2546,13 @@ def validate_run_group(
 
 def assert_phase_and_ground_pairing(
     baseline_runs: dict[tuple[int, int, float, bool], Run],
-    candidate_runs: dict[tuple[int, int, float, bool], Run],
+    local_runs: dict[tuple[int, int, float, bool], Run],
+    preview_runs: dict[tuple[int, int, float, bool], Run],
 ) -> None:
     """Reject screenshots that cannot support like-for-like before/after review."""
     for key in EXPECTED_VIEWPORTS:
         baseline = baseline_runs[key]
-        candidate = candidate_runs[key]
+        candidates = (local_runs[key], preview_runs[key])
         for area_id in AREA_IDS:
             baseline_fixture_samples = {
                 sample["position"]: sample
@@ -2016,101 +2565,193 @@ def assert_phase_and_ground_pairing(
                     "samples",
                 )
             }
-            candidate_fixture_samples = {
-                sample["position"]: sample
-                for sample in nested(
-                    candidate.state,
-                    "geometryFixture",
-                    "areas",
-                    area_id,
-                    "ground",
-                    "samples",
-                )
-            }
-            require(
-                baseline_fixture_samples.keys() == candidate_fixture_samples.keys(),
-                f"{baseline.device_id}/{area_id}: ground sample names differ.",
-            )
-            for position in POSITIONS:
-                before = baseline_fixture_samples[position]
-                after = candidate_fixture_samples[position]
+            for candidate in candidates:
+                candidate_fixture_samples = {
+                    sample["position"]: sample
+                    for sample in nested(
+                        candidate.state,
+                        "geometryFixture",
+                        "areas",
+                        area_id,
+                        "ground",
+                        "samples",
+                    )
+                }
                 require(
-                    before["x"] == after["x"] and before["position"] == after["position"],
-                    f"{baseline.device_id}/{area_id}/{position}: before/after ground coordinates differ.",
+                    baseline_fixture_samples.keys()
+                    == candidate_fixture_samples.keys(),
+                    f"{candidate.role}/{baseline.device_id}/{area_id}: "
+                    "ground sample names differ.",
+                )
+                for position in POSITIONS:
+                    before = baseline_fixture_samples[position]
+                    after = candidate_fixture_samples[position]
+                    require(
+                        before["x"] == after["x"]
+                        and before["position"] == after["position"],
+                        f"{candidate.role}/{baseline.device_id}/{area_id}/"
+                        f"{position}: before/after ground coordinates differ.",
+                    )
+            for position in POSITIONS:
+                baseline_measurement, _ = baseline_ground_entry(
+                    baseline,
+                    area_id,
+                    position,
+                )
+                local_measurement, _ = candidate_ground_entry(
+                    local_runs[key],
+                    area_id,
+                    position,
+                )
+                preview_measurement, _ = candidate_ground_entry(
+                    preview_runs[key],
+                    area_id,
+                    position,
+                )
+                actual_values = [
+                    measurement_actual_x(
+                        baseline_measurement,
+                        baseline=True,
+                    ),
+                    measurement_actual_x(
+                        local_measurement,
+                        baseline=False,
+                    ),
+                    measurement_actual_x(
+                        preview_measurement,
+                        baseline=False,
+                    ),
+                ]
+                require(
+                    max(actual_values) - min(actual_values) <= 8,
+                    f"{baseline.device_id}/{area_id}/{position}: baseline/"
+                    "local/Preview actual ground X coordinates differ.",
                 )
             for phase in PHASES:
                 before, _ = phase_entry(baseline, area_id, phase, baseline=True)
-                after, _ = phase_entry(candidate, area_id, phase, baseline=False)
+                local, _ = phase_entry(
+                    local_runs[key],
+                    area_id,
+                    phase,
+                    baseline=False,
+                )
+                preview, _ = phase_entry(
+                    preview_runs[key],
+                    area_id,
+                    phase,
+                    baseline=False,
+                )
+                entries = (
+                    (baseline, before, True),
+                    (local_runs[key], local, False),
+                    (preview_runs[key], preview, False),
+                )
                 require(
-                    nested(before, "snapshot", "timeMinutes")
-                    == nested(after, "snapshot", "timeMinutes"),
+                    len({
+                        nested(entry, "snapshot", "timeMinutes")
+                        for _, entry, _ in entries
+                    }) == 1,
                     f"{baseline.device_id}/{area_id}/{phase}: phase clock differs.",
+                )
+                coordinates = [
+                    validate_phase_coordinate(
+                        run,
+                        area_id,
+                        phase,
+                        entry,
+                        baseline=is_baseline,
+                    )
+                    for run, entry, is_baseline in entries
+                ]
+                require(
+                    len({
+                        coordinate["targetWorldX"]
+                        for coordinate in coordinates
+                    }) == 1
+                    and (
+                        max(
+                            coordinate["actualWorldX"]
+                            for coordinate in coordinates
+                        )
+                        - min(
+                            coordinate["actualWorldX"]
+                            for coordinate in coordinates
+                        )
+                    )
+                    <= PHASE_CAPTURE_PAIR_TOLERANCE_WORLD_PX,
+                    f"{baseline.device_id}/{area_id}/{phase}: baseline/local/"
+                    "Preview phase world coordinates differ.",
                 )
         baseline_same = nested(
             baseline.state,
             "evidence",
             "sameCoordinateComparisons",
         )
-        candidate_panels = panel_entries(candidate)
-        for direction in DIRECTIONS:
-            matching_areas = [
-                area_id
-                for area_id in AREA_IDS
-                if direction
-                in nested(
+        for candidate in candidates:
+            candidate_panels = panel_entries(candidate)
+            for direction in DIRECTIONS:
+                matching_areas = [
+                    area_id
+                    for area_id in AREA_IDS
+                    if direction
+                    in nested(
+                        candidate.state,
+                        "geometryFixture",
+                        "areas",
+                        area_id,
+                        "branchEntrances",
+                    )
+                ]
+                require(
+                    len(matching_areas) == 1,
+                    f"{baseline.device_id}/{direction}: fixture direction "
+                    "is ambiguous.",
+                )
+                area_id = matching_areas[0]
+                entrance = nested(
                     candidate.state,
                     "geometryFixture",
                     "areas",
                     area_id,
                     "branchEntrances",
+                    direction,
                 )
-            ]
-            require(
-                len(matching_areas) == 1,
-                f"{baseline.device_id}/{direction}: fixture direction is ambiguous.",
-            )
-            area_id = matching_areas[0]
-            entrance = nested(
-                candidate.state,
-                "geometryFixture",
-                "areas",
-                area_id,
-                "branchEntrances",
-                direction,
-            )
-            before = baseline_same[direction]
-            require(
-                before.get("areaId") == area_id
-                and before.get("candidateEntrance") == entrance
-                and before.get("requestedWorldX")
-                == entrance.get("backgroundCenterX"),
-                f"{baseline.device_id}/{direction}: baseline same-coordinate "
-                "capture is not bound to the candidate fixture.",
-            )
-            baseline_position_tolerance = float(
-                nested(
-                    baseline.state,
-                    "measurementPositioning",
-                    "targetToleranceWorldPx",
-                ),
-            )
-            require(
-                abs(
-                    float(before.get("actualBaselinePlayerX"))
-                    - float(before.get("requestedWorldX"))
-                )
-                <= baseline_position_tolerance,
-                f"{baseline.device_id}/{direction}: baseline same-coordinate "
-                "capture missed its requested world X.",
-            )
-            for facing in FACINGS:
-                panel, _ = candidate_panels[(direction, "center", facing)]
+                before = baseline_same[direction]
                 require(
-                    nested(panel, "triggerSample", "fixtureWorldX")
-                    == entrance.get("triggerCenterX"),
-                    f"{candidate.device_id}/{direction}/{facing}: candidate "
-                    "center panel is not fixture-backed.",
+                    before.get("areaId") == area_id
+                    and before.get("candidateEntrance") == entrance
+                    and before.get("requestedWorldX")
+                    == entrance.get("backgroundCenterX"),
+                    f"{baseline.device_id}/{direction}: baseline "
+                    "same-coordinate capture is not bound to the candidate "
+                    "fixture.",
                 )
+                baseline_position_tolerance = float(
+                    nested(
+                        baseline.state,
+                        "measurementPositioning",
+                        "targetToleranceWorldPx",
+                    ),
+                )
+                require(
+                    abs(
+                        float(before.get("actualBaselinePlayerX"))
+                        - float(before.get("requestedWorldX"))
+                    )
+                    <= baseline_position_tolerance,
+                    f"{baseline.device_id}/{direction}: baseline "
+                    "same-coordinate capture missed its requested world X.",
+                )
+                for facing in FACINGS:
+                    panel, _ = candidate_panels[
+                        (direction, "center", facing)
+                    ]
+                    require(
+                        nested(panel, "triggerSample", "fixtureWorldX")
+                        == entrance.get("triggerCenterX"),
+                        f"{candidate.device_id}/{direction}/{facing}: "
+                        "candidate center panel is not fixture-backed.",
+                    )
 
 
 def validate_audio_directory(path: Path, candidate_sha: str) -> dict[str, Any]:
@@ -2180,6 +2821,171 @@ def resolve_runtime_asset(url_path: str) -> Path:
     require(path.is_relative_to((ROOT / "public").resolve()), f"Runtime asset escapes public/: {url_path}")
     require(path.is_file() and not path.is_symlink(), f"Runtime asset is missing: {path}")
     return path
+
+
+def validate_player_foot_evidence(
+    path: Path,
+    fixture: dict[str, Any],
+    candidate_sha: str,
+) -> dict[str, Any]:
+    resolved = path.expanduser().resolve()
+    report = strict_json_load(resolved)
+    player = nested(fixture, "player")
+    atlas_path = resolve_runtime_asset(player["atlasImagePath"])
+    atlas_json_path = resolve_runtime_asset(player["atlasJsonPath"])
+    manifest_path = ROOT / TRACKED_PROVENANCE[0]
+    sidecar_path = manifest_path.with_suffix(".sha256")
+    atlas_json = strict_json_load(atlas_json_path)
+    frames = report.get("frames")
+    require(
+        report.get("schemaVersion") == 1
+        and report.get("status") == "PASS"
+        and report.get("candidateSha") == candidate_sha
+        and report.get("expectedCommit") == candidate_sha
+        and report.get("gitStatusShort") == []
+        and report.get("failures") == [],
+        "Player visible-foot Evidence is stale, dirty, or failed.",
+    )
+    require(
+        nested(report, "manifest", "path")
+        == str(manifest_path.relative_to(ROOT))
+        and nested(report, "manifest", "bytes")
+        == manifest_path.stat().st_size
+        and nested(report, "manifest", "sha256") == sha256(manifest_path)
+        and nested(report, "manifest", "sidecarPath")
+        == str(sidecar_path.relative_to(ROOT))
+        and nested(report, "manifest", "sidecarBytes")
+        == sidecar_path.stat().st_size
+        and nested(report, "manifest", "sidecarSha256")
+        == sha256(sidecar_path)
+        and nested(
+            report,
+            "manifest",
+            "sidecarDeclaredManifestSha256",
+        )
+        == sha256(manifest_path),
+        "Player visible-foot Evidence is not bound to the asset manifest.",
+    )
+    require(
+        nested(report, "atlas", "path")
+        == str(atlas_path.relative_to(ROOT))
+        and nested(report, "atlas", "bytes") == atlas_path.stat().st_size
+        and nested(report, "atlas", "sha256") == sha256(atlas_path)
+        and nested(report, "atlas", "sha256")
+        == player["atlasImageSha256"]
+        and nested(report, "atlas", "manifestBytes")
+        == atlas_path.stat().st_size
+        and nested(report, "atlas", "manifestSha256")
+        == sha256(atlas_path)
+        and nested(report, "atlas", "jsonPath")
+        == str(atlas_json_path.relative_to(ROOT))
+        and nested(report, "atlas", "jsonBytes")
+        == atlas_json_path.stat().st_size
+        and nested(report, "atlas", "jsonSha256") == sha256(atlas_json_path)
+        and nested(report, "atlas", "jsonSha256")
+        == player["atlasJsonSha256"]
+        and nested(report, "atlas", "manifestJsonBytes")
+        == atlas_json_path.stat().st_size
+        and nested(report, "atlas", "manifestJsonSha256")
+        == sha256(atlas_json_path),
+        "Player visible-foot Evidence is not bound to the fixture atlas.",
+    )
+    require(
+        report.get("alphaThresholdExclusive") == 10
+        and report.get("visibleFootToleranceCssPx") == 2
+        and report.get("runtimeScale") == player["runtimeScale"]
+        and report.get("frameCount") == 24
+        and report.get("expectedFrameCount") == 24
+        and isinstance(frames, list)
+        and len(frames) == 24,
+        "Player visible-foot Evidence contract is incomplete.",
+    )
+    expected_frame_names = set(nested(atlas_json, "frames"))
+    require(
+        {
+            frame.get("name")
+            for frame in frames
+            if isinstance(frame, dict)
+        }
+        == expected_frame_names,
+        "Player visible-foot Evidence frame names differ from the atlas.",
+    )
+    pivot_y = finite_number(
+        nested(player, "footPivot", "pixelY"),
+        "fixture player foot pivot Y",
+    )
+    runtime_scale = finite_number(
+        player.get("runtimeScale"),
+        "fixture player runtime scale",
+    )
+    for frame in frames:
+        name = frame.get("name")
+        max_alpha_y = finite_number(
+            frame.get("maxAlphaY"),
+            f"{name} maximum visible alpha Y",
+        )
+        bottom_exclusive = finite_number(
+            frame.get("bottomExclusive"),
+            f"{name} visible alpha bottom edge",
+        )
+        row_delta = finite_number(
+            frame.get("rowDeltaPx"),
+            f"{name} visible-foot row delta",
+        )
+        edge_delta = finite_number(
+            frame.get("visibleBottomEdgeDeltaPx"),
+            f"{name} visible-foot edge delta",
+        )
+        row_delta_css = finite_number(
+            frame.get("rowDeltaCssPx"),
+            f"{name} visible-foot CSS row delta",
+        )
+        edge_delta_css = finite_number(
+            frame.get("visibleBottomEdgeDeltaCssPx"),
+            f"{name} visible-foot CSS edge delta",
+        )
+        require(
+            frame.get("visiblePixelCount", 0) > 12_000
+            and frame.get("pivotPixelY") == pivot_y
+            and max_alpha_y == pivot_y
+            and bottom_exclusive == max_alpha_y + 1
+            and row_delta == max_alpha_y - pivot_y == 0
+            and edge_delta == bottom_exclusive - pivot_y
+            and math.isclose(
+                row_delta_css,
+                row_delta * runtime_scale,
+                abs_tol=1e-9,
+            )
+            and math.isclose(
+                edge_delta_css,
+                edge_delta * runtime_scale,
+                abs_tol=1e-9,
+            )
+            and abs(row_delta_css) <= 2
+            and abs(edge_delta_css) <= 2,
+            f"{name} visible alpha foot does not match the runtime pivot.",
+        )
+    require(
+        nested(report, "summary", "maxAbsoluteRowDeltaPx") == 0
+        and nested(report, "summary", "maxAbsoluteRowDeltaCssPx") == 0
+        and math.isclose(
+            finite_number(
+                nested(
+                    report,
+                    "summary",
+                    "maxAbsoluteVisibleBottomEdgeDeltaCssPx",
+                ),
+                "maximum visible-foot bottom-edge CSS delta",
+            ),
+            runtime_scale,
+            abs_tol=1e-9,
+        ),
+        "Player visible-foot Evidence summary does not match its frames.",
+    )
+    return {
+        "path": resolved,
+        "report": report,
+    }
 
 
 def validate_tracked_assets(
@@ -2544,7 +3350,10 @@ def copy_run_evidence(
             copy_file(source, destination)
             selected["phase"][area_id][phase] = {
                 "path": output_relative(destination, output),
-                "playerX": nested(entry, "snapshot", "playerX"),
+                "coordinate": nested(entry, "coordinate"),
+                "playerX": nested(entry, "coordinate", "actualWorldX"),
+                "targetWorldX":
+                    nested(entry, "coordinate", "targetWorldX"),
                 "timeMinutes": nested(entry, "snapshot", "timeMinutes"),
                 "sourceSha256": sha256(source),
             }
@@ -2556,6 +3365,12 @@ def copy_run_evidence(
         selected["panel"]["/".join(key)] = {
             "path": output_relative(destination, output),
             "sourceSha256": sha256(source),
+            "actualPlayerWorldX": entry.get(
+                "actualPlayerWorldX",
+                entry.get("actualPlayerX"),
+            ),
+            "triggerSample": entry.get("triggerSample"),
+            "geometry": entry.get("geometry"),
         }
 
     if baseline:
@@ -2681,11 +3496,15 @@ def build_contacts(
                 phase_items.extend(
                     [
                         ImageItem(
-                            f"BEFORE {area_id}/{phase} x={before['playerX']}",
+                            f"BEFORE {area_id}/{phase} "
+                            f"target={before['targetWorldX']} "
+                            f"actual={before['playerX']}",
                             path_from_selected(output, before),
                         ),
                         ImageItem(
-                            f"AFTER {area_id}/{phase} x={after['playerX']}",
+                            f"AFTER {area_id}/{phase} "
+                            f"target={after['targetWorldX']} "
+                            f"actual={after['playerX']}",
                             path_from_selected(output, after),
                         ),
                     ],
@@ -2798,7 +3617,9 @@ def build_contacts(
                     entry = selected[role][device_id]["phase"][area_id][phase]
                     matrix_items.append(
                         ImageItem(
-                            f"{role} {area_id}/{phase} x={entry['playerX']}",
+                            f"{role} {area_id}/{phase} "
+                            f"target={entry['targetWorldX']} "
+                            f"actual={entry['playerX']}",
                             path_from_selected(output, entry),
                         ),
                     )
@@ -2880,6 +3701,13 @@ def run_metrics(run: Run) -> dict[str, Any]:
         "nodeVersion": runtime.get("nodeVersion"),
         "browserVersion": runtime.get("browserVersion"),
         "browserExecutablePath": runtime.get("browserExecutablePath"),
+        "pageErrors": state.get("pageErrors"),
+        "failedRequests": state.get("failedRequests"),
+        "spawnMeasurements": (
+            state.get("evidence", {}).get("spawnMeasurements", [])
+            if run.role == "baseline"
+            else state.get("evidence", {}).get("spawns", [])
+        ),
         "lifecycle": {
             "visibilityMethod": hidden_visible.get("method"),
             "x11TabControl": hidden_visible.get("x11TabControl"),
@@ -2925,10 +3753,36 @@ def aggregate_candidate_metrics(runs: Iterable[Run]) -> dict[str, Any]:
     panel_heights: list[float] = []
     obstacle_intersections: list[float] = []
     entrance_deltas: list[dict[str, Any]] = []
+    spawn_bindings: list[dict[str, Any]] = []
     for run in runs:
         evidence = nested(run.state, "evidence")
         for spawn in nested(evidence, "spawns"):
             spawn_deltas.append(float(spawn["cssDelta"]))
+            spawn_bindings.append(
+                {
+                    "deviceId": run.device_id,
+                    "role": run.role,
+                    "areaId": spawn["areaId"],
+                    "position": spawn["position"],
+                    "spawnId": spawn["spawnId"],
+                    "fixtureSpawn": spawn["fixtureSpawn"],
+                    "actualPlayerX": nested(
+                        spawn,
+                        "snapshot",
+                        "playerX",
+                    ),
+                    "actualPlayerY": nested(
+                        spawn,
+                        "snapshot",
+                        "playerY",
+                    ),
+                    "actualFacing": nested(
+                        spawn,
+                        "snapshot",
+                        "facing",
+                    ),
+                },
+            )
         for area_id in AREA_IDS:
             for position in POSITIONS:
                 measurement = nested(evidence, "areaPositions", area_id, position)
@@ -2981,6 +3835,7 @@ def aggregate_candidate_metrics(runs: Iterable[Run]) -> dict[str, Any]:
             "maximumObstacleIntersectionCssPx2": max(obstacle_intersections),
         },
         "entranceTrigger": entrance_deltas,
+        "spawnBindings": spawn_bindings,
     }
 
 
@@ -3071,6 +3926,14 @@ def build_readme(
             f"- Image generation record: {image_generation_rights}",
             f"- Audio: {audio_rights}",
             f"- Audio runtime SHA-256: `{visible_metrics['audio']['runtimeSha256']}`",
+            f"- Player atlas SHA-256: "
+            f"`{visible_metrics['playerVisibleFoot']['atlas']['sha256']}`",
+            f"- Visible-foot frames: "
+            f"`{visible_metrics['playerVisibleFoot']['frameCount']}`; "
+            f"max pivot-row delta "
+            f"`{visible_metrics['playerVisibleFoot']['summary']['maxAbsoluteRowDeltaCssPx']} CSS px`; "
+            f"max visible-edge delta "
+            f"`{visible_metrics['playerVisibleFoot']['summary']['maxAbsoluteVisibleBottomEdgeDeltaCssPx']} CSS px`",
             "",
             "The exact provenance JSON, source states, selected PNGs, fixture "
             "snapshots, objective audio analysis, and SHA-256 manifest are "
@@ -3135,6 +3998,7 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     parser.add_argument("--preview-run", action="append", default=[], metavar="DIR")
     parser.add_argument("--preview-runs", nargs=3, metavar=("DIR1", "DIR2", "DIR3"))
     parser.add_argument("--audio-evidence-dir", "--audio-dir", required=True, type=Path)
+    parser.add_argument("--player-foot-evidence-file", required=True, type=Path)
     parser.add_argument("--baseline-sha", required=True)
     parser.add_argument("--candidate-sha", required=True)
     parser.add_argument("--preview-url", required=True)
@@ -3237,10 +4101,19 @@ def main(arguments: Sequence[str] | None = None) -> None:
             nested(run.state, "independentVisualFixture") == baseline_fixture,
             f"{run.role}/{run.device_id}: baseline geometry fixture differs across runs.",
         )
-    assert_phase_and_ground_pairing(baseline_runs, local_runs)
+    assert_phase_and_ground_pairing(
+        baseline_runs,
+        local_runs,
+        preview_runs,
+    )
 
     audio = validate_audio_directory(args.audio_evidence_dir, candidate_sha)
     tracked = validate_tracked_assets(candidate_fixture, candidate_sha)
+    player_foot = validate_player_foot_evidence(
+        args.player_foot_evidence_file,
+        candidate_fixture,
+        candidate_sha,
+    )
 
     # All input validation is complete before the first output byte is written.
     output = prepare_output(args.output_dir)
@@ -3287,6 +4160,10 @@ def main(arguments: Sequence[str] | None = None) -> None:
     copy_file(
         tracked["paths"]["atlasImage"],
         output / "selected" / "assets" / "player-atlas.webp",
+    )
+    copy_file(
+        player_foot["path"],
+        output / "raw" / "assets" / "player-foot-alpha.json",
     )
     for filename in sorted(REQUIRED_AUDIO_FILES):
         destination_root = (
@@ -3339,6 +4216,10 @@ def main(arguments: Sequence[str] | None = None) -> None:
         "path": str(tracked["paths"]["atlasImage"]),
         **file_record(tracked["paths"]["atlasImage"]),
     }
+    source_inputs["assets/player-foot-alpha.json"] = {
+        "path": str(player_foot["path"]),
+        **file_record(player_foot["path"]),
+    }
 
     metrics: dict[str, Any] = {
         "schemaVersion": 1,
@@ -3381,6 +4262,7 @@ def main(arguments: Sequence[str] | None = None) -> None:
             "measurementPositions": audio["analysis"]["measurementPositions"],
             "toolchain": audio["analysis"]["toolchain"],
         },
+        "playerVisibleFoot": player_foot["report"],
         "rights": {
             "images": tracked["manifest"]["rights"],
             "imageGeneration": tracked["generation"]["rights"],

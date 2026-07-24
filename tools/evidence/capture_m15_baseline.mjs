@@ -63,6 +63,11 @@ const TOUCH_TARGET_REQUIREMENT_CSS_PX = 44;
 const FOOT_GROUND_REQUIREMENT_CSS_PX = 2;
 const SPAWN_GROUND_REQUIREMENT_CSS_PX = 6;
 const POSITION_TOLERANCE_WORLD_PX = 8;
+const PHASE_CAPTURE_TOLERANCE_WORLD_PX = 4;
+const PHASE_CAPTURE_POSITION = 'left';
+const PHASE_CAPTURE_FACING = 'right';
+const PHASE_CAPTURE_FIXTURE =
+  'src/game/areas/m15GeometryFixture.mjs';
 const POSITIONING_METHOD = (
   'Measurement-only two-stage navigation uses real CDP keyboard/touch input. '
   + 'Distances over 32 world px stop at a direction-aware 32px lead; nearer '
@@ -885,6 +890,21 @@ function visualSample(areaId, position, x) {
 async function measureGround(areaId, position, { spawn = false } = {}) {
   const snapshot = await latestHud();
   assert.equal(snapshot.area, areaId);
+  const area = runtimeArea(areaId);
+  const spawnId = spawn ? snapshot.spawnId : null;
+  const runtimeSpawn = spawn
+    ? area.spawnPoints[spawnId]
+    : null;
+  const runtimeSpawnY = spawn ? area.groundY : null;
+  if (spawn) {
+    assert(runtimeSpawn, `${areaId}/${position} runtime spawn is missing.`);
+    assert(
+      Math.abs(snapshot.playerX - runtimeSpawn.x) <= 1
+        && Math.abs(snapshot.playerY - runtimeSpawnY) <= 1
+        && snapshot.facing === runtimeSpawn.facing,
+      `${areaId}/${position} does not match baseline spawn ${spawnId}.`,
+    );
+  }
   const sample = visualSample(
     areaId,
     spawn ? null : position,
@@ -895,8 +915,11 @@ async function measureGround(areaId, position, { spawn = false } = {}) {
     areaId,
     position,
     spawn,
+    spawnId,
+    runtimeSpawn,
+    runtimeSpawnY,
     independentVisualSample: sample,
-    runtimeGroundY: runtimeArea(areaId).groundY,
+    runtimeGroundY: area.groundY,
     runtimeSnapshot: snapshot,
     playerGeometry,
     requirementCssPx: spawn
@@ -1027,7 +1050,12 @@ async function moveToX(areaId, targetX, tolerance = POSITION_TOLERANCE_WORLD_PX)
   );
 }
 
-async function setFacingAtX(areaId, targetX, facing) {
+async function setFacingAtX(
+  areaId,
+  targetX,
+  facing,
+  tolerance = POSITION_TOLERANCE_WORLD_PX,
+) {
   const preparedX = Math.max(
     40,
     Math.min(
@@ -1036,7 +1064,13 @@ async function setFacingAtX(areaId, targetX, facing) {
     ),
   );
   await moveToX(areaId, preparedX);
-  return moveToX(areaId, targetX);
+  const settled = await moveToX(areaId, targetX, tolerance);
+  assert.equal(
+    settled.facing,
+    facing,
+    `${areaId} did not face ${facing} at ${targetX}.`,
+  );
+  return settled;
 }
 
 async function exerciseWalk(areaId, direction, screenshotName) {
@@ -1133,6 +1167,21 @@ async function activateDeveloperControl(label, count = 1) {
 
 async function capturePhaseMatrix(areaId) {
   const results = {};
+  const phaseAnchor = getM15GeometryArea(areaId).ground.samples.find(
+    ({ position }) => position === PHASE_CAPTURE_POSITION,
+  );
+  assert(phaseAnchor, `${areaId} phase capture anchor is missing.`);
+  const positioned = await setFacingAtX(
+    areaId,
+    phaseAnchor.x,
+    PHASE_CAPTURE_FACING,
+    PHASE_CAPTURE_TOLERANCE_WORLD_PX,
+  );
+  assert(
+    Math.abs(positioned.playerX - phaseAnchor.x)
+      <= PHASE_CAPTURE_TOLERANCE_WORLD_PX,
+    `${areaId} phase capture could not settle at the fixture anchor.`,
+  );
   await openDeveloperDrawer();
   await activateDeveloperControl('朝へ戻す');
   for (const target of PHASE_TARGETS) {
@@ -1144,12 +1193,28 @@ async function capturePhaseMatrix(areaId) {
       timeMinutes: target.minutes,
       timeTolerance: 1,
     });
+    assert(
+      Math.abs(snapshot.playerX - phaseAnchor.x)
+        <= PHASE_CAPTURE_TOLERANCE_WORLD_PX
+        && snapshot.facing === PHASE_CAPTURE_FACING,
+      `${areaId}/${target.phase} phase coordinate drifted.`,
+    );
     await closeDeveloperDrawer();
     const screenshot = await capture(`phase-${areaId}-${target.phase}.png`);
     const visualBackground =
       getM15BaselineGeometryArea(areaId).backgrounds[target.phase];
     results[target.phase] = {
       minutes: target.minutes,
+      coordinate: {
+        sourceFixture: PHASE_CAPTURE_FIXTURE,
+        sourcePath:
+          `areas.${areaId}.ground.samples[${PHASE_CAPTURE_POSITION}]`,
+        position: PHASE_CAPTURE_POSITION,
+        targetWorldX: phaseAnchor.x,
+        actualWorldX: snapshot.playerX,
+        toleranceWorldPx: PHASE_CAPTURE_TOLERANCE_WORLD_PX,
+        facing: snapshot.facing,
+      },
       screenshot,
       snapshot,
       visualBackground,

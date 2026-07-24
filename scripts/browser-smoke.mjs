@@ -29,6 +29,12 @@ import {
   resolveInstalledPlaywrightCoreRoot,
   verifyPlaywrightNativeVisibility,
 } from './prepare-playwright-native-visibility.mjs';
+import {
+  M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT,
+  M15_HEARTBEAT_INTERVAL_MS,
+  evaluateM15HeartbeatCalibration,
+  minimumM15SuspensionGapMs,
+} from './m15-heartbeat-contract.mjs';
 
 function positiveIntegerFromEnv(name, fallback) {
   const rawValue = process.env[name];
@@ -208,6 +214,10 @@ const POSITION_TOLERANCE_WORLD_PX = 4;
 const PANEL_POSITION_TOLERANCE_WORLD_PX = 4;
 const PANEL_TRIGGER_INSET_WORLD_PX = 8;
 const HORIZONTAL_EDGE_APPROACH_MARGIN_WORLD_PX = 160;
+const PHASE_CAPTURE_POSITION = 'left';
+const PHASE_CAPTURE_FACING = 'right';
+const PHASE_CAPTURE_FIXTURE =
+  'src/game/areas/m15GeometryFixture.mjs';
 
 const records = [];
 const pageErrors = [];
@@ -835,6 +845,29 @@ async function fixtureGroundMeasurement(areaId, position, spawn = false) {
   const geometry = getM15GeometryArea(areaId);
   const snapshot = await latestHud();
   assert(snapshot.area === areaId, `Ground measurement area drifted to ${snapshot.area}.`);
+  const fixtureSample = spawn
+    ? null
+    : geometry.ground.samples.find(
+      (sample) => sample.position === position,
+    ) ?? null;
+  const spawnId = spawn ? snapshot.spawnId : null;
+  const fixtureSpawn = spawn ? geometry.spawns[spawnId] : null;
+  if (spawn) {
+    assert(fixtureSpawn, `${areaId}/${position} spawn fixture is missing.`);
+    assert(
+      Math.abs(snapshot.playerX - fixtureSpawn.x) <= 1
+        && Math.abs(snapshot.playerY - fixtureSpawn.y) <= 1
+        && snapshot.facing === fixtureSpawn.facing,
+      `${areaId}/${position} runtime spawn does not match ${spawnId}.`,
+    );
+  }
+  if (fixtureSample) {
+    assert(
+      Math.abs(snapshot.playerX - fixtureSample.x)
+        <= POSITION_TOLERANCE_WORLD_PX,
+      `${areaId}/${position} runtime X is not fixture-anchored.`,
+    );
+  }
   await page.waitForFunction(
     ({ expectedArea, expectedPlayerX }) => {
       const playerGeometry =
@@ -875,6 +908,9 @@ async function fixtureGroundMeasurement(areaId, position, spawn = false) {
   const measurement = {
     areaId,
     position,
+    spawnId,
+    fixtureSpawn,
+    fixtureSample,
     fixtureGroundY: geometry.ground.y,
     runtimeFootY: snapshot.playerY,
     renderedFootScreenY,
@@ -981,6 +1017,21 @@ async function captureGeometryDebug(areaId) {
 
 async function capturePhaseMatrix(areaId, legacyNames = {}) {
   const results = {};
+  const phaseAnchor = getM15GeometryArea(areaId).ground.samples.find(
+    ({ position }) => position === PHASE_CAPTURE_POSITION,
+  );
+  assert(phaseAnchor, `${areaId} phase capture anchor is missing.`);
+  const positioned = await setFacingAtX(
+    areaId,
+    phaseAnchor.x,
+    PHASE_CAPTURE_FACING,
+  );
+  assert(
+    Math.abs(positioned.playerX - phaseAnchor.x)
+      <= POSITION_TOLERANCE_WORLD_PX
+      && positioned.facing === PHASE_CAPTURE_FACING,
+    `${areaId} phase capture could not settle at the fixture anchor.`,
+  );
   await openDeveloperDrawer();
   const stepButton = page.getByRole('button', { name: '＋15分', exact: true });
   const resetButton = page.getByRole('button', { name: '朝へ戻す', exact: true });
@@ -1000,6 +1051,12 @@ async function capturePhaseMatrix(areaId, legacyNames = {}) {
     const filename =
       legacyNames[phaseTarget.phase]
       ?? `phase-${areaId}-${phaseTarget.phase}.png`;
+    assert(
+      Math.abs(snapshot.playerX - phaseAnchor.x)
+        <= POSITION_TOLERANCE_WORLD_PX
+        && snapshot.facing === PHASE_CAPTURE_FACING,
+      `${areaId}/${phaseTarget.phase} phase coordinate drifted.`,
+    );
     await closeDeveloperDrawer();
     await capture(filename);
     results[phaseTarget.phase] = {
@@ -1007,6 +1064,16 @@ async function capturePhaseMatrix(areaId, legacyNames = {}) {
         getM15GeometryArea(areaId).assets.backgroundPaths[phaseTarget.phase],
       fixtureBackgroundSha256:
         getM15GeometryArea(areaId).assets.backgroundSha256[phaseTarget.phase],
+      coordinate: {
+        sourceFixture: PHASE_CAPTURE_FIXTURE,
+        sourcePath:
+          `areas.${areaId}.ground.samples[${PHASE_CAPTURE_POSITION}]`,
+        position: PHASE_CAPTURE_POSITION,
+        targetWorldX: phaseAnchor.x,
+        actualWorldX: snapshot.playerX,
+        toleranceWorldPx: POSITION_TOLERANCE_WORLD_PX,
+        facing: snapshot.facing,
+      },
       snapshot,
       screenshot: filename,
     };
@@ -1158,6 +1225,8 @@ async function capturePanelMatrix(direction) {
   const triggerSamples = [
     {
       name: 'start',
+      samplingSemantics: 'inside-inclusive-trigger-edge',
+      insetWorldPx: PANEL_TRIGGER_INSET_WORLD_PX,
       triggerBoundaryWorldX: entrance.triggerRange.minX,
       fixtureWorldX:
         entrance.triggerRange.minX + PANEL_TRIGGER_INSET_WORLD_PX,
@@ -1166,12 +1235,16 @@ async function capturePanelMatrix(direction) {
     },
     {
       name: 'center',
+      samplingSemantics: 'trigger-center',
+      insetWorldPx: 0,
       triggerBoundaryWorldX: entrance.triggerCenterX,
       fixtureWorldX: entrance.triggerCenterX,
       targetWorldX: entrance.triggerCenterX,
     },
     {
       name: 'end',
+      samplingSemantics: 'inside-inclusive-trigger-edge',
+      insetWorldPx: PANEL_TRIGGER_INSET_WORLD_PX,
       triggerBoundaryWorldX: entrance.triggerRange.maxX,
       fixtureWorldX:
         entrance.triggerRange.maxX - PANEL_TRIGGER_INSET_WORLD_PX,
@@ -1736,10 +1809,23 @@ async function verifyVisibilityAndFreezeRecovery() {
   };
 
   const beforeFreeze = await audioDiagnostics();
+  const calibrationStart = await page.evaluate(() => {
+    const heartbeat = globalThis.__m15CandidateSmoke.heartbeat;
+    heartbeat.maxGapMs = 0;
+    heartbeat.recentGapsMs.length = 0;
+    heartbeat.callbackWallMs.length = 0;
+    heartbeat.lastWallMs = Date.now();
+    return {
+      startedTicks: heartbeat.ticks,
+      startedWallMs: heartbeat.lastWallMs,
+    };
+  });
   await page.waitForFunction(
-    () => globalThis.__m15CandidateSmoke?.heartbeat?.ticks >= 10,
-    null,
-    { timeout: 5_000, polling: 40 },
+    (minimumTicks) => (
+      globalThis.__m15CandidateSmoke?.heartbeat?.ticks >= minimumTicks
+    ),
+    calibrationStart.startedTicks + M15_HEARTBEAT_CALIBRATION_SAMPLE_COUNT,
+    { timeout: 8_000, polling: M15_HEARTBEAT_INTERVAL_MS },
   );
   const calibrationHeartbeat = await page.evaluate(() => {
     const heartbeat = globalThis.__m15CandidateSmoke.heartbeat;
@@ -1749,12 +1835,20 @@ async function verifyVisibilityAndFreezeRecovery() {
       callbackWallMs: [...heartbeat.callbackWallMs],
     };
   });
-  const calibratedGaps = calibrationHeartbeat.recentGapsMs.slice(-8);
+  const calibration = {
+    ...evaluateM15HeartbeatCalibration({
+      startedTicks: calibrationStart.startedTicks,
+      finishedTicks: calibrationHeartbeat.ticks,
+      gaps: calibrationHeartbeat.recentGapsMs,
+    }),
+    startedWallMs: calibrationStart.startedWallMs,
+    finishedWallMs: calibrationHeartbeat.lastWallMs,
+    heartbeat: calibrationHeartbeat,
+  };
   assert(
-    calibratedGaps.length === 8
-      && calibratedGaps.every((gap) => gap > 0 && gap < 200),
+    calibration.verified,
     `Page heartbeat did not calibrate in the foreground: `
-      + `${JSON.stringify(calibratedGaps)}.`,
+      + `${JSON.stringify(calibration)}.`,
   );
   const hostClockBefore = Date.now();
   const browserClock = await page.evaluate(() => Date.now());
@@ -1824,12 +1918,12 @@ async function verifyVisibilityAndFreezeRecovery() {
       callbackWallMs > activeRequestedAt + browserClockOffsetMs
     ),
   );
-  const minimumSuspensionGapMs = Math.max(
-    2_500,
-    Math.floor(frozenWallDurationMs * 0.78),
-  );
+  const minimumSuspensionGapMs = minimumM15SuspensionGapMs({
+    frozenWallDurationMs,
+    foregroundMaximumGapMs: calibration.maximumObservedGapMs,
+  });
   const frozenMeasurement = {
-    calibration: calibrationHeartbeat,
+    calibration,
     browserClockOffsetMs,
     beforeFreeze: beforeFreezeHeartbeat,
     afterResume: afterFreezeHeartbeat,
@@ -2007,7 +2101,7 @@ try {
   statePayload.traceEnabled = traceEnabled;
   statePayload.traceSuppressedForProtectedPreview =
     requestedTraceEnabled && !traceEnabled;
-  await context.addInitScript(() => {
+  await context.addInitScript(({ heartbeatIntervalMs }) => {
     const state = {
       lastHud: null,
       hudSnapshots: [],
@@ -2087,8 +2181,8 @@ try {
       if (heartbeat.callbackWallMs.length > 240) {
         heartbeat.callbackWallMs.shift();
       }
-    }, 40);
-  });
+    }, heartbeatIntervalMs);
+  }, { heartbeatIntervalMs: M15_HEARTBEAT_INTERVAL_MS });
   if (traceEnabled) {
     await context.tracing.start({
       screenshots: true,

@@ -467,6 +467,7 @@ jobs:
 
           SMOKE_ROOT="$RUNNER_TEMP/m15-browser-smoke"
           AUDIO_ROOT="$RUNNER_TEMP/m15-audio-$M15_CANDIDATE_SHA"
+          PLAYER_FOOT_EVIDENCE="$RUNNER_TEMP/player-foot-$M15_CANDIDATE_SHA.json"
           EVIDENCE_ROOT="$RUNNER_TEMP/m15-evidence-$M15_CANDIDATE_SHA"
 
           resolve_single_run() {
@@ -528,6 +529,9 @@ jobs:
           python3 tools/evidence/generate_m15_audio_evidence.py \
             --expected-commit "$M15_CANDIDATE_SHA" \
             --output-dir "$AUDIO_ROOT"
+          python3 tools/art/validate_m15_assets.py \
+            --expected-commit "$M15_CANDIDATE_SHA" \
+            --json-out "$PLAYER_FOOT_EVIDENCE"
           python3 tools/evidence/assemble_m15_evidence.py \
             --baseline-runs \
               "$BASELINE_DESKTOP" \
@@ -542,6 +546,7 @@ jobs:
               "$PREVIEW_TOUCH_844" \
               "$PREVIEW_TOUCH_932" \
             --audio-evidence-dir "$AUDIO_ROOT" \
+            --player-foot-evidence-file "$PLAYER_FOOT_EVIDENCE" \
             --baseline-sha "$M15_BASELINE_SHA" \
             --candidate-sha "$M15_CANDIDATE_SHA" \
             --preview-url "$M15_PREVIEW_URL" \
