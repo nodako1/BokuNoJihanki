@@ -56,9 +56,13 @@ export class SideScrollInputSystem {
     window.addEventListener('focus', this.resumeInput);
     window.addEventListener('keydown', this.handleKeyDown, { passive: false });
     document.addEventListener('visibilitychange', this.handleVisibility);
+    document.addEventListener('freeze', this.stopInput);
+    document.addEventListener('resume', this.resumeInput);
+    window.addEventListener('pagehide', this.stopInput);
+    window.addEventListener('pageshow', this.resumeInput);
   }
 
-  read(): SideScrollInput {
+  read(allowedTraversal: TraversalDirection | null = null): SideScrollInput {
     if (this.suspended) {
       return { horizontal: 0, source: 'none', traversal: null };
     }
@@ -76,17 +80,26 @@ export class SideScrollInputSystem {
       if (horizontal !== 0) source = 'keyboard';
     }
 
-    let traversal = consumeAreaTraversalRequest();
-    if (!traversal && (this.cursors?.up && Phaser.Input.Keyboard.JustDown(this.cursors.up))) {
+    const requestedTraversal = consumeAreaTraversalRequest();
+    let traversal = requestedTraversal === allowedTraversal ? requestedTraversal : null;
+    if (traversal) {
+      source = 'touch';
+    } else if (
+      allowedTraversal === 'up'
+      && (
+        (this.cursors?.up && Phaser.Input.Keyboard.JustDown(this.cursors.up))
+        || (this.keys?.up && Phaser.Input.Keyboard.JustDown(this.keys.up))
+      )
+    ) {
       traversal = 'up';
       source = 'keyboard';
-    } else if (!traversal && (this.keys?.up && Phaser.Input.Keyboard.JustDown(this.keys.up))) {
-      traversal = 'up';
-      source = 'keyboard';
-    } else if (!traversal && (this.cursors?.down && Phaser.Input.Keyboard.JustDown(this.cursors.down))) {
-      traversal = 'down';
-      source = 'keyboard';
-    } else if (!traversal && (this.keys?.down && Phaser.Input.Keyboard.JustDown(this.keys.down))) {
+    } else if (
+      allowedTraversal === 'down'
+      && (
+        (this.cursors?.down && Phaser.Input.Keyboard.JustDown(this.cursors.down))
+        || (this.keys?.down && Phaser.Input.Keyboard.JustDown(this.keys.down))
+      )
+    ) {
       traversal = 'down';
       source = 'keyboard';
     }
@@ -105,6 +118,10 @@ export class SideScrollInputSystem {
     window.removeEventListener('focus', this.resumeInput);
     window.removeEventListener('keydown', this.handleKeyDown);
     document.removeEventListener('visibilitychange', this.handleVisibility);
+    document.removeEventListener('freeze', this.stopInput);
+    document.removeEventListener('resume', this.resumeInput);
+    window.removeEventListener('pagehide', this.stopInput);
+    window.removeEventListener('pageshow', this.resumeInput);
     clearVirtualInput();
   }
 }

@@ -8,6 +8,9 @@ import {
   getM14SpawnPoint,
 } from '../src/game/areas/m14AreaData.mjs';
 import {
+  getM15GeometryArea,
+} from '../src/game/areas/m15GeometryFixture.mjs';
+import {
   HORIZONTAL_MOTION_CONFIG,
   M14_TRANSITION_PHASES,
   assertValidM14AreaGraph,
@@ -25,7 +28,7 @@ import {
   validateM14AreaGraph,
 } from '../src/game/navigationAdapter/m14NavigationAdapter.mjs';
 
-test('M1.4 defines the three authored areas, dimensions and fixed ground lines', () => {
+test('M1.5 runtime consumes the three independently annotated ground fixtures', () => {
   assert.deepEqual(M14_AREA_IDS, [
     'home-street',
     'life-road',
@@ -39,17 +42,20 @@ test('M1.4 defines the three authored areas, dimensions and fixed ground lines',
   const home = getM14AreaDefinition('home-street');
   const life = getM14AreaDefinition('life-road');
   const upper = getM14AreaDefinition('upper-vending-lane');
+  const homeFixture = getM15GeometryArea('home-street');
+  const lifeFixture = getM15GeometryArea('life-road');
+  const upperFixture = getM15GeometryArea('upper-vending-lane');
   assert.deepEqual(
     [home.worldWidth, home.groundY, home.label],
-    [2400, 525, '自宅前'],
+    [homeFixture.worldWidth, homeFixture.ground.y, '自宅前'],
   );
   assert.deepEqual(
     [life.worldWidth, life.groundY, life.label],
-    [2680, 614, '生活道路'],
+    [lifeFixture.worldWidth, lifeFixture.ground.y, '生活道路'],
   );
   assert.deepEqual(
     [upper.worldWidth, upper.groundY, upper.label],
-    [2320, 535, '自販機路地'],
+    [upperFixture.worldWidth, upperFixture.ground.y, '自販機路地'],
   );
   assert.equal(home.cameraBounds.width, home.worldWidth);
   assert.equal(life.cameraBounds.width, life.worldWidth);
@@ -220,35 +226,48 @@ test('movement clamps to world bounds and input lock stops movement immediately'
 });
 
 test('branch prompts appear only inside authored up and down ranges', () => {
-  assert.deepEqual(getAvailableBranchDirections('life-road', 1219), []);
-  assert.deepEqual(getAvailableBranchDirections('life-road', 1220), ['up']);
-  assert.deepEqual(getAvailableBranchDirections('life-road', 1400), ['up']);
-  assert.deepEqual(getAvailableBranchDirections('life-road', 1480), ['up']);
-  assert.deepEqual(getAvailableBranchDirections('life-road', 1481), []);
-
+  const lifeRange = getM15GeometryArea('life-road').branchEntrances.up.triggerRange;
+  assert.deepEqual(getAvailableBranchDirections('life-road', lifeRange.minX - 1), []);
+  assert.deepEqual(getAvailableBranchDirections('life-road', lifeRange.minX), ['up']);
   assert.deepEqual(
-    getAvailableBranchDirections('upper-vending-lane', 1039),
+    getAvailableBranchDirections(
+      'life-road',
+      (lifeRange.minX + lifeRange.maxX) / 2,
+    ),
+    ['up'],
+  );
+  assert.deepEqual(getAvailableBranchDirections('life-road', lifeRange.maxX), ['up']);
+  assert.deepEqual(getAvailableBranchDirections('life-road', lifeRange.maxX + 1), []);
+
+  const upperRange =
+    getM15GeometryArea('upper-vending-lane').branchEntrances.down.triggerRange;
+  assert.deepEqual(
+    getAvailableBranchDirections('upper-vending-lane', upperRange.minX - 1),
     [],
   );
   assert.deepEqual(
-    getAvailableBranchDirections('upper-vending-lane', 1040),
+    getAvailableBranchDirections('upper-vending-lane', upperRange.minX),
     ['down'],
   );
   assert.deepEqual(
-    getAvailableBranchDirections('upper-vending-lane', 1320),
+    getAvailableBranchDirections('upper-vending-lane', upperRange.maxX),
     ['down'],
   );
   assert.deepEqual(
-    getAvailableBranchDirections('upper-vending-lane', 1321),
+    getAvailableBranchDirections('upper-vending-lane', upperRange.maxX + 1),
     [],
   );
   assert.deepEqual(getAvailableBranchDirections('home-street', 1300), []);
 });
 
 test('up and down input resolve only at the matching branch', () => {
+  const lifeFixture = getM15GeometryArea('life-road');
+  const upperFixture = getM15GeometryArea('upper-vending-lane');
+  const lifeEntrance = lifeFixture.branchEntrances.up;
+  const upperEntrance = upperFixture.branchEntrances.down;
   const outside = interpretM14Input(
     'life-road',
-    1000,
+    lifeEntrance.triggerRange.minX - 1,
     { up: true },
   );
   assert.equal(outside.horizontalAxis, 0);
@@ -256,24 +275,24 @@ test('up and down input resolve only at the matching branch', () => {
 
   const upward = interpretM14Input(
     'life-road',
-    1300,
+    lifeEntrance.triggerCenterX,
     { up: true },
   );
   assert.deepEqual(upward.branchDirections, ['up']);
   assert.equal(upward.transition?.targetAreaId, 'upper-vending-lane');
   assert.equal(upward.transition?.spawnId, 'from-life');
-  assert.equal(upward.transition?.x, 1160);
+  assert.equal(upward.transition?.x, upperFixture.spawns['from-life'].x);
   assert.equal(upward.transition?.facing, 'right');
 
   const downward = interpretM14Input(
     'upper-vending-lane',
-    1200,
+    upperEntrance.triggerCenterX,
     { down: true },
   );
   assert.deepEqual(downward.branchDirections, ['down']);
   assert.equal(downward.transition?.targetAreaId, 'life-road');
   assert.equal(downward.transition?.spawnId, 'from-upper');
-  assert.equal(downward.transition?.x, 1340);
+  assert.equal(downward.transition?.x, lifeFixture.spawns['from-upper'].x);
   assert.equal(downward.transition?.facing, 'left');
 });
 
@@ -313,6 +332,7 @@ test('right and left boundaries resolve to their exact target spawns', () => {
   assert.deepEqual(getM14SpawnPoint('home-street', 'from-life'), {
     id: 'from-life',
     x: 2180,
+    y: getM15GeometryArea('home-street').spawns['from-life'].y,
     facing: 'left',
   });
 });
@@ -394,7 +414,11 @@ test('cloned transition state reconstructs safely and rejects a duplicate start'
 });
 
 test('cloned fade-in reset restores the exact non-initial source spawn', () => {
-  const transition = resolveAreaExit('life-road', 'up', 1300);
+  const transition = resolveAreaExit(
+    'life-road',
+    'up',
+    getM15GeometryArea('life-road').branchEntrances.up.triggerCenterX,
+  );
   assert.ok(transition);
 
   let state = createM14TransitionState('life-road', 'from-upper', {

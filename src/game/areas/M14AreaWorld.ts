@@ -2,12 +2,21 @@ import Phaser from 'phaser';
 import type { M14AreaId } from '../gameBridge';
 import type { Atmosphere, TimePhase } from '../systems/timeOfDay';
 import { M14_AREA_IDS, getM14AreaDefinition } from './m14AreaData.mjs';
+import { M15_GEOMETRY_FIXTURE } from './m15GeometryFixture.mjs';
 
+// The legacy root remains exported so M1.4 asset ownership is explicit. M1.5
+// runtime loads only the new content-addressed URLs from the geometry fixture.
 export const M14_ASSET_ROOT = '/assets/images/m14';
+export const M15_ASSET_ROOT = '/assets/images/m15';
 export const M14_PHASES: readonly TimePhase[] = ['morning', 'day', 'evening', 'night'];
-export const M14_PLAYER_ATLAS_KEY = 'm14-player-atlas';
-export const M14_PLAYER_ATLAS_IMAGE = `${M14_ASSET_ROOT}/player-atlas.webp`;
-export const M14_PLAYER_ATLAS_JSON = `${M14_ASSET_ROOT}/player-atlas.json`;
+export const M15_PLAYER_ATLAS_KEY = 'm15-player-atlas-c02fff1f264e';
+export const M15_PLAYER_ATLAS_IMAGE =
+  M15_GEOMETRY_FIXTURE.player.atlasImagePath;
+export const M15_PLAYER_ATLAS_JSON =
+  M15_GEOMETRY_FIXTURE.player.atlasJsonPath;
+export const M14_PLAYER_ATLAS_KEY = M15_PLAYER_ATLAS_KEY;
+export const M14_PLAYER_ATLAS_IMAGE = M15_PLAYER_ATLAS_IMAGE;
+export const M14_PLAYER_ATLAS_JSON = M15_PLAYER_ATLAS_JSON;
 
 const PHASE_KEYFRAMES: readonly { minute: number; phase: TimePhase }[] = [
   { minute: 360, phase: 'morning' },
@@ -17,19 +26,20 @@ const PHASE_KEYFRAMES: readonly { minute: number; phase: TimePhase }[] = [
 ];
 
 export function m14BackgroundKey(areaId: M14AreaId, phase: TimePhase): string {
-  return `m14-bg-${areaId}-${phase}`;
+  const area = getM14AreaDefinition(areaId);
+  return `${area.assets.backgroundAssetId}-${phase}`;
 }
 
 export function m14BackgroundPath(areaId: M14AreaId, phase: TimePhase): string {
-  return `${M14_ASSET_ROOT}/bg-${areaId}-${phase}.webp`;
+  return getM14AreaDefinition(areaId).assets.backgroundPaths[phase];
 }
 
 export function m14ForegroundKey(areaId: M14AreaId): string {
-  return `m14-fg-${areaId}`;
+  return getM14AreaDefinition(areaId).assets.foregroundAssetId;
 }
 
 export function m14ForegroundPath(areaId: M14AreaId): string {
-  return `${M14_ASSET_ROOT}/fg-${areaId}.webp`;
+  return getM14AreaDefinition(areaId).assets.foregroundPath;
 }
 
 export function preloadM14Assets(scene: Phaser.Scene): void {

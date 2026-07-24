@@ -27,11 +27,15 @@ test('M1.4 state keeps M2 paused as the next gameplay milestone', async () => {
   );
 });
 
-test('Vercel only deploys main to the normal production flow', async () => {
+test('Vercel permits only the M1.5 rebuild exception among disabled work branches', async () => {
   const config = await readJson('vercel.json');
   assert.equal(config.framework, 'vite');
   assert.equal(config.buildCommand, 'npm run build');
   assert.equal(config.outputDirectory, 'dist');
+  assert.equal(
+    config.git.deploymentEnabled['fix/m1-5-real-device-polish-rebuild'],
+    true,
+  );
   for (const pattern of [
     'feat/**',
     'feature/**',
@@ -80,7 +84,7 @@ test('M1.4 player atlas contains four idle and ten walking frames per side', asy
   }
 });
 
-test('M1.4 production scene is wired through the adapter and accessible arrow UI', async () => {
+test('M1.5 candidate scene is wired through the adapter and accessible arrow UI', async () => {
   const [createGame, scene, world, adapter, arrow, hud] = await Promise.all([
     readFile('src/game/createGame.ts', 'utf-8'),
     readFile('src/game/scenes/SideScrollTownScene.ts', 'utf-8'),
@@ -99,10 +103,10 @@ test('M1.4 production scene is wired through the adapter and accessible arrow UI
     assert.ok(scene.includes(marker), marker);
     assert.ok(adapter.includes(marker), marker);
   }
-  assert.match(world, /\/assets\/images\/m14/);
+  assert.match(world, /\/assets\/images\/m15/);
   assert.match(arrow, /上のエリアへ移動/);
   assert.match(arrow, /下のエリアへ移動/);
-  assert.match(hud, /M1\.4 SIDE-SCROLL HUD/);
+  assert.match(hud, /M1\.5 SIDE-SCROLL HUD/);
 });
 
 test('M1.4 adapter delegates navigation behavior to the shared core', async () => {

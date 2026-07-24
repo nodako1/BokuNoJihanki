@@ -371,6 +371,12 @@ for (const pattern of [
     failures.push(`Normal Vercel deployment for ${pattern} must remain disabled.`);
   }
 }
+if (
+  vercel.git?.deploymentEnabled?.['fix/m1-5-real-device-polish-rebuild']
+  !== true
+) {
+  failures.push('Vercel must enable the exact M1.5 rebuild Preview branch.');
+}
 
 if (
   !createGame.includes('SideScrollTownScene')
@@ -395,9 +401,11 @@ for (const marker of [
 }
 for (const marker of [
   "M14_ASSET_ROOT = '/assets/images/m14'",
+  "M15_ASSET_ROOT = '/assets/images/m15'",
   "['morning', 'day', 'evening', 'night']",
-  'player-atlas.webp',
-  'player-atlas.json',
+  'M15_PLAYER_ATLAS_IMAGE',
+  'M15_PLAYER_ATLAS_JSON',
+  'M15_GEOMETRY_FIXTURE',
 ]) {
   if (!areaWorld.includes(marker)) {
     failures.push(`M14AreaWorld is missing ${marker}.`);
@@ -405,11 +413,12 @@ for (const marker of [
 }
 for (const marker of [
   'M14_AREA_IDS',
+  'getM15GeometryArea',
   'home-street',
   'life-road',
   'upper-vending-lane',
-  '1220, 1480',
-  '1040, 1320',
+  'branchEntrances.up.triggerRange',
+  'branchEntrances.down.triggerRange',
   'preserveAcrossTransition',
 ]) {
   if (!areaData.includes(marker)) {
@@ -525,10 +534,10 @@ for (const marker of [
   }
 }
 if (!gameHud.includes('<AreaArrowButton />')) {
-  failures.push('GameHud must render the M1.4 area arrow control.');
+  failures.push('GameHud must render the M1.5 area arrow control.');
 }
 for (const marker of [
-  'M1.4 SIDE-SCROLL HUD',
+  'M1.5 SIDE-SCROLL HUD',
   'AREA_ID',
   'CAMERA',
   'TRANSITION',
@@ -537,7 +546,7 @@ for (const marker of [
   'AUDIO',
 ]) {
   if (!developerHud.includes(marker)) {
-    failures.push(`DeveloperHud is missing M1.4 marker ${marker}.`);
+    failures.push(`DeveloperHud is missing M1.5 marker ${marker}.`);
   }
 }
 

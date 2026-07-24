@@ -12,6 +12,7 @@ export interface M14HorizontalRange {
 export interface M14SpawnPoint {
   readonly id: string;
   readonly x: number;
+  readonly y: number;
   readonly facing: M14Facing;
 }
 
@@ -61,7 +62,10 @@ export interface M14AreaAssets {
   readonly backgroundAssetId: string;
   readonly foregroundAssetId: string;
   readonly backgroundPathPattern: string;
+  readonly backgroundPaths: Readonly<Record<M14TimePhase, string>>;
+  readonly backgroundSha256: Readonly<Record<M14TimePhase, string>>;
   readonly foregroundPath: string;
+  readonly foregroundSha256: string;
 }
 
 export interface M14AreaMetadata {

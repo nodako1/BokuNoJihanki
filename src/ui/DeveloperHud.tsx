@@ -60,7 +60,7 @@ export function DeveloperHud({
   return (
     <aside className="developer-hud" aria-label="開発用情報">
       <header>
-        <strong>M1.4 SIDE-SCROLL HUD</strong>
+        <strong>M1.5 SIDE-SCROLL HUD</strong>
         <span className={snapshot.fps >= 45 ? 'hud-ok' : 'hud-warn'}>{snapshot.fps} FPS</span>
       </header>
       <dl>

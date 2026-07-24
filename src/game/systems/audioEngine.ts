@@ -4,52 +4,176 @@ import type { TimePhase } from './timeOfDay';
 
 type AudioContextConstructor = new () => AudioContext;
 type WindowWithWebkitAudio = Window & { webkitAudioContext?: AudioContextConstructor };
+type RecoverableAudioContextState = AudioContextState | 'interrupted';
+type RecoveryReason =
+  | 'audio-context-state'
+  | 'page-resume'
+  | 'page-show'
+  | 'user-activation'
+  | 'visibility';
 
-const MASTER_VOLUME = 0.18;
-const NOTE_FREQUENCIES = [261.63, 293.66, 329.63, 392, 440, 392, 329.63, 293.66] as const;
+export type AudioEngineDiagnostics = {
+  assetUrl: string;
+  sourceId: string | null;
+  contextState: RecoverableAudioContextState | 'not-created';
+  decodedChannels: number;
+  decodedSampleRate: number;
+  duration: number;
+  offset: number;
+  muted: boolean;
+  documentHidden: boolean;
+  masterGain: number;
+  bgmBusGain: number;
+  ambienceBusGain: number;
+  recoveryCount: number;
+  lastRecoveryReason: RecoveryReason | null;
+  lastRecoveryError: string | null;
+};
+
+declare global {
+  interface Window {
+    __BOKU_M15_AUDIO__?: Readonly<{
+      getDiagnostics: () => AudioEngineDiagnostics;
+    }>;
+  }
+}
+
+const BGM_ASSET_URL = '/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a';
+const MASTER_VOLUME = 0.68;
+const BGM_BUS_VOLUME = 0.68;
+const AMBIENCE_BUS_VOLUME = 0.76;
+
+const modulo = (value: number, modulus: number): number => {
+  if (!Number.isFinite(value) || !Number.isFinite(modulus) || modulus <= 0) return 0;
+  return ((value % modulus) + modulus) % modulus;
+};
 
 class AmbientAudioEngine {
   private context: AudioContext | null = null;
   private masterGain: GainNode | null = null;
-  private ambienceGain: GainNode | null = null;
+  private bgmBusGain: GainNode | null = null;
+  private ambienceBusGain: GainNode | null = null;
+  private cicadaGain: GainNode | null = null;
   private ambienceFilter: BiquadFilterNode | null = null;
   private windGain: GainNode | null = null;
   private trafficGain: GainNode | null = null;
-  private melodyTimer: number | null = null;
+  private bgmBuffer: AudioBuffer | null = null;
+  private bgmLoadPromise: Promise<AudioBuffer> | null = null;
+  private bgmSource: AudioBufferSourceNode | null = null;
+  private bgmSourceSerial = 0;
+  private activeSourceId: string | null = null;
+  private bgmAnchorOffset = 0;
+  private bgmAnchorContextTime = 0;
+  private startPromise: Promise<boolean> | null = null;
+  private recoveryPromise: Promise<void> | null = null;
+  private recoveryCount = 0;
+  private lastRecoveryReason: RecoveryReason | null = null;
+  private lastRecoveryError: string | null = null;
+  private lifecycleListenersAttached = false;
+  private lifecycleGeneration = 0;
+  private tearingDown = false;
   private birdTimer: number | null = null;
-  private melodyIndex = 0;
   private muted = false;
   private phase: TimePhase = 'morning';
   private area: AreaId = 'residential';
-  private persistentNodes: AudioScheduledSourceNode[] = [];
+  private persistentAmbienceNodes: AudioScheduledSourceNode[] = [];
+
   private readonly handleVisibility = (): void => {
-    if (!this.context || !this.masterGain) return;
-    const hidden = document.hidden;
-    this.masterGain.gain.setTargetAtTime(
-      hidden || this.muted ? 0 : MASTER_VOLUME,
-      this.context.currentTime,
-      hidden ? 0.06 : 0.18,
-    );
+    this.captureBgmPosition();
+    this.applyOutputGain();
+    if (!document.hidden) void this.recoverPlayback('visibility');
+  };
+
+  private readonly handleFreeze = (): void => {
+    this.captureBgmPosition();
+    this.applyOutputGain(true);
+  };
+
+  private readonly handlePageResume = (): void => {
+    void this.recoverPlayback('page-resume');
+  };
+
+  private readonly handlePageShow = (): void => {
+    void this.recoverPlayback('page-show');
+  };
+
+  private readonly handleUserActivation = (): void => {
+    const state = this.context?.state as RecoverableAudioContextState | undefined;
+    if (state && state !== 'running' && state !== 'closed') {
+      void this.recoverPlayback('user-activation');
+    }
+  };
+
+  private readonly handleContextStateChange = (): void => {
+    const context = this.context;
+    if (!context) return;
+
+    const state = context.state as RecoverableAudioContextState;
+    if (state === 'suspended' || state === 'interrupted') {
+      this.captureBgmPosition();
+      if (!document.hidden) void this.recoverPlayback('audio-context-state');
+      return;
+    }
+
+    if (state === 'running') {
+      this.lastRecoveryError = null;
+      this.applyOutputGain();
+    }
   };
 
   async start(): Promise<boolean> {
-    if (!this.context) {
-      const contextConstructor =
-        window.AudioContext ?? (window as WindowWithWebkitAudio).webkitAudioContext;
-      if (!contextConstructor) return false;
+    if (this.startPromise) return this.startPromise;
 
-      this.context = new contextConstructor();
+    const promise = this.startInternal();
+    this.startPromise = promise;
+    try {
+      return await promise;
+    } finally {
+      if (this.startPromise === promise) this.startPromise = null;
+    }
+  }
+
+  private async startInternal(): Promise<boolean> {
+    if (this.context) {
+      await this.recoverPlayback('user-activation');
+      this.applyMix();
+      return this.bgmSource !== null;
+    }
+
+    const contextConstructor =
+      window.AudioContext ?? (window as WindowWithWebkitAudio).webkitAudioContext;
+    if (!contextConstructor) return false;
+
+    const generation = ++this.lifecycleGeneration;
+    this.tearingDown = false;
+
+    try {
+      const context = new contextConstructor();
+      this.context = context;
+      this.createMixGraph();
       this.createAmbientLayers();
-      this.startMelodyLoop();
       this.startBirdLoop();
-      document.addEventListener('visibilitychange', this.handleVisibility);
-    }
+      this.attachLifecycleListeners();
 
-    if (this.context.state === 'suspended') {
-      await this.context.resume();
+      const buffer = await this.loadBgmBuffer(context);
+      if (
+        generation !== this.lifecycleGeneration
+        || this.context !== context
+        || context.state === 'closed'
+      ) {
+        return false;
+      }
+
+      this.bgmBuffer = buffer;
+      this.startBgmSource(this.bgmAnchorOffset);
+      await this.recoverPlayback('user-activation');
+      this.applyMix();
+      return this.bgmSource !== null;
+    } catch (error) {
+      this.lastRecoveryError = error instanceof Error ? error.message : String(error);
+      this.releaseAudioGraph();
+      return false;
     }
-    this.applyMix();
-    return true;
   }
 
   setPhase(phase: TimePhase): void {
@@ -66,7 +190,33 @@ class AmbientAudioEngine {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this.handleVisibility();
+    this.applyOutputGain();
+    if (!muted) this.handleUserActivation();
+  }
+
+  getDiagnostics(): AudioEngineDiagnostics {
+    const contextState = this.context
+      ? this.context.state as RecoverableAudioContextState
+      : 'not-created';
+    const outputMuted = this.muted || (typeof document !== 'undefined' && document.hidden);
+
+    return {
+      assetUrl: BGM_ASSET_URL,
+      sourceId: this.activeSourceId,
+      contextState,
+      decodedChannels: this.bgmBuffer?.numberOfChannels ?? 0,
+      decodedSampleRate: this.bgmBuffer?.sampleRate ?? 0,
+      duration: this.bgmBuffer?.duration ?? 0,
+      offset: this.getBgmOffset(),
+      muted: this.muted,
+      documentHidden: typeof document !== 'undefined' && document.hidden,
+      masterGain: outputMuted ? 0 : MASTER_VOLUME,
+      bgmBusGain: this.bgmBusGain ? BGM_BUS_VOLUME : 0,
+      ambienceBusGain: this.ambienceBusGain ? AMBIENCE_BUS_VOLUME : 0,
+      recoveryCount: this.recoveryCount,
+      lastRecoveryReason: this.lastRecoveryReason,
+      lastRecoveryError: this.lastRecoveryError,
+    };
   }
 
   playConfirm(): void {
@@ -103,7 +253,11 @@ class AmbientAudioEngine {
     if (!context || !master || context.state !== 'running' || this.muted) return;
 
     const duration = surface === 'grass' ? 0.085 : 0.065;
-    const buffer = context.createBuffer(1, Math.ceil(context.sampleRate * duration), context.sampleRate);
+    const buffer = context.createBuffer(
+      1,
+      Math.ceil(context.sampleRate * duration),
+      context.sampleRate,
+    );
     const data = buffer.getChannelData(0);
     for (let index = 0; index < data.length; index += 1) {
       const envelope = 1 - index / data.length;
@@ -127,27 +281,28 @@ class AmbientAudioEngine {
   }
 
   destroy(): void {
-    document.removeEventListener('visibilitychange', this.handleVisibility);
-    if (this.melodyTimer !== null) window.clearInterval(this.melodyTimer);
-    if (this.birdTimer !== null) window.clearInterval(this.birdTimer);
-    this.melodyTimer = null;
-    this.birdTimer = null;
+    this.lifecycleGeneration += 1;
+    this.tearingDown = true;
+    this.detachLifecycleListeners();
+    this.releaseAudioGraph();
+    this.tearingDown = false;
+  }
 
-    for (const node of this.persistentNodes) {
-      try {
-        node.stop();
-      } catch {
-        // Stopped nodes cannot be stopped twice.
-      }
-    }
-    this.persistentNodes = [];
-    if (this.context) void this.context.close();
-    this.context = null;
-    this.masterGain = null;
-    this.ambienceGain = null;
-    this.ambienceFilter = null;
-    this.windGain = null;
-    this.trafficGain = null;
+  private createMixGraph(): void {
+    const context = this.context;
+    if (!context) return;
+
+    this.masterGain = context.createGain();
+    this.masterGain.gain.value = this.muted ? 0 : MASTER_VOLUME;
+    this.masterGain.connect(context.destination);
+
+    this.bgmBusGain = context.createGain();
+    this.bgmBusGain.gain.value = BGM_BUS_VOLUME;
+    this.bgmBusGain.connect(this.masterGain);
+
+    this.ambienceBusGain = context.createGain();
+    this.ambienceBusGain.gain.value = AMBIENCE_BUS_VOLUME;
+    this.ambienceBusGain.connect(this.masterGain);
   }
 
   private applyMix(): void {
@@ -183,40 +338,38 @@ class AmbientAudioEngine {
     const profile = areaMix[this.area];
 
     this.ambienceFilter?.frequency.setTargetAtTime(frequencyByPhase[this.phase], now, 0.7);
-    this.ambienceGain?.gain.setTargetAtTime(cicadaByPhase[this.phase] * profile.cicada, now, 0.7);
+    this.cicadaGain?.gain.setTargetAtTime(
+      cicadaByPhase[this.phase] * profile.cicada,
+      now,
+      0.7,
+    );
     this.windGain?.gain.setTargetAtTime(
       windByPhase[this.phase] * profile.wind,
       now,
       0.8,
     );
-    this.trafficGain?.gain.setTargetAtTime(
-      profile.traffic,
-      now,
-      0.8,
+    this.trafficGain?.gain.setTargetAtTime(profile.traffic, now, 0.8);
+    this.applyOutputGain();
+  }
+
+  private applyOutputGain(forceSilent = false): void {
+    const context = this.context;
+    const masterGain = this.masterGain;
+    if (!context || !masterGain) return;
+
+    const hidden = typeof document !== 'undefined' && document.hidden;
+    const silent = forceSilent || hidden || this.muted;
+    masterGain.gain.setTargetAtTime(
+      silent ? 0 : MASTER_VOLUME,
+      context.currentTime,
+      silent ? 0.04 : 0.14,
     );
-    this.handleVisibility();
   }
 
   private createAmbientLayers(): void {
     const context = this.context;
-    if (!context) return;
-
-    this.masterGain = context.createGain();
-    this.masterGain.gain.value = this.muted ? 0 : MASTER_VOLUME;
-    this.masterGain.connect(context.destination);
-
-    const padGain = context.createGain();
-    padGain.gain.value = 0.014;
-    padGain.connect(this.masterGain);
-    for (const [frequency, detune] of [[130.81, -4], [196, 3]] as const) {
-      const oscillator = context.createOscillator();
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      oscillator.detune.value = detune;
-      oscillator.connect(padGain);
-      oscillator.start();
-      this.persistentNodes.push(oscillator);
-    }
+    const ambienceBus = this.ambienceBusGain;
+    if (!context || !ambienceBus) return;
 
     const cicadaSource = this.createLoopingNoise(2, (index, sampleRate) => {
       const pulse = Math.sin((index / sampleRate) * Math.PI * 38) > 0.72 ? 1 : 0.12;
@@ -226,11 +379,11 @@ class AmbientAudioEngine {
     this.ambienceFilter.type = 'bandpass';
     this.ambienceFilter.frequency.value = 5200;
     this.ambienceFilter.Q.value = 0.85;
-    this.ambienceGain = context.createGain();
-    this.ambienceGain.gain.value = 0.023;
+    this.cicadaGain = context.createGain();
+    this.cicadaGain.gain.value = 0.023;
     cicadaSource.connect(this.ambienceFilter);
-    this.ambienceFilter.connect(this.ambienceGain);
-    this.ambienceGain.connect(this.masterGain);
+    this.ambienceFilter.connect(this.cicadaGain);
+    this.cicadaGain.connect(ambienceBus);
 
     const windSource = this.createLoopingNoise(3, () => Math.random() * 2 - 1);
     const windFilter = context.createBiquadFilter();
@@ -240,7 +393,7 @@ class AmbientAudioEngine {
     this.windGain.gain.value = 0.01;
     windSource.connect(windFilter);
     windFilter.connect(this.windGain);
-    this.windGain.connect(this.masterGain);
+    this.windGain.connect(ambienceBus);
 
     const trafficSource = this.createLoopingNoise(4, (index, sampleRate) => {
       const wave = Math.sin((index / sampleRate) * Math.PI * 1.25) * 0.32;
@@ -253,7 +406,7 @@ class AmbientAudioEngine {
     this.trafficGain.gain.value = 0.012;
     trafficSource.connect(trafficFilter);
     trafficFilter.connect(this.trafficGain);
-    this.trafficGain.connect(this.masterGain);
+    this.trafficGain.connect(ambienceBus);
   }
 
   private createLoopingNoise(
@@ -271,25 +424,8 @@ class AmbientAudioEngine {
     source.buffer = buffer;
     source.loop = true;
     source.start();
-    this.persistentNodes.push(source);
+    this.persistentAmbienceNodes.push(source);
     return source;
-  }
-
-  private startMelodyLoop(): void {
-    if (this.melodyTimer !== null) return;
-    this.melodyTimer = window.setInterval(() => {
-      const frequency = NOTE_FREQUENCIES[this.melodyIndex % NOTE_FREQUENCIES.length];
-      this.melodyIndex += 1;
-      if (!frequency) return;
-      const phaseMultiplier: Record<TimePhase, number> = {
-        morning: 1,
-        day: 0.9,
-        evening: 0.68,
-        night: 0.42,
-      };
-      const octave = this.phase === 'night' ? 0.5 : 1;
-      this.playTone(frequency * octave, 0.34, 'triangle', 0.021 * phaseMultiplier[this.phase]);
-    }, 820);
   }
 
   private startBirdLoop(): void {
@@ -305,9 +441,195 @@ class AmbientAudioEngine {
             : 0.3;
       if (Math.random() > chance) return;
       const base = this.phase === 'morning' ? 1320 : 1120;
-      this.playTone(base + Math.random() * 280, 0.075, 'sine', 0.016);
-      window.setTimeout(() => this.playTone(base * 1.16, 0.065, 'sine', 0.012), 80);
+      this.playTone(base + Math.random() * 280, 0.075, 'sine', 0.016, 'ambience');
+      window.setTimeout(
+        () => this.playTone(base * 1.16, 0.065, 'sine', 0.012, 'ambience'),
+        80,
+      );
     }, 2400);
+  }
+
+  private async loadBgmBuffer(context: AudioContext): Promise<AudioBuffer> {
+    if (!this.bgmLoadPromise) {
+      this.bgmLoadPromise = (async () => {
+        const response = await fetch(BGM_ASSET_URL, { cache: 'force-cache' });
+        if (!response.ok) {
+          throw new Error(`BGM request failed with status ${response.status}.`);
+        }
+        const buffer = await context.decodeAudioData(await response.arrayBuffer());
+        if (buffer.numberOfChannels !== 2) {
+          throw new Error(`BGM must decode as stereo; received ${buffer.numberOfChannels} channels.`);
+        }
+        if (!Number.isFinite(buffer.duration) || buffer.duration <= 0) {
+          throw new Error('BGM decoded with an invalid duration.');
+        }
+        return buffer;
+      })();
+    }
+    return this.bgmLoadPromise;
+  }
+
+  private startBgmSource(offset: number): void {
+    const context = this.context;
+    const buffer = this.bgmBuffer;
+    const bgmBus = this.bgmBusGain;
+    if (!context || !buffer || !bgmBus || this.bgmSource) return;
+
+    const normalizedOffset = modulo(offset, buffer.duration);
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    source.loopStart = 0;
+    source.loopEnd = buffer.duration;
+    source.connect(bgmBus);
+
+    this.bgmSourceSerial += 1;
+    this.activeSourceId = `${BGM_ASSET_URL}#${this.bgmSourceSerial}`;
+    this.bgmSource = source;
+    this.bgmAnchorOffset = normalizedOffset;
+    this.bgmAnchorContextTime = context.currentTime;
+
+    source.addEventListener('ended', () => {
+      if (this.bgmSource !== source) return;
+      const preservedOffset = this.getBgmOffset();
+      this.bgmAnchorOffset = preservedOffset;
+      this.bgmAnchorContextTime = this.context?.currentTime ?? 0;
+      this.bgmSource = null;
+      this.activeSourceId = null;
+      if (!this.tearingDown && !document.hidden) {
+        void this.recoverPlayback('audio-context-state');
+      }
+    }, { once: true });
+    source.start(0, normalizedOffset);
+  }
+
+  private getBgmOffset(): number {
+    const context = this.context;
+    const duration = this.bgmBuffer?.duration ?? 0;
+    if (!context || duration <= 0) return 0;
+
+    const elapsed = this.bgmSource
+      ? Math.max(0, context.currentTime - this.bgmAnchorContextTime)
+      : 0;
+    return modulo(this.bgmAnchorOffset + elapsed, duration);
+  }
+
+  private captureBgmPosition(): void {
+    const context = this.context;
+    if (!context || !this.bgmBuffer) return;
+    this.bgmAnchorOffset = this.getBgmOffset();
+    this.bgmAnchorContextTime = context.currentTime;
+  }
+
+  private recoverPlayback(reason: RecoveryReason): Promise<void> {
+    if (this.recoveryPromise) return this.recoveryPromise;
+
+    const recovery = async (): Promise<void> => {
+      const context = this.context;
+      if (!context || context.state === 'closed') return;
+
+      this.captureBgmPosition();
+      const initialState = context.state as RecoverableAudioContextState;
+      const needsSource = !this.bgmSource && this.bgmBuffer !== null;
+      const needsContextResume = initialState !== 'running';
+
+      if (needsSource) this.startBgmSource(this.bgmAnchorOffset);
+      if (!needsSource && !needsContextResume) {
+        this.applyOutputGain();
+        return;
+      }
+
+      this.recoveryCount += 1;
+      this.lastRecoveryReason = reason;
+      this.lastRecoveryError = null;
+      try {
+        if (needsContextResume) await context.resume();
+        this.applyOutputGain();
+      } catch (error) {
+        this.lastRecoveryError = error instanceof Error ? error.message : String(error);
+      }
+    };
+
+    const promise = recovery().finally(() => {
+      if (this.recoveryPromise === promise) this.recoveryPromise = null;
+    });
+    this.recoveryPromise = promise;
+    return promise;
+  }
+
+  private attachLifecycleListeners(): void {
+    const context = this.context;
+    if (!context || this.lifecycleListenersAttached) return;
+
+    document.addEventListener('visibilitychange', this.handleVisibility);
+    document.addEventListener('freeze', this.handleFreeze);
+    document.addEventListener('resume', this.handlePageResume);
+    window.addEventListener('pageshow', this.handlePageShow);
+    window.addEventListener('pointerdown', this.handleUserActivation, { passive: true });
+    window.addEventListener('touchend', this.handleUserActivation, { passive: true });
+    window.addEventListener('keydown', this.handleUserActivation);
+    context.addEventListener('statechange', this.handleContextStateChange);
+    this.lifecycleListenersAttached = true;
+  }
+
+  private detachLifecycleListeners(): void {
+    const context = this.context;
+    if (!this.lifecycleListenersAttached) return;
+
+    document.removeEventListener('visibilitychange', this.handleVisibility);
+    document.removeEventListener('freeze', this.handleFreeze);
+    document.removeEventListener('resume', this.handlePageResume);
+    window.removeEventListener('pageshow', this.handlePageShow);
+    window.removeEventListener('pointerdown', this.handleUserActivation);
+    window.removeEventListener('touchend', this.handleUserActivation);
+    window.removeEventListener('keydown', this.handleUserActivation);
+    context?.removeEventListener('statechange', this.handleContextStateChange);
+    this.lifecycleListenersAttached = false;
+  }
+
+  private releaseAudioGraph(): void {
+    this.detachLifecycleListeners();
+
+    if (this.birdTimer !== null) window.clearInterval(this.birdTimer);
+    this.birdTimer = null;
+
+    const source = this.bgmSource;
+    this.bgmSource = null;
+    this.activeSourceId = null;
+    if (source) {
+      try {
+        source.stop();
+      } catch {
+        // Stopped nodes cannot be stopped twice.
+      }
+      source.disconnect();
+    }
+
+    for (const node of this.persistentAmbienceNodes) {
+      try {
+        node.stop();
+      } catch {
+        // Stopped nodes cannot be stopped twice.
+      }
+      node.disconnect();
+    }
+    this.persistentAmbienceNodes = [];
+
+    const context = this.context;
+    this.context = null;
+    if (context && context.state !== 'closed') void context.close();
+
+    this.masterGain = null;
+    this.bgmBusGain = null;
+    this.ambienceBusGain = null;
+    this.cicadaGain = null;
+    this.ambienceFilter = null;
+    this.windGain = null;
+    this.trafficGain = null;
+    this.startPromise = null;
+    this.recoveryPromise = null;
+    this.bgmAnchorOffset = 0;
+    this.bgmAnchorContextTime = 0;
   }
 
   private playTone(
@@ -315,10 +637,11 @@ class AmbientAudioEngine {
     duration: number,
     waveform: OscillatorType,
     volume: number,
+    destination: 'sfx' | 'ambience' = 'sfx',
   ): void {
     const context = this.context;
-    const masterGain = this.masterGain;
-    if (!context || !masterGain || context.state !== 'running' || this.muted) return;
+    const output = destination === 'ambience' ? this.ambienceBusGain : this.masterGain;
+    if (!context || !output || context.state !== 'running' || this.muted) return;
 
     const oscillator = context.createOscillator();
     const envelope = context.createGain();
@@ -329,10 +652,19 @@ class AmbientAudioEngine {
     envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, volume), now + 0.025);
     envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     oscillator.connect(envelope);
-    envelope.connect(masterGain);
+    envelope.connect(output);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.04);
   }
 }
 
 export const audioEngine = new AmbientAudioEngine();
+
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, '__BOKU_M15_AUDIO__', {
+    configurable: true,
+    value: Object.freeze({
+      getDiagnostics: (): AudioEngineDiagnostics => audioEngine.getDiagnostics(),
+    }),
+  });
+}
