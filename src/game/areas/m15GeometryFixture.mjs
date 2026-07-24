@@ -167,10 +167,10 @@ export const M15_GEOMETRY_FIXTURE = deepFreeze({
       edgeTriggers: edgeTriggers(2680),
       branchEntrances: {
         up: branchEntrance(
-          horizontalRange(1000, 1300),
-          horizontalRange(1060, 1240),
+          horizontalRange(820, 1300),
+          horizontalRange(820, 1300),
           634,
-          'Painted uphill road mouth between the two roadside walls.',
+          'Painted uphill road mouth from the left drain edge to the right wall/curb edge.',
         ),
       },
     },

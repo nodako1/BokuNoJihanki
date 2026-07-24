@@ -11,7 +11,11 @@ export function BuildBadge(): React.JSX.Element {
       });
 
   return (
-    <div className="build-badge" title={`Build: ${formattedBuildTime}`}>
+    <div
+      className="build-badge"
+      data-build-commit={__BUILD_COMMIT_FULL__}
+      title={`Build: ${formattedBuildTime}`}
+    >
       v{__APP_VERSION__} · {__BUILD_COMMIT__}
     </div>
   );

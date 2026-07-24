@@ -11,6 +11,8 @@ interface PackageMetadata {
 const packageMetadata = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
 ) as PackageMetadata;
+const buildCommitFull =
+  process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? 'local';
 
 export default defineConfig({
   plugins: [react()],
@@ -21,9 +23,8 @@ export default defineConfig({
   },
   define: {
     __APP_VERSION__: JSON.stringify(packageMetadata.version),
-    __BUILD_COMMIT__: JSON.stringify(
-      (process.env.VERCEL_GIT_COMMIT_SHA ?? process.env.GITHUB_SHA ?? 'local').slice(0, 7),
-    ),
+    __BUILD_COMMIT__: JSON.stringify(buildCommitFull.slice(0, 7)),
+    __BUILD_COMMIT_FULL__: JSON.stringify(buildCommitFull),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   server: {

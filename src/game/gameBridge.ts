@@ -68,6 +68,14 @@ export interface PlayerScreenGeometry {
   rect: ScreenRectSnapshot;
   footRect: ScreenRectSnapshot;
   facing: 'left' | 'right' | 'up' | 'down';
+  areaId: M14AreaId;
+  playerWorldX: number;
+  playerWorldY: number;
+  cameraScrollX: number;
+  cameraScrollY: number;
+  canvasRect: ScreenRectSnapshot;
+  scaleX: number;
+  scaleY: number;
 }
 
 let virtualInput: VirtualInputState = { x: 0, y: 0, active: false };

@@ -1,6 +1,19 @@
-import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import { chromium } from 'playwright';
+import {
+  M15_AREA_IDS,
+  M15_GEOMETRY_FIXTURE,
+  M15_TIME_PHASES,
+  getM15GeometryArea,
+} from '../src/game/areas/m15GeometryFixture.mjs';
+import {
+  AREA_PANEL_MIN_PLAYER_GAP,
+  AREA_PANEL_MIN_TOUCH_TARGET,
+  areaPanelIntersectionArea,
+  areaPanelRectDistance,
+  createAreaPanelRect,
+} from '../src/ui/areaPanelPlacement.mjs';
 
 function positiveIntegerFromEnv(name, fallback) {
   const rawValue = process.env[name];
@@ -8,6 +21,16 @@ function positiveIntegerFromEnv(name, fallback) {
   const value = Number(rawValue);
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new RangeError(`${name} must be a positive integer.`);
+  }
+  return value;
+}
+
+function positiveNumberFromEnv(name, fallback) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === '') return fallback;
+  const value = Number(rawValue);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive number.`);
   }
   return value;
 }
@@ -20,35 +43,99 @@ function booleanFromEnv(name, fallback) {
   throw new RangeError(`${name} must be true or false.`);
 }
 
+function safeFilename(value) {
+  return value.replace(/[^a-z0-9_.-]+/gi, '-');
+}
+
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173';
-const expectedCommit = (process.env.EXPECTED_COMMIT ?? '').slice(0, 7);
-const outputDir = process.env.BROWSER_ARTIFACT_DIR ?? 'diagnostics/browser-smoke';
-const productionWaitMs = Number(process.env.PRODUCTION_WAIT_MS ?? 480_000);
+const expectedCommit = (process.env.EXPECTED_COMMIT ?? '').trim();
+if (!/^[0-9a-f]{40}$/i.test(expectedCommit)) {
+  throw new Error('EXPECTED_COMMIT must be a complete 40-character Git SHA.');
+}
+const browserExecutablePath =
+  process.env.BROWSER_EXECUTABLE_PATH?.trim() || undefined;
+const configuredOutputDir =
+  process.env.BROWSER_ARTIFACT_DIR ?? 'diagnostics/browser-smoke';
+const productionWaitMs = positiveIntegerFromEnv(
+  'PRODUCTION_WAIT_MS',
+  480_000,
+);
 const viewport = Object.freeze({
   width: positiveIntegerFromEnv('BROWSER_VIEWPORT_WIDTH', 1280),
   height: positiveIntegerFromEnv('BROWSER_VIEWPORT_HEIGHT', 720),
 });
+const deviceScaleFactor = positiveNumberFromEnv(
+  'BROWSER_DEVICE_SCALE_FACTOR',
+  1,
+);
+const touchEnabled = booleanFromEnv('BROWSER_TOUCH', false);
 const traceEnabled = booleanFromEnv('BROWSER_TRACE', true);
-const areaGroundY = {
-  'home-street': 525,
-  'life-road': 614,
-  'upper-vending-lane': 535,
-};
-const upArrowLabel = '上のエリアへ移動';
-const downArrowLabel = '下のエリアへ移動';
+const browserHeadless = booleanFromEnv('BROWSER_HEADLESS', true);
+fs.mkdirSync(configuredOutputDir, { recursive: true });
+const outputDir = fs.mkdtempSync(
+  path.join(configuredOutputDir, 'm15-run-'),
+);
 
-fs.mkdirSync(outputDir, { recursive: true });
+const PHASE_TARGETS = Object.freeze([
+  { phase: 'morning', minutes: 360, increments: 0 },
+  { phase: 'day', minutes: 720, increments: 24 },
+  { phase: 'evening', minutes: 990, increments: 18 },
+  { phase: 'night', minutes: 1_200, increments: 14 },
+]);
+const PANEL_DIRECTION_AREAS = Object.freeze({
+  up: 'life-road',
+  down: 'upper-vending-lane',
+});
+const PANEL_LABELS = Object.freeze({
+  up: '上のエリアへ移動',
+  down: '下のエリアへ移動',
+});
+const PANEL_OBSTACLE_SELECTORS = Object.freeze([
+  '.game-date-chip',
+  '.game-actions',
+  '.developer-hud',
+  '.dev-control-panel',
+  '.virtual-joystick',
+  '.control-hint',
+  '.build-badge',
+  '[data-area-panel-obstacle]',
+]);
+const POSITION_TOLERANCE_WORLD_PX = 4;
+const PANEL_POSITION_TOLERANCE_WORLD_PX = 1;
 
 const records = [];
 const pageErrors = [];
 const failedRequests = [];
+const requestedUrls = new Set();
+const cdpLifecycleEvents = [];
 const transitionChecks = [];
-const evidence = {};
+const evidence = {
+  areaPositions: {},
+  debugGeometry: {},
+  phaseMatrix: {},
+  panelMatrix: [],
+  spawns: [],
+  transitions: [],
+  audio: {},
+  lifecycle: {},
+};
+let browser;
+let context;
+let page;
+let cdpSession;
+let inputController;
+let collectRuntimeFailures = false;
+let observedCommit = '';
+let failure;
 let statePayload = {
   baseUrl,
   expectedCommit,
   viewport,
+  deviceScaleFactor,
+  touchEnabled,
   traceEnabled,
+  browserHeadless,
+  outputDir,
 };
 
 const record = (kind, value) => {
@@ -61,20 +148,32 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function latestHud(page) {
-  const snapshot = await page.evaluate(() => globalThis.__m14BrowserSmoke?.last ?? null);
-  if (!snapshot) throw new Error('M1.4 HUD snapshot is not available.');
+function normalizeRect(rect) {
+  return createAreaPanelRect(rect.left, rect.top, rect.width, rect.height);
+}
+
+function cyclicOffsetDelta(before, after, duration) {
+  return ((after - before) % duration + duration) % duration;
+}
+
+async function latestHud(targetPage = page) {
+  const snapshot = await targetPage.evaluate(
+    () => globalThis.__m15CandidateSmoke?.lastHud ?? null,
+  );
+  if (!snapshot) throw new Error('M1.5 HUD snapshot is not available.');
   return snapshot;
 }
 
-async function hudTimeline(page) {
-  return page.evaluate(() => globalThis.__m14BrowserSmoke?.snapshots ?? []);
+async function hudTimeline(targetPage = page) {
+  return targetPage.evaluate(
+    () => globalThis.__m15CandidateSmoke?.hudSnapshots ?? [],
+  );
 }
 
-async function waitForHud(page, expected, timeout = 30_000) {
+async function waitForHud(expected, timeout = 30_000) {
   await page.waitForFunction(
     (criteria) => {
-      const snapshot = globalThis.__m14BrowserSmoke?.last;
+      const snapshot = globalThis.__m15CandidateSmoke?.lastHud;
       if (!snapshot) return false;
       if (criteria.area !== undefined && snapshot.area !== criteria.area) return false;
       if (
@@ -89,9 +188,10 @@ async function waitForHud(page, expected, timeout = 30_000) {
         criteria.inputLocked !== undefined
         && snapshot.inputLocked !== criteria.inputLocked
       ) return false;
-      if (criteria.branchVisible !== undefined && snapshot.branchVisible !== criteria.branchVisible) {
-        return false;
-      }
+      if (
+        criteria.branchVisible !== undefined
+        && snapshot.branchVisible !== criteria.branchVisible
+      ) return false;
       if (
         criteria.branchDirection !== undefined
         && snapshot.branchDirection !== criteria.branchDirection
@@ -105,21 +205,30 @@ async function waitForHud(page, expected, timeout = 30_000) {
         criteria.animationPrefix !== undefined
         && !String(snapshot.animation ?? '').startsWith(criteria.animationPrefix)
       ) return false;
+      if (
+        criteria.spawnId !== undefined
+        && snapshot.spawnId !== criteria.spawnId
+      ) return false;
+      if (
+        criteria.lastTransitionId !== undefined
+        && snapshot.lastTransitionId !== criteria.lastTransitionId
+      ) return false;
       if (criteria.minX !== undefined && snapshot.playerX < criteria.minX) return false;
       if (criteria.maxX !== undefined && snapshot.playerX > criteria.maxX) return false;
       if (criteria.minSpeed !== undefined && snapshot.speed < criteria.minSpeed) return false;
       if (criteria.maxSpeed !== undefined && snapshot.speed > criteria.maxSpeed) return false;
       if (
-        criteria.minCamera !== undefined
-        && snapshot.cameraScrollX < criteria.minCamera
-      ) return false;
-      if (
         criteria.audioMuted !== undefined
         && snapshot.audioMuted !== criteria.audioMuted
       ) return false;
       if (
+        criteria.inputSource !== undefined
+        && snapshot.inputSource !== criteria.inputSource
+      ) return false;
+      if (
         criteria.timeMinutes !== undefined
-        && Math.abs(snapshot.timeMinutes - criteria.timeMinutes) > (criteria.timeTolerance ?? 2)
+        && Math.abs(snapshot.timeMinutes - criteria.timeMinutes)
+          > (criteria.timeTolerance ?? 2)
       ) return false;
       if (criteria.minFps !== undefined && snapshot.fps < criteria.minFps) return false;
       return true;
@@ -127,176 +236,1149 @@ async function waitForHud(page, expected, timeout = 30_000) {
     expected,
     { timeout, polling: 'raf' },
   );
-  return latestHud(page);
+  return latestHud();
 }
 
-async function waitForIdle(page, area, facing) {
-  return waitForHud(page, {
-    area,
-    transitionState: 'idle',
-    inputLocked: false,
-    maxSpeed: 0,
-    animation: `idle-${facing}`,
-  });
+async function waitForStableIdle(area, facing, timeout = 15_000) {
+  await page.waitForFunction(
+    ({ expectedArea, expectedFacing }) => {
+      const snapshots =
+        globalThis.__m15CandidateSmoke?.hudSnapshots?.slice(-4) ?? [];
+      if (snapshots.length < 4) return false;
+      return snapshots.every((snapshot) => (
+        snapshot.area === expectedArea
+        && snapshot.transitionState === 'idle'
+        && snapshot.inputLocked === false
+        && snapshot.speed === 0
+        && snapshot.facing === expectedFacing
+        && snapshot.animation === `idle-${expectedFacing}`
+        && snapshot.playerX === snapshots[0].playerX
+      ));
+    },
+    { expectedArea: area, expectedFacing: facing },
+    { timeout, polling: 'raf' },
+  );
+  return latestHud();
 }
 
-async function capture(page, filename) {
-  await page.screenshot({ path: path.join(outputDir, filename), fullPage: true });
+async function audioDiagnostics() {
+  return page.evaluate(
+    () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+  );
 }
 
-async function captureWalk(page, area, direction, filename) {
-  const key = direction === 'right' ? 'ArrowRight' : 'ArrowLeft';
-  const before = await latestHud(page);
+async function waitForAudioReady(timeout = 30_000) {
+  await page.waitForFunction(
+    () => {
+      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
+      return Boolean(
+        diagnostics
+        && diagnostics.sourceId
+        && diagnostics.contextState === 'running'
+        && diagnostics.decodedChannels === 2
+        && diagnostics.duration > 1
+        && diagnostics.lastRecoveryError === null,
+      );
+    },
+    null,
+    { timeout, polling: 100 },
+  );
+  return audioDiagnostics();
+}
+
+async function waitForAudioAdvance(before, minimumDelta = 0.15, timeout = 15_000) {
+  await page.waitForFunction(
+    ({ sourceId, offset, duration, requiredDelta }) => {
+      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
+      if (!diagnostics || diagnostics.sourceId !== sourceId) return false;
+      const delta =
+        ((diagnostics.offset - offset) % duration + duration) % duration;
+      return delta >= requiredDelta && delta < duration / 2;
+    },
+    {
+      sourceId: before.sourceId,
+      offset: before.offset,
+      duration: before.duration,
+      requiredDelta: minimumDelta,
+    },
+    { timeout, polling: 75 },
+  );
+  return audioDiagnostics();
+}
+
+async function capture(filename) {
+  const target = path.join(outputDir, safeFilename(filename));
+  await page.screenshot({ path: target, fullPage: true });
+  return target;
+}
+
+function createInputController(targetPage, targetCdpSession, useTouch) {
+  let touchActive = false;
+
+  async function joystickPoint(direction) {
+    const joystick = targetPage.getByLabel('左右移動スティック', { exact: true });
+    await joystick.waitFor({ state: 'visible' });
+    const box = await joystick.boundingBox();
+    if (!box) throw new Error('Touch joystick does not have a rendered rectangle.');
+    const center = {
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2,
+    };
+    const travel = Math.min(56, box.width * 0.38);
+    return {
+      center,
+      target: {
+        x: center.x + (direction === 'right' ? travel : -travel),
+        y: center.y,
+      },
+    };
+  }
+
+  return {
+    async start(direction) {
+      if (!useTouch) {
+        await targetPage.keyboard.down(
+          direction === 'right' ? 'ArrowRight' : 'ArrowLeft',
+        );
+        return;
+      }
+      assert(!touchActive, 'A prior joystick touch is still active.');
+      const point = await joystickPoint(direction);
+      await targetCdpSession.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ ...point.center, radiusX: 7, radiusY: 7, force: 1 }],
+      });
+      await targetCdpSession.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ ...point.target, radiusX: 7, radiusY: 7, force: 1 }],
+      });
+      touchActive = true;
+    },
+
+    async stop(direction) {
+      if (!useTouch) {
+        await targetPage.keyboard.up(
+          direction === 'right' ? 'ArrowRight' : 'ArrowLeft',
+        );
+        return;
+      }
+      if (!touchActive) return;
+      await targetCdpSession.send('Input.dispatchTouchEvent', {
+        type: 'touchEnd',
+        touchPoints: [],
+      });
+      touchActive = false;
+    },
+
+    async cancel() {
+      if (!useTouch || !touchActive) return;
+      await targetCdpSession.send('Input.dispatchTouchEvent', {
+        type: 'touchCancel',
+        touchPoints: [],
+      });
+      touchActive = false;
+    },
+  };
+}
+
+async function exerciseWalk(area, direction, screenshotName) {
+  const before = await latestHud();
   let during;
-  await page.keyboard.down(key);
+  await inputController.start(direction);
   try {
-    await waitForHud(page, {
+    during = await waitForHud({
       area,
       facing: direction,
       animation: `walk-${direction}`,
-      minSpeed: 100,
+      minSpeed: 35,
+      inputSource: touchEnabled ? 'touch' : 'keyboard',
     });
-    await page.waitForTimeout(180);
-    during = await latestHud(page);
-    if (filename) await capture(page, filename);
+    if (screenshotName) await capture(screenshotName);
   } finally {
-    await page.keyboard.up(key);
+    await inputController.stop(direction);
   }
-  const idle = await waitForIdle(page, area, direction);
-  const movedInDirection = direction === 'right'
+  const stopped = await waitForStableIdle(area, direction);
+  const moved = direction === 'right'
     ? during.playerX > before.playerX
     : during.playerX < before.playerX;
-  assert(movedInDirection, `${area} did not move ${direction}.`);
-  return { before, during, idle };
+  assert(moved, `${area} did not move ${direction}.`);
+  assert(
+    stopped.inputSource === 'none',
+    `${area}/${direction} input did not return to none after release.`,
+  );
+  return { before, during, stopped };
 }
 
-async function moveRightTo(page, area, minX, timeout = 60_000) {
-  await page.keyboard.down('ArrowRight');
-  try {
-    await waitForHud(page, { area, minX, animation: 'walk-right' }, timeout);
-  } finally {
-    await page.keyboard.up('ArrowRight');
+async function moveToX(area, targetX, tolerance = POSITION_TOLERANCE_WORLD_PX) {
+  const geometry = getM15GeometryArea(area);
+  assert(
+    targetX >= 0 && targetX <= geometry.worldWidth,
+    `${area} target ${targetX} is outside the fixture world.`,
+  );
+
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    const current = await latestHud();
+    assert(current.area === area, `Expected ${area}, got ${current.area}.`);
+    const delta = targetX - current.playerX;
+    if (Math.abs(delta) <= tolerance) return current;
+    const direction = delta > 0 ? 'right' : 'left';
+    const distance = Math.abs(delta);
+
+    await inputController.start(direction);
+    try {
+      if (distance > 42) {
+        const threshold = direction === 'right'
+          ? { minX: targetX - 24 }
+          : { maxX: targetX + 24 };
+        await waitForHud({
+          area,
+          facing: direction,
+          animation: `walk-${direction}`,
+          ...threshold,
+        }, 45_000);
+      } else {
+        const pulseMs = Math.max(42, Math.min(170, Math.round(distance * 5)));
+        await page.waitForTimeout(pulseMs);
+      }
+    } finally {
+      await inputController.stop(direction);
+    }
+    await waitForStableIdle(area, direction);
   }
-  return waitForIdle(page, area, 'right');
+
+  const final = await latestHud();
+  throw new Error(
+    `${area} could not settle at ${targetX}±${tolerance}; got ${final.playerX}.`,
+  );
 }
 
-async function transitionWithHeldKey(page, key, targetArea, loadingScreenshot) {
-  const departure = await latestHud(page);
-  let lockedStart;
-  let lockedEnd;
-  await page.keyboard.down(key);
+async function setFacingAtX(area, targetX, facing) {
+  const geometry = getM15GeometryArea(area);
+  const preparationOffset = facing === 'right' ? -24 : 24;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const preparedX = Math.max(
+      0,
+      Math.min(geometry.worldWidth, targetX + preparationOffset),
+    );
+    await moveToX(area, preparedX, 3);
+    const settled = await moveToX(
+      area,
+      targetX,
+      PANEL_POSITION_TOLERANCE_WORLD_PX,
+    );
+    if (settled.facing === facing) return settled;
+  }
+  const final = await latestHud();
+  throw new Error(
+    `${area} could not face ${facing} at ${targetX}; `
+    + `got ${final.facing} at ${final.playerX}.`,
+  );
+}
+
+async function fixtureGroundMeasurement(areaId, position, spawn = false) {
+  const geometry = getM15GeometryArea(areaId);
+  const snapshot = await latestHud();
+  assert(snapshot.area === areaId, `Ground measurement area drifted to ${snapshot.area}.`);
+  await page.waitForFunction(
+    ({ expectedArea, expectedPlayerX }) => {
+      const playerGeometry =
+        globalThis.__m15CandidateSmoke?.lastPlayerGeometry;
+      return Boolean(
+        playerGeometry
+        && playerGeometry.areaId === expectedArea
+        && Math.abs(playerGeometry.playerWorldX - expectedPlayerX) <= 2,
+      );
+    },
+    { expectedArea: areaId, expectedPlayerX: snapshot.playerX },
+    { timeout: 5_000, polling: 'raf' },
+  );
+  const playerGeometry = await page.evaluate(
+    () => globalThis.__m15CandidateSmoke?.lastPlayerGeometry ?? null,
+  );
+  assert(playerGeometry, `${areaId}/${position} player geometry is unavailable.`);
+  assert(
+    playerGeometry.areaId === areaId
+      && Math.abs(playerGeometry.playerWorldX - snapshot.playerX) <= 2,
+    `${areaId}/${position} player geometry is stale.`,
+  );
+  const renderedFootScreenY =
+    playerGeometry.footRect.top + playerGeometry.footRect.height / 2;
+  const fixtureGroundScreenY =
+    playerGeometry.canvasRect.top
+    + (geometry.ground.y - playerGeometry.cameraScrollY)
+      * playerGeometry.scaleY;
+  const cssDelta = Math.abs(renderedFootScreenY - fixtureGroundScreenY);
+  const worldDelta = Math.abs(snapshot.playerY - geometry.ground.y);
+  const tolerance = spawn
+    ? M15_GEOMETRY_FIXTURE.tolerances.spawnFootToGroundCssPx
+    : M15_GEOMETRY_FIXTURE.tolerances.renderedFootToGroundCssPx;
+  assert(
+    cssDelta <= tolerance,
+    `${areaId}/${position} foot-ground delta ${cssDelta} exceeds ${tolerance}.`,
+  );
+  const measurement = {
+    areaId,
+    position,
+    fixtureGroundY: geometry.ground.y,
+    runtimeFootY: snapshot.playerY,
+    renderedFootScreenY,
+    fixtureGroundScreenY,
+    worldDelta,
+    cssDelta,
+    tolerance,
+    playerGeometry,
+    backgroundSha256: geometry.assets.backgroundSha256,
+    foregroundSha256: geometry.assets.foregroundSha256,
+    snapshot,
+  };
+  if (spawn) evidence.spawns.push(measurement);
+  return measurement;
+}
+
+async function captureAreaPositions(areaId, legacyNames = {}) {
+  const geometry = getM15GeometryArea(areaId);
+  const results = {};
+  for (const sample of geometry.ground.samples) {
+    await moveToX(areaId, sample.x);
+    const ground = await fixtureGroundMeasurement(areaId, sample.position);
+    const screenshot =
+      legacyNames[sample.position]
+      ?? `ground-${areaId}-${sample.position}.png`;
+    await capture(screenshot);
+    results[sample.position] = ground;
+
+    if (sample.position === 'center') {
+      results.walkRight = await exerciseWalk(
+        areaId,
+        'right',
+        legacyNames.walkRight ?? `walk-${areaId}-right.png`,
+      );
+      await moveToX(areaId, sample.x);
+      results.walkLeft = await exerciseWalk(
+        areaId,
+        'left',
+        legacyNames.walkLeft ?? `walk-${areaId}-left.png`,
+      );
+      await moveToX(areaId, sample.x);
+    }
+  }
+  evidence.areaPositions[areaId] = results;
+  return results;
+}
+
+async function openDeveloperDrawer() {
+  const drawer = page.locator('details.dev-tool-drawer');
+  if (!await drawer.evaluate((element) => element.open)) {
+    await drawer.locator('summary').click();
+  }
+  return drawer;
+}
+
+async function closeDeveloperDrawer() {
+  const drawer = page.locator('details.dev-tool-drawer');
+  if (await drawer.evaluate((element) => element.open)) {
+    await drawer.locator('summary').click();
+  }
+}
+
+async function captureGeometryDebug(areaId) {
+  await openDeveloperDrawer();
+  const showButton = page.getByRole('button', {
+    name: '当たり判定を表示',
+    exact: true,
+  });
+  assert(await showButton.count() === 1, 'Geometry debug toggle is missing.');
+  await showButton.click();
+  await waitForHud({ area: areaId });
+  await page.waitForFunction(
+    () => globalThis.__m15CandidateSmoke?.lastHud?.collisionDebug === true,
+    null,
+    { timeout: 5_000, polling: 'raf' },
+  );
+  await closeDeveloperDrawer();
+  const filename = `debug-geometry-${areaId}.png`;
+  await capture(filename);
+
+  await openDeveloperDrawer();
+  const hideButton = page.getByRole('button', {
+    name: '当たり判定を隠す',
+    exact: true,
+  });
+  assert(await hideButton.count() === 1, 'Geometry debug reset toggle is missing.');
+  await hideButton.click();
+  await page.waitForFunction(
+    () => globalThis.__m15CandidateSmoke?.lastHud?.collisionDebug === false,
+    null,
+    { timeout: 5_000, polling: 'raf' },
+  );
+  await closeDeveloperDrawer();
+  evidence.debugGeometry[areaId] = {
+    screenshot: filename,
+    fixture: {
+      ground: getM15GeometryArea(areaId).ground,
+      spawns: getM15GeometryArea(areaId).spawns,
+      branchEntrances: getM15GeometryArea(areaId).branchEntrances,
+    },
+  };
+  return evidence.debugGeometry[areaId];
+}
+
+async function capturePhaseMatrix(areaId, legacyNames = {}) {
+  const results = {};
+  await openDeveloperDrawer();
+  const stepButton = page.getByRole('button', { name: '＋15分', exact: true });
+  const resetButton = page.getByRole('button', { name: '朝へ戻す', exact: true });
+  assert(await stepButton.count() === 1, 'The +15 minute control is missing.');
+  assert(await resetButton.count() === 1, 'The morning reset control is missing.');
+
+  await resetButton.click();
+  for (const phaseTarget of PHASE_TARGETS) {
+    for (let index = 0; index < phaseTarget.increments; index += 1) {
+      await stepButton.click();
+    }
+    const snapshot = await waitForHud({
+      area: areaId,
+      timeMinutes: phaseTarget.minutes,
+      timeTolerance: 1,
+    }, 15_000);
+    const filename =
+      legacyNames[phaseTarget.phase]
+      ?? `phase-${areaId}-${phaseTarget.phase}.png`;
+    await closeDeveloperDrawer();
+    await capture(filename);
+    results[phaseTarget.phase] = {
+      fixtureBackgroundPath:
+        getM15GeometryArea(areaId).assets.backgroundPaths[phaseTarget.phase],
+      fixtureBackgroundSha256:
+        getM15GeometryArea(areaId).assets.backgroundSha256[phaseTarget.phase],
+      snapshot,
+      screenshot: filename,
+    };
+    if (phaseTarget.phase !== 'night') await openDeveloperDrawer();
+  }
+
+  await openDeveloperDrawer();
+  await resetButton.click();
+  await waitForHud({ area: areaId, timeMinutes: 360, timeTolerance: 1 });
+  await closeDeveloperDrawer();
+  evidence.phaseMatrix[areaId] = results;
+  return results;
+}
+
+async function waitForPanel(direction) {
+  const button = page.getByRole('button', {
+    name: PANEL_LABELS[direction],
+    exact: true,
+  });
+  await button.waitFor({ state: 'visible' });
+  await page.waitForFunction(
+    ({ label, minimumGap }) => {
+      const candidate = [...document.querySelectorAll('button')]
+        .find((element) => element.getAttribute('aria-label') === label);
+      if (!(candidate instanceof HTMLButtonElement)) return false;
+      const distance = Number(candidate.dataset.areaPanelPlayerDistance);
+      return (
+        !candidate.disabled
+        && candidate.getAttribute('aria-hidden') !== 'true'
+        && candidate.classList.contains('area-arrow-button--placed')
+        && Number.isFinite(distance)
+        && distance >= minimumGap
+      );
+    },
+    {
+      label: PANEL_LABELS[direction],
+      minimumGap: AREA_PANEL_MIN_PLAYER_GAP,
+    },
+    { timeout: 12_000, polling: 'raf' },
+  );
+  return button;
+}
+
+async function readPanelGeometry(direction) {
+  const domSnapshot = await page.evaluate(
+    ({ label, obstacleSelectors }) => {
+      const button = [...document.querySelectorAll('button')]
+        .find((element) => element.getAttribute('aria-label') === label);
+      if (!(button instanceof HTMLButtonElement)) {
+        throw new Error(`Panel ${label} is not rendered.`);
+      }
+      const smoke = globalThis.__m15CandidateSmoke;
+      const playerGeometry = smoke?.lastPlayerGeometry ?? null;
+      const panelRect = button.getBoundingClientRect().toJSON();
+      const obstacles = [];
+      const seen = new Set();
+      for (const selector of obstacleSelectors) {
+        for (const element of document.querySelectorAll(selector)) {
+          if (
+            !(element instanceof HTMLElement)
+            || element === button
+            || element.contains(button)
+            || seen.has(element)
+          ) {
+            continue;
+          }
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          if (
+            style.display === 'none'
+            || style.visibility === 'hidden'
+            || Number.parseFloat(style.opacity) === 0
+            || rect.width <= 0
+            || rect.height <= 0
+          ) {
+            continue;
+          }
+          seen.add(element);
+          obstacles.push({
+            id:
+              element.dataset.areaPanelObstacle
+              || element.getAttribute('aria-label')
+              || element.classList.item(0)
+              || selector,
+            selector,
+            rect: rect.toJSON(),
+          });
+        }
+      }
+      return {
+        panelRect,
+        playerGeometry,
+        obstacles,
+        dataset: {
+          anchor: button.dataset.areaPanelAnchor,
+          playerIntersection: button.dataset.areaPanelPlayerIntersection,
+          playerDistance: button.dataset.areaPanelPlayerDistance,
+          obstacleIntersections:
+            button.dataset.areaPanelObstacleIntersections,
+          x: button.dataset.areaPanelX,
+          y: button.dataset.areaPanelY,
+        },
+        disabled: button.disabled,
+        ariaHidden: button.getAttribute('aria-hidden'),
+        prompt: smoke?.lastPrompt ?? null,
+        viewport: {
+          width: window.innerWidth,
+          height: window.innerHeight,
+          devicePixelRatio: window.devicePixelRatio,
+        },
+      };
+    },
+    {
+      label: PANEL_LABELS[direction],
+      obstacleSelectors: PANEL_OBSTACLE_SELECTORS,
+    },
+  );
+  assert(domSnapshot.playerGeometry, `${direction} player geometry is missing.`);
+
+  const panel = normalizeRect(domSnapshot.panelRect);
+  const playerRect = normalizeRect(domSnapshot.playerGeometry.rect);
+  const footRect = normalizeRect(domSnapshot.playerGeometry.footRect);
+  const playerIntersection = areaPanelIntersectionArea(panel, playerRect);
+  const playerDistance = areaPanelRectDistance(panel, playerRect);
+  const obstacleMetrics = domSnapshot.obstacles.map((obstacle) => {
+    const obstacleRect = normalizeRect(obstacle.rect);
+    return {
+      ...obstacle,
+      intersectionArea: areaPanelIntersectionArea(panel, obstacleRect),
+      distance: areaPanelRectDistance(panel, obstacleRect),
+    };
+  });
+
+  return {
+    ...domSnapshot,
+    panelRect: panel,
+    playerRect,
+    footRect,
+    playerIntersection,
+    playerDistance,
+    obstacleMetrics,
+  };
+}
+
+async function capturePanelMatrix(direction) {
+  const areaId = PANEL_DIRECTION_AREAS[direction];
+  const area = getM15GeometryArea(areaId);
+  const entrance = area.branchEntrances[direction];
+  const triggerSamples = [
+    {
+      name: 'start',
+      fixtureWorldX: entrance.triggerRange.minX,
+      targetWorldX: entrance.triggerRange.minX + 4,
+    },
+    {
+      name: 'center',
+      fixtureWorldX: entrance.triggerCenterX,
+      targetWorldX: entrance.triggerCenterX,
+    },
+    {
+      name: 'end',
+      fixtureWorldX: entrance.triggerRange.maxX,
+      targetWorldX: entrance.triggerRange.maxX - 4,
+    },
+  ];
+  const results = [];
+
+  assert(
+    entrance.centerDeltaX
+      <= M15_GEOMETRY_FIXTURE.tolerances.entranceToTriggerCenterCssPx,
+    `${areaId}/${direction} painted entrance and trigger are misaligned.`,
+  );
+
+  for (const triggerSample of triggerSamples) {
+    for (const facing of ['left', 'right']) {
+      const position = await setFacingAtX(
+        areaId,
+        triggerSample.targetWorldX,
+        facing,
+      );
+      assert(
+        Math.abs(position.playerX - triggerSample.fixtureWorldX)
+          <= POSITION_TOLERANCE_WORLD_PX + 1,
+        `${areaId}/${direction}/${triggerSample.name}/${facing} position drift.`,
+      );
+      const prompt = await waitForHud({
+        area: areaId,
+        branchVisible: true,
+        branchDirection: direction,
+        facing,
+        maxSpeed: 0,
+      });
+      await waitForPanel(direction);
+      const geometry = await readPanelGeometry(direction);
+      const groundCss = await fixtureGroundMeasurement(
+        areaId,
+        `panel-${direction}-${triggerSample.name}-${facing}`,
+      );
+      const filename =
+        `panel-${direction}-${triggerSample.name}-${facing}.png`;
+
+      assert(geometry.disabled === false, `${filename} panel is disabled.`);
+      assert(geometry.ariaHidden !== 'true', `${filename} panel is aria-hidden.`);
+      assert(
+        geometry.playerIntersection === 0,
+        `${filename} player intersection ${geometry.playerIntersection}.`,
+      );
+      assert(
+        geometry.playerDistance >= AREA_PANEL_MIN_PLAYER_GAP,
+        `${filename} player distance ${geometry.playerDistance}.`,
+      );
+      assert(
+        geometry.panelRect.width >= AREA_PANEL_MIN_TOUCH_TARGET
+          && geometry.panelRect.height >= AREA_PANEL_MIN_TOUCH_TARGET,
+        `${filename} touch rectangle is below 44x44 CSS px.`,
+      );
+      assert(
+        geometry.obstacleMetrics.every((metric) => metric.intersectionArea === 0),
+        `${filename} intersects a HUD obstacle.`,
+      );
+      assert(
+        geometry.dataset.obstacleIntersections === '',
+        `${filename} placement core reported an obstacle collision.`,
+      );
+      assert(
+        Number(geometry.dataset.playerIntersection) === 0,
+        `${filename} placement dataset intersection is not zero.`,
+      );
+      assert(
+        Number(geometry.dataset.playerDistance) >= AREA_PANEL_MIN_PLAYER_GAP,
+        `${filename} placement dataset distance is below 12px.`,
+      );
+      assert(
+        geometry.prompt?.visible === true
+          && geometry.prompt?.direction === direction
+          && geometry.prompt?.areaId === areaId,
+        `${filename} prompt state does not match the panel.`,
+      );
+
+      await capture(filename);
+      if (direction === 'up' && results.length === 0) {
+        await capture('09-up-arrow.png');
+      }
+      if (direction === 'down' && results.length === 0) {
+        await capture('11-down-arrow.png');
+      }
+      results.push({
+        viewport,
+        deviceScaleFactor,
+        touchEnabled,
+        areaId,
+        direction,
+        triggerSample,
+        actualPlayerWorldX: position.playerX,
+        facing,
+        prompt,
+        entrance: {
+          backgroundRange: entrance.backgroundRange,
+          backgroundCenterX: entrance.backgroundCenterX,
+          triggerRange: entrance.triggerRange,
+          triggerCenterX: entrance.triggerCenterX,
+          centerDeltaX: entrance.centerDeltaX,
+        },
+        geometry,
+        groundCss,
+        screenshot: filename,
+      });
+    }
+  }
+
+  assert(results.length === 6, `${direction} panel matrix is incomplete.`);
+  evidence.panelMatrix.push(...results);
+  return results;
+}
+
+async function transitionWithHorizontalInput({
+  direction,
+  targetArea,
+  targetSpawnId,
+  expectedExitId,
+  loadingScreenshot,
+}) {
+  const departure = await latestHud();
+  const beforeAudio = await audioDiagnostics();
+  let locked;
+  await inputController.start(direction);
   try {
-    lockedStart = await waitForHud(page, {
+    locked = await waitForHud({
       area: departure.area,
       notTransitionState: 'idle',
       inputLocked: true,
       maxSpeed: 0,
     });
-    await page.waitForTimeout(90);
-    lockedEnd = await latestHud(page);
-    if (loadingScreenshot) await capture(page, loadingScreenshot);
+    if (loadingScreenshot) await capture(loadingScreenshot);
   } finally {
-    await page.keyboard.up(key);
+    await inputController.stop(direction);
   }
-  const switched = await waitForHud(page, {
+  const arrival = await waitForHud({
     area: targetArea,
     transitionState: 'idle',
     inputLocked: false,
-  });
-  const arrival = await waitForHud(page, {
-    area: targetArea,
-    transitionState: 'idle',
-    inputLocked: false,
+    spawnId: targetSpawnId,
+    lastTransitionId: expectedExitId,
     maxSpeed: 0,
     animationPrefix: 'idle-',
   });
+  const afterAudio = await waitForAudioAdvance(beforeAudio);
+  assert(
+    afterAudio.sourceId === beforeAudio.sourceId,
+    `${expectedExitId} replaced the BGM source.`,
+  );
+  assert(
+    arrival.audioMuted === departure.audioMuted,
+    `${expectedExitId} changed mute state.`,
+  );
   const check = {
+    kind: 'horizontal',
+    direction,
     departure,
-    lockedStart,
-    lockedEnd,
-    switched,
+    locked,
     arrival,
-    inputAttemptedWhileLocked: true,
+    expectedTarget: { targetArea, targetSpawnId, expectedExitId },
+    audio: { before: beforeAudio, after: afterAudio },
   };
   transitionChecks.push(check);
+  evidence.transitions.push(check);
   return check;
 }
 
-async function transitionWithArrowButton(page, label, targetArea) {
-  const departure = await latestHud(page);
-  const button = page.getByRole('button', { name: label, exact: true });
-  assert(await button.count() === 1, `Expected one visible ${label} button.`);
-  await button.click();
-  const lockedStart = await waitForHud(page, {
+async function tapPanelAndTransition({
+  direction,
+  targetArea,
+  targetSpawnId,
+  expectedExitId,
+}) {
+  const departure = await latestHud();
+  const beforeAudio = await audioDiagnostics();
+  const button = await waitForPanel(direction);
+  if (touchEnabled) {
+    const box = await button.boundingBox();
+    if (!box) throw new Error(`${direction} panel does not have a touch box.`);
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  } else {
+    await button.click();
+  }
+  const locked = await waitForHud({
     area: departure.area,
     notTransitionState: 'idle',
     inputLocked: true,
     maxSpeed: 0,
   });
-
-  // Deliberately pulse movement while the curtain is active. Releasing before
-  // fade-in completes avoids mistaking valid post-transition movement for leak.
-  let lockedEnd;
-  await page.keyboard.down('ArrowRight');
-  try {
-    await page.waitForTimeout(40);
-    lockedEnd = await latestHud(page);
-  } finally {
-    await page.keyboard.up('ArrowRight');
-  }
-
-  const switched = await waitForHud(page, {
+  const arrival = await waitForHud({
     area: targetArea,
     transitionState: 'idle',
     inputLocked: false,
-  });
-  const arrival = await waitForHud(page, {
-    area: targetArea,
-    transitionState: 'idle',
-    inputLocked: false,
+    spawnId: targetSpawnId,
+    lastTransitionId: expectedExitId,
     maxSpeed: 0,
     animationPrefix: 'idle-',
   });
+  const afterAudio = await waitForAudioAdvance(beforeAudio);
+  assert(
+    afterAudio.sourceId === beforeAudio.sourceId,
+    `${expectedExitId} replaced the BGM source.`,
+  );
+  assert(
+    arrival.audioMuted === departure.audioMuted,
+    `${expectedExitId} changed mute state.`,
+  );
   const check = {
+    kind: touchEnabled ? 'touch-panel' : 'desktop-panel',
+    direction,
     departure,
-    lockedStart,
-    lockedEnd,
-    switched,
+    locked,
     arrival,
-    inputAttemptedWhileLocked: true,
+    expectedTarget: { targetArea, targetSpawnId, expectedExitId },
+    audio: { before: beforeAudio, after: afterAudio },
   };
   transitionChecks.push(check);
+  evidence.transitions.push(check);
   return check;
 }
 
-async function advanceTime(page, count, targetMinutes) {
-  const drawer = page.locator('details.dev-tool-drawer');
-  if (!await drawer.evaluate((element) => element.open)) {
-    await drawer.locator('summary').click();
-  }
-  const button = page.getByRole('button', { name: '＋15分', exact: true });
-  assert(await button.count() === 1, 'The +15 minute developer control is missing.');
-  for (let index = 0; index < count; index += 1) {
+async function setMuted(muted) {
+  const current = await latestHud();
+  if (current.audioMuted === muted) return current;
+  const label = muted ? '音をオフにする' : '音をオンにする';
+  const button = page.getByRole('button', { name: label, exact: true });
+  await button.waitFor({ state: 'visible' });
+  assert(!await button.isDisabled(), 'Web Audio is unavailable.');
+  if (touchEnabled) {
+    const box = await button.boundingBox();
+    if (!box) throw new Error('Mute button does not have a touch box.');
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  } else {
     await button.click();
   }
-  const snapshot = await waitForHud(page, {
-    timeMinutes: targetMinutes,
-    timeTolerance: 2,
-  }, 12_000);
-  if (await drawer.evaluate((element) => element.open)) {
-    await drawer.locator('summary').click();
-  }
+  const snapshot = await waitForHud({ audioMuted: muted });
+  const diagnostics = await audioDiagnostics();
+  assert(diagnostics.muted === muted, 'Audio diagnostics mute state disagrees.');
   return snapshot;
 }
 
-let browser;
-let context;
-let page;
-let failure;
+async function verifyAudioTimeline() {
+  const start = await waitForAudioReady();
+  assert(
+    start.assetUrl.includes('/assets/audio/m15/'),
+    `Unexpected BGM asset: ${start.assetUrl}.`,
+  );
+  assert(start.decodedChannels === 2, 'Decoded BGM is not stereo.');
+  assert(
+    start.decodedSampleRate > 0,
+    'Browser decode did not publish a sample rate.',
+  );
+  const startedForward = await waitForAudioAdvance(start, 0.2);
+
+  await page.waitForFunction(
+    ({ sourceId, duration }) => {
+      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
+      return Boolean(
+        diagnostics
+        && diagnostics.sourceId === sourceId
+        && diagnostics.offset >= duration * 0.45
+        && diagnostics.offset <= duration * 0.62,
+      );
+    },
+    { sourceId: start.sourceId, duration: start.duration },
+    { timeout: Math.ceil(start.duration * 1_100), polling: 100 },
+  );
+  const middle = await audioDiagnostics();
+
+  await page.waitForFunction(
+    ({ sourceId, duration }) => {
+      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
+      return Boolean(
+        diagnostics
+        && diagnostics.sourceId === sourceId
+        && diagnostics.offset >= duration - Math.min(0.45, duration * 0.02),
+      );
+    },
+    { sourceId: start.sourceId, duration: start.duration },
+    { timeout: Math.ceil(start.duration * 1_100), polling: 75 },
+  );
+  const loopBefore = await audioDiagnostics();
+  await page.waitForFunction(
+    ({ sourceId, beforeOffset }) => {
+      const diagnostics = globalThis.__BOKU_M15_AUDIO__?.getDiagnostics();
+      return Boolean(
+        diagnostics
+        && diagnostics.sourceId === sourceId
+        && diagnostics.offset < beforeOffset
+        && diagnostics.offset < 1.5,
+      );
+    },
+    { sourceId: start.sourceId, beforeOffset: loopBefore.offset },
+    { timeout: 5_000, polling: 30 },
+  );
+  const loopAfter = await audioDiagnostics();
+  const boundaryDelta = cyclicOffsetDelta(
+    loopBefore.offset,
+    loopAfter.offset,
+    start.duration,
+  );
+  assert(boundaryDelta > 0 && boundaryDelta < 1.5, 'BGM loop boundary did not advance naturally.');
+  assert(loopAfter.sourceId === loopBefore.sourceId, 'BGM loop replaced its source.');
+
+  evidence.audio.timeline = {
+    start,
+    startedForward,
+    middle,
+    loopBefore,
+    loopAfter,
+    boundaryDelta,
+  };
+  return evidence.audio.timeline;
+}
+
+async function verifyVisibilityAndFreezeRecovery() {
+  const beforeHidden = await audioDiagnostics();
+  await page.evaluate(() => {
+    const smoke = globalThis.__m15CandidateSmoke;
+    smoke.visibilityOverride = 'hidden';
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => smoke.visibilityOverride === 'hidden',
+    });
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => smoke.visibilityOverride,
+    });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(
+    () => (
+      document.visibilityState === 'hidden'
+      && globalThis.__BOKU_M15_AUDIO__?.getDiagnostics().documentHidden === true
+    ),
+    null,
+    { timeout: 5_000, polling: 50 },
+  );
+  const hidden = await audioDiagnostics();
+  assert(hidden.documentHidden === true, 'Visibility handler did not mute hidden output.');
+  assert(
+    hidden.sourceId === beforeHidden.sourceId,
+    'hidden state replaced the BGM source.',
+  );
+  assert(
+    hidden.muted === beforeHidden.muted,
+    'hidden state changed the logical mute setting.',
+  );
+  assert(hidden.masterGain === 0, 'Hidden output was not silenced.');
+  await page.evaluate(() => {
+    globalThis.__m15CandidateSmoke.visibilityOverride = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForFunction(
+    () => (
+      document.visibilityState === 'visible'
+      && globalThis.__BOKU_M15_AUDIO__?.getDiagnostics().documentHidden === false
+    ),
+    null,
+    { timeout: 5_000, polling: 50 },
+  );
+  const visible = await waitForAudioAdvance(beforeHidden);
+  assert(
+    visible.sourceId === beforeHidden.sourceId,
+    'hidden-visible recovery replaced the BGM source.',
+  );
+  assert(
+    visible.muted === beforeHidden.muted,
+    'hidden-visible recovery changed the logical mute setting.',
+  );
+  assert(
+    visible.lastRecoveryError === null,
+    `hidden-visible recovery error: ${visible.lastRecoveryError}.`,
+  );
+  await page.evaluate(() => {
+    delete document.hidden;
+    delete document.visibilityState;
+    globalThis.__m15CandidateSmoke.visibilityOverride = null;
+  });
+
+  const beforeFreeze = await audioDiagnostics();
+  await page.waitForFunction(
+    () => globalThis.__m15CandidateSmoke?.heartbeat?.ticks >= 10,
+    null,
+    { timeout: 5_000, polling: 40 },
+  );
+  const calibrationHeartbeat = await page.evaluate(() => {
+    const heartbeat = globalThis.__m15CandidateSmoke.heartbeat;
+    return {
+      ...heartbeat,
+      recentGapsMs: [...heartbeat.recentGapsMs],
+      callbackWallMs: [...heartbeat.callbackWallMs],
+    };
+  });
+  const calibratedGaps = calibrationHeartbeat.recentGapsMs.slice(-8);
+  assert(
+    calibratedGaps.length === 8
+      && calibratedGaps.every((gap) => gap > 0 && gap < 200),
+    `Page heartbeat did not calibrate in the foreground: `
+      + `${JSON.stringify(calibratedGaps)}.`,
+  );
+  const hostClockBefore = Date.now();
+  const browserClock = await page.evaluate(() => Date.now());
+  const hostClockAfter = Date.now();
+  const browserClockOffsetMs =
+    browserClock - ((hostClockBefore + hostClockAfter) / 2);
+  const beforeFreezeHeartbeat = await page.evaluate(() => {
+    const heartbeat = globalThis.__m15CandidateSmoke.heartbeat;
+    heartbeat.maxGapMs = 0;
+    heartbeat.recentGapsMs.length = 0;
+    heartbeat.callbackWallMs.length = 0;
+    heartbeat.lastWallMs = Date.now();
+    return {
+      ...heartbeat,
+      recentGapsMs: [...heartbeat.recentGapsMs],
+      callbackWallMs: [...heartbeat.callbackWallMs],
+    };
+  });
+  const cdpEventStartIndex = cdpLifecycleEvents.length;
+  const frozenResponse = await cdpSession.send(
+    'Page.setWebLifecycleState',
+    { state: 'frozen' },
+  );
+  const frozenAcceptedAt = Date.now();
+  await new Promise((resolve) => {
+    setTimeout(resolve, 900);
+  });
+  const activeRequestedAt = Date.now();
+  const activeResponse = await cdpSession.send(
+    'Page.setWebLifecycleState',
+    { state: 'active' },
+  );
+  await page.bringToFront();
+  await page.waitForFunction(
+    (minimumTicks) => (
+      globalThis.__m15CandidateSmoke?.heartbeat?.ticks >= minimumTicks
+    ),
+    beforeFreezeHeartbeat.ticks + 2,
+    { timeout: 5_000, polling: 40 },
+  );
+  const afterFreezeHeartbeat = await page.evaluate(() => {
+    const heartbeat = globalThis.__m15CandidateSmoke.heartbeat;
+    return { ...heartbeat, recentGapsMs: [...heartbeat.recentGapsMs] };
+  });
+  const frozenWallDurationMs = activeRequestedAt - frozenAcceptedAt;
+  const innerFrozenHostWindow = {
+    start: frozenAcceptedAt + 100,
+    end: activeRequestedAt - 100,
+  };
+  const innerFrozenBrowserWindow = {
+    start: innerFrozenHostWindow.start + browserClockOffsetMs,
+    end: innerFrozenHostWindow.end + browserClockOffsetMs,
+  };
+  const innerFrozenCallbacks = afterFreezeHeartbeat.callbackWallMs.filter(
+    (callbackWallMs) => (
+      callbackWallMs >= innerFrozenBrowserWindow.start
+      && callbackWallMs <= innerFrozenBrowserWindow.end
+    ),
+  );
+  const postActiveCallbacks = afterFreezeHeartbeat.callbackWallMs.filter(
+    (callbackWallMs) => (
+      callbackWallMs > activeRequestedAt + browserClockOffsetMs
+    ),
+  );
+  const minimumSuspensionGapMs = Math.max(
+    500,
+    Math.floor(frozenWallDurationMs * 0.6),
+  );
+  assert(
+    innerFrozenHostWindow.end > innerFrozenHostWindow.start,
+    'CDP frozen measurement window was too short.',
+  );
+  assert(
+    innerFrozenCallbacks.length === 0,
+    `CDP frozen state allowed ${innerFrozenCallbacks.length} page heartbeat `
+      + 'callbacks inside the measured suspension window.',
+  );
+  assert(
+    postActiveCallbacks.length >= 1,
+    'The page heartbeat did not restart after CDP active.',
+  );
+  assert(
+    afterFreezeHeartbeat.maxGapMs >= minimumSuspensionGapMs,
+    `CDP frozen state did not suspend the page heartbeat: `
+      + `${afterFreezeHeartbeat.maxGapMs}ms < ${minimumSuspensionGapMs}ms.`,
+  );
+  const afterResume = await waitForAudioAdvance(beforeFreeze);
+  assert(
+    afterResume.sourceId === beforeFreeze.sourceId,
+    'frozen-active recovery replaced the BGM source.',
+  );
+  assert(
+    afterResume.lastRecoveryError === null,
+    `frozen-active recovery error: ${afterResume.lastRecoveryError}.`,
+  );
+  assert(
+    afterResume.muted === beforeFreeze.muted,
+    'frozen-active recovery changed the logical mute setting.',
+  );
+  const lifecycleEvents = await page.evaluate(
+    () => globalThis.__m15CandidateSmoke?.lifecycleEvents ?? [],
+  );
+  const cdpEvents = cdpLifecycleEvents.slice(cdpEventStartIndex);
+  const domEventObserved = {
+    freeze: lifecycleEvents.some((event) => event.type === 'freeze'),
+    resume: lifecycleEvents.some((event) => event.type === 'resume'),
+  };
+
+  evidence.lifecycle = {
+    hiddenVisible: {
+      method: 'deterministic-document-visibility-override',
+      beforeHidden,
+      hidden,
+      visible,
+    },
+    frozenActive: {
+      method: 'cdp-page-lifecycle',
+      beforeFreeze,
+      frozenCommand: {
+        succeeded: true,
+        response: frozenResponse,
+      },
+      activeCommand: {
+        succeeded: true,
+        response: activeResponse,
+      },
+      heartbeatSuspension: {
+        calibration: calibrationHeartbeat,
+        browserClockOffsetMs,
+        beforeFreeze: beforeFreezeHeartbeat,
+        afterResume: afterFreezeHeartbeat,
+        frozenWallDurationMs,
+        innerFrozenHostWindow,
+        innerFrozenBrowserWindow,
+        innerFrozenCallbacks,
+        postActiveCallbacks,
+        minimumSuspensionGapMs,
+        verified:
+          innerFrozenCallbacks.length === 0
+          && postActiveCallbacks.length >= 1
+          && afterFreezeHeartbeat.maxGapMs >= minimumSuspensionGapMs,
+      },
+      afterResume,
+      cdpEvents,
+      domEventObserved,
+      headlessConstraint:
+        'DOM freeze/resume events are optional; zero calibrated heartbeat callbacks in the inner frozen window and post-active callback recovery prove the CDP lifecycle interval.',
+      relatedUnitTest:
+        'tests/m15-audio-contract.test.mjs — mute, area transition, visibility, freeze and iOS interruption preserve one source',
+    },
+    events: lifecycleEvents,
+  };
+  return evidence.lifecycle;
+}
+
+async function navigateToHorizontalEdge(areaId, direction) {
+  const geometry = getM15GeometryArea(areaId);
+  const range = geometry.edgeTriggers[direction];
+  const targetX = direction === 'right' ? range.minX - 8 : range.maxX + 8;
+  return moveToX(areaId, targetX, 6);
+}
 
 try {
   browser = await chromium.launch({
-    headless: true,
+    headless: browserHeadless,
+    executablePath: browserExecutablePath,
     args: [
       '--use-gl=swiftshader',
       '--enable-webgl',
@@ -306,21 +1388,81 @@ try {
   });
   context = await browser.newContext({
     viewport,
-    deviceScaleFactor: 1,
+    deviceScaleFactor,
+    hasTouch: touchEnabled,
+    isMobile: touchEnabled,
     locale: 'ja-JP',
   });
   await context.addInitScript(() => {
-    const state = { last: null, snapshots: [] };
-    Object.defineProperty(globalThis, '__m14BrowserSmoke', {
+    const state = {
+      lastHud: null,
+      hudSnapshots: [],
+      lastPlayerGeometry: null,
+      playerGeometries: [],
+      lastPrompt: null,
+      prompts: [],
+      lifecycleEvents: [],
+      heartbeat: {
+        ticks: 0,
+        lastWallMs: Date.now(),
+        maxGapMs: 0,
+        recentGapsMs: [],
+        callbackWallMs: [],
+      },
+    };
+    Object.defineProperty(globalThis, '__m15CandidateSmoke', {
       configurable: true,
       value: state,
     });
     globalThis.addEventListener('boku-no-jihanki:hud-snapshot', (event) => {
       const snapshot = { ...event.detail, capturedAt: performance.now() };
-      state.last = snapshot;
-      state.snapshots.push(snapshot);
-      if (state.snapshots.length > 1_200) state.snapshots.shift();
+      state.lastHud = snapshot;
+      state.hudSnapshots.push(snapshot);
+      if (state.hudSnapshots.length > 2_400) state.hudSnapshots.shift();
     });
+    globalThis.addEventListener(
+      'boku-no-jihanki:player-screen-geometry',
+      (event) => {
+        const snapshot = { ...event.detail, capturedAt: performance.now() };
+        state.lastPlayerGeometry = snapshot;
+        state.playerGeometries.push(snapshot);
+        if (state.playerGeometries.length > 1_200) {
+          state.playerGeometries.shift();
+        }
+      },
+    );
+    globalThis.addEventListener('boku-no-jihanki:area-prompt', (event) => {
+      const snapshot = { ...event.detail, capturedAt: performance.now() };
+      state.lastPrompt = snapshot;
+      state.prompts.push(snapshot);
+      if (state.prompts.length > 400) state.prompts.shift();
+    });
+    for (const type of ['visibilitychange', 'freeze', 'resume', 'pageshow']) {
+      const target = type === 'pageshow' ? globalThis : document;
+      target.addEventListener(type, () => {
+        state.lifecycleEvents.push({
+          type,
+          capturedAt: performance.now(),
+          visibilityState: document.visibilityState,
+        });
+      });
+    }
+    globalThis.setInterval(() => {
+      const now = Date.now();
+      const heartbeat = state.heartbeat;
+      const gap = now - heartbeat.lastWallMs;
+      heartbeat.ticks += 1;
+      heartbeat.lastWallMs = now;
+      heartbeat.maxGapMs = Math.max(heartbeat.maxGapMs, gap);
+      heartbeat.recentGapsMs.push(gap);
+      if (heartbeat.recentGapsMs.length > 40) {
+        heartbeat.recentGapsMs.shift();
+      }
+      heartbeat.callbackWallMs.push(now);
+      if (heartbeat.callbackWallMs.length > 240) {
+        heartbeat.callbackWallMs.shift();
+      }
+    }, 40);
   });
   if (traceEnabled) {
     await context.tracing.start({
@@ -330,328 +1472,471 @@ try {
     });
   }
   page = await context.newPage();
-  page.on('console', (message) => record(`console:${message.type()}`, message.text()));
-  page.on('pageerror', (error) => {
-    pageErrors.push(error.stack ?? error.message);
-    record('pageerror', error.stack ?? error.message);
+  cdpSession = await context.newCDPSession(page);
+  await cdpSession.send('Page.enable');
+  await cdpSession.send('Page.setLifecycleEventsEnabled', { enabled: true });
+  cdpSession.on('Page.lifecycleEvent', (event) => {
+    cdpLifecycleEvents.push({
+      ...event,
+      receivedAt: Date.now(),
+    });
   });
+  inputController = createInputController(page, cdpSession, touchEnabled);
+  page.on('console', (message) => {
+    record(`console:${message.type()}`, message.text());
+  });
+  page.on('pageerror', (error) => {
+    if (!collectRuntimeFailures) return;
+    const detail = error.stack ?? error.message;
+    pageErrors.push(detail);
+    record('pageerror', detail);
+  });
+  page.on('request', (request) => requestedUrls.add(request.url()));
   page.on('requestfailed', (request) => {
-    const detail = `${request.method()} ${request.url()} :: ${request.failure()?.errorText ?? 'unknown'}`;
+    if (!collectRuntimeFailures) return;
+    const detail =
+      `${request.method()} ${request.url()} :: `
+      + `${request.failure()?.errorText ?? 'unknown'}`;
     failedRequests.push(detail);
     record('requestfailed', detail);
   });
 
   const deadline = Date.now() + productionWaitMs;
-  let commitMatched = expectedCommit.length === 0;
+  let commitMatched = false;
   do {
-    const url = `${baseUrl.replace(/\/$/, '')}/?m14-smoke=${Date.now()}`;
-    const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 60_000 });
+    const url = `${baseUrl.replace(/\/$/, '')}/?m15-smoke=${Date.now()}`;
+    const response = await page.goto(url, {
+      waitUntil: 'networkidle',
+      timeout: 60_000,
+    });
     if (!response || response.status() >= 400) {
       throw new Error(`Page returned HTTP ${response?.status() ?? 'no response'}.`);
     }
-    const bodyText = await page.locator('body').innerText();
-    commitMatched = expectedCommit.length === 0 || bodyText.includes(expectedCommit);
-    if (!commitMatched) await page.waitForTimeout(5_000);
+    observedCommit = (
+      await page.locator('.build-badge').getAttribute('data-build-commit')
+      ?? ''
+    ).trim();
+    commitMatched =
+      observedCommit.toLowerCase() === expectedCommit.toLowerCase();
+    if (!commitMatched) await page.waitForTimeout(3_000);
   } while (!commitMatched && Date.now() < deadline);
   if (!commitMatched) {
-    throw new Error(`Timed out waiting for commit ${expectedCommit} at ${baseUrl}.`);
+    throw new Error(
+      `Timed out waiting for commit ${expectedCommit} at ${baseUrl}.`,
+    );
   }
 
-  await capture(page, '01-title.png');
-  await page.getByRole('button', { name: '夏休みを始める', exact: true }).click();
-  await waitForHud(page, {
+  pageErrors.length = 0;
+  failedRequests.length = 0;
+  requestedUrls.clear();
+  collectRuntimeFailures = true;
+  const exactResponse = await page.goto(
+    `${baseUrl.replace(/\/$/, '')}/?m15-smoke-exact=${Date.now()}`,
+    {
+      waitUntil: 'networkidle',
+      timeout: 60_000,
+    },
+  );
+  if (!exactResponse || exactResponse.status() >= 400) {
+    throw new Error(
+      `Exact candidate reload returned HTTP `
+      + `${exactResponse?.status() ?? 'no response'}.`,
+    );
+  }
+  observedCommit = (
+    await page.locator('.build-badge').getAttribute('data-build-commit')
+    ?? ''
+  ).trim();
+  assert(
+    observedCommit.toLowerCase() === expectedCommit.toLowerCase(),
+    `Exact candidate reload changed from ${expectedCommit} to `
+      + `${observedCommit || '<missing>'}.`,
+  );
+  const actualBrowserViewport = await page.evaluate(() => ({
+    width: window.innerWidth,
+    height: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio,
+    maxTouchPoints: navigator.maxTouchPoints,
+  }));
+  assert(
+    actualBrowserViewport.width === viewport.width
+      && actualBrowserViewport.height === viewport.height,
+    `Browser viewport mismatch: ${JSON.stringify(actualBrowserViewport)}.`,
+  );
+  assert(
+    Math.abs(actualBrowserViewport.devicePixelRatio - deviceScaleFactor) < 0.01,
+    `Browser DPR mismatch: ${actualBrowserViewport.devicePixelRatio}.`,
+  );
+  assert(
+    touchEnabled
+      ? actualBrowserViewport.maxTouchPoints > 0
+      : actualBrowserViewport.maxTouchPoints === 0,
+    `Browser touch emulation mismatch: ${actualBrowserViewport.maxTouchPoints}.`,
+  );
+  record('candidate', {
+    expectedCommit,
+    observedCommit,
+    baseUrl,
+    browserVersion: browser.version(),
+    nodeVersion: process.version,
+    viewport,
+    deviceScaleFactor,
+    touchEnabled,
+    browserHeadless,
+    actualBrowserViewport,
+    outputDir,
+  });
+
+  await capture('01-title.png');
+  const startButton = page.getByRole('button', {
+    name: '夏休みを始める',
+    exact: true,
+  });
+  if (touchEnabled) {
+    const box = await startButton.boundingBox();
+    if (!box) throw new Error('Start button does not have a touch box.');
+    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+  } else {
+    await startButton.click();
+  }
+  const initial = await waitForHud({
     area: 'home-street',
     transitionState: 'idle',
     inputLocked: false,
+    spawnId: 'start',
     timeMinutes: 360,
     minFps: 1,
   });
-  assert(await page.locator('canvas').count() === 1, 'Expected exactly one game canvas.');
+  assert(await page.locator('canvas').count() === 1, 'Expected one game canvas.');
+  const initialSpawn = await fixtureGroundMeasurement(
+    'home-street',
+    'spawn-start',
+    true,
+  );
 
-  const developerDrawer = page.locator('details.dev-tool-drawer');
-  await developerDrawer.locator('summary').click();
+  const drawer = await openDeveloperDrawer();
   await page.getByRole('button', { name: 'HUDを表示', exact: true }).click();
-  await page.getByText('M1.4 SIDE-SCROLL HUD', { exact: true }).waitFor();
-  const initial = await latestHud(page);
-  assert(initial.fps > 0, `M1.4 HUD did not report a running frame loop: ${initial.fps}.`);
-  assert(initial.playerY === areaGroundY['home-street'], 'Home spawn is off the fixed ground line.');
+  await page.getByText('M1.5 SIDE-SCROLL HUD', { exact: true }).waitFor();
+  const developerHudRect = await page.locator('.developer-hud').evaluate(
+    (element) => element.getBoundingClientRect().toJSON(),
+  );
+  assert(initial.fps > 0, `M1.5 HUD did not report a running loop: ${initial.fps}.`);
   await page.getByRole('button', { name: 'HUDを隠す', exact: true }).click();
-  await developerDrawer.locator('summary').click();
+  await drawer.locator('summary').click();
 
-  const muteButton = page.getByRole('button', { name: '音をオフにする', exact: true });
-  await muteButton.waitFor({ state: 'visible' });
-  assert(!await muteButton.isDisabled(), 'Web Audio is unavailable in the smoke browser.');
-  await muteButton.click();
-  const mutedInitial = await waitForHud(page, { audioMuted: true, timeMinutes: 360 });
-
-  await capture(page, '02-home-street.png');
-  const homeWalkRight = await captureWalk(
-    page,
-    'home-street',
-    'right',
-    '03-walk-right.png',
-  );
-  const homeWalkLeft = await captureWalk(
-    page,
-    'home-street',
-    'left',
-    '04-walk-left.png',
-  );
-
-  const homeRightEdge = await moveRightTo(page, 'home-street', 2_210);
-  assert(homeRightEdge.playerX < 2_336, 'Home edge setup entered the transition trigger too early.');
-  assert(
-    homeRightEdge.cameraScrollX >= homeRightEdge.cameraMaxX - 4,
-    `Horizontal camera did not reach the authored home edge: ${JSON.stringify(homeRightEdge)}`,
-  );
-  await capture(page, '05-home-right-edge.png');
-
-  const firstLifeTransition = await transitionWithHeldKey(
-    page,
-    'ArrowRight',
-    'life-road',
-    '06-transition-loading.png',
-  );
-  await capture(page, '07-life-road.png');
-
-  const returnedHome = await transitionWithHeldKey(page, 'ArrowLeft', 'home-street');
-  assert(
-    returnedHome.arrival.playerX >= 2_100,
-    `Life-road left edge returned to an unexpected home spawn: ${returnedHome.arrival.playerX}.`,
-  );
-  await capture(page, '08-returned-home.png');
-
-  const secondLifeTransition = await transitionWithHeldKey(page, 'ArrowRight', 'life-road');
-  const lifeBranch = await moveRightTo(page, 'life-road', 1_280);
-  assert(
-    lifeBranch.playerX >= 1_220 && lifeBranch.playerX <= 1_480,
-    `Life-road branch was overshot: ${lifeBranch.playerX}.`,
-  );
-  const upPrompt = await waitForHud(page, {
-    area: 'life-road',
-    branchVisible: true,
-    branchDirection: 'up',
-    maxSpeed: 0,
+  await verifyAudioTimeline();
+  await capture('02-home-street.png');
+  await capturePhaseMatrix('home-street', {
+    morning: '12-morning.png',
+    day: '13-day.png',
+    evening: '14-evening.png',
+    night: '15-night.png',
   });
-  assert(
-    await page.getByRole('button', { name: upArrowLabel, exact: true }).count() === 1,
-    'The life-road up arrow is not accessible.',
-  );
-  await capture(page, '09-up-arrow.png');
-
-  const upperTransition = await transitionWithArrowButton(
-    page,
-    upArrowLabel,
-    'upper-vending-lane',
-  );
-  const upperWalkRight = await captureWalk(
-    page,
-    'upper-vending-lane',
-    'right',
-    '10-upper-vending-lane.png',
-  );
-  const upperWalkLeft = await captureWalk(
-    page,
-    'upper-vending-lane',
-    'left',
-    null,
-  );
-
-  const idleStart = await waitForIdle(page, 'upper-vending-lane', 'left');
-  await page.waitForTimeout(500);
-  const idleEnd = await waitForIdle(page, 'upper-vending-lane', 'left');
-  assert(idleEnd.playerX === idleStart.playerX, 'Player drifted after returning to idle.');
-  assert(idleEnd.footstepCount === idleStart.footstepCount, 'Idle animation emitted a footstep.');
-
-  const downPrompt = await waitForHud(page, {
-    area: 'upper-vending-lane',
-    branchVisible: true,
-    branchDirection: 'down',
-    maxSpeed: 0,
+  await captureAreaPositions('home-street', {
+    left: 'ground-home-street-left.png',
+    center: 'ground-home-street-center.png',
+    right: '05-home-right-edge.png',
+    walkRight: '03-walk-right.png',
+    walkLeft: '04-walk-left.png',
   });
-  assert(
-    await page.getByRole('button', { name: downArrowLabel, exact: true }).count() === 1,
-    'The upper lane down arrow is not accessible.',
-  );
-  await capture(page, '11-down-arrow.png');
+  await captureGeometryDebug('home-street');
 
-  const lowerTransition = await transitionWithArrowButton(
-    page,
-    downArrowLabel,
-    'life-road',
-  );
-  const morning = await waitForHud(page, {
-    area: 'life-road',
-    timeMinutes: 360,
-    audioMuted: true,
+  await navigateToHorizontalEdge('home-street', 'right');
+  const firstLife = await transitionWithHorizontalInput({
+    direction: 'right',
+    targetArea: 'life-road',
+    targetSpawnId: 'from-home',
+    expectedExitId: 'home-to-life',
+    loadingScreenshot: '06-transition-loading.png',
   });
-  await capture(page, '12-morning.png');
+  await fixtureGroundMeasurement('life-road', 'spawn-from-home', true);
+  await capture('07-life-road.png');
+  await capturePhaseMatrix('life-road');
+  await captureAreaPositions('life-road');
+  await captureGeometryDebug('life-road');
 
-  const day = await advanceTime(page, 24, 720);
-  await capture(page, '13-day.png');
-  const evening = await advanceTime(page, 18, 990);
-  await capture(page, '14-evening.png');
-  const night = await advanceTime(page, 14, 1_200);
-  await capture(page, '15-night.png');
+  await setMuted(true);
+  await navigateToHorizontalEdge('life-road', 'left');
+  const returnedHome = await transitionWithHorizontalInput({
+    direction: 'left',
+    targetArea: 'home-street',
+    targetSpawnId: 'from-life',
+    expectedExitId: 'life-to-home',
+  });
+  await fixtureGroundMeasurement('home-street', 'spawn-from-life', true);
+  await capture('08-returned-home.png');
 
-  await page.keyboard.down('ArrowRight');
-  let focusLossStop;
-  try {
-    await waitForHud(page, {
-      area: 'life-road',
-      animation: 'walk-right',
-      minSpeed: 100,
-    });
-    await page.evaluate(() => globalThis.dispatchEvent(new Event('blur')));
-    const stopped = await waitForHud(page, {
-      area: 'life-road',
-      animation: 'idle-right',
-      maxSpeed: 0,
-    });
-    await page.waitForTimeout(350);
-    const stillStopped = await latestHud(page);
-    focusLossStop = (
-      stillStopped.speed === 0
-      && stillStopped.animation === 'idle-right'
-      && stillStopped.playerX === stopped.playerX
-    );
-  } finally {
-    await page.keyboard.up('ArrowRight');
-  }
-  assert(focusLossStop, 'Focus loss did not stop horizontal movement immediately.');
+  await navigateToHorizontalEdge('home-street', 'right');
+  const secondLife = await transitionWithHorizontalInput({
+    direction: 'right',
+    targetArea: 'life-road',
+    targetSpawnId: 'from-home',
+    expectedExitId: 'home-to-life',
+  });
+  await fixtureGroundMeasurement('life-road', 'spawn-from-home-repeat', true);
+  assert(
+    returnedHome.arrival.spawnId === 'from-life'
+      && secondLife.arrival.spawnId === 'from-home',
+    'Repeated horizontal traversal lost its sourceSpawnId mapping.',
+  );
+  await setMuted(false);
 
-  const snapshots = await hudTimeline(page);
-  const m14Snapshots = snapshots.filter((snapshot) => (
-    Object.hasOwn(areaGroundY, snapshot.area)
+  const upMatrix = await capturePanelMatrix('up');
+  const upper = await tapPanelAndTransition({
+    direction: 'up',
+    targetArea: 'upper-vending-lane',
+    targetSpawnId: 'from-life',
+    expectedExitId: 'life-to-upper',
+  });
+  await fixtureGroundMeasurement(
+    'upper-vending-lane',
+    'spawn-from-life',
+    true,
+  );
+  await capture('10-upper-vending-lane.png');
+  await capturePhaseMatrix('upper-vending-lane');
+  await captureAreaPositions('upper-vending-lane');
+  await captureGeometryDebug('upper-vending-lane');
+
+  const downMatrix = await capturePanelMatrix('down');
+  const lower = await tapPanelAndTransition({
+    direction: 'down',
+    targetArea: 'life-road',
+    targetSpawnId: 'from-upper',
+    expectedExitId: 'upper-to-life',
+  });
+  await fixtureGroundMeasurement('life-road', 'spawn-from-upper', true);
+  assert(
+    upper.arrival.spawnId === 'from-life'
+      && lower.arrival.spawnId === 'from-upper',
+    'Up/down round trip lost its sourceSpawnId mapping.',
+  );
+
+  await verifyVisibilityAndFreezeRecovery();
+  const finalAudio = await audioDiagnostics();
+  const snapshots = await hudTimeline();
+  const candidateSnapshots = snapshots.filter((snapshot) => (
+    M15_AREA_IDS.includes(snapshot.area)
   ));
-  const verticalInvariant = (
-    m14Snapshots.length > 0
-    && m14Snapshots.every((snapshot) => snapshot.playerY === areaGroundY[snapshot.area])
+  const groundMeasurements = [
+    ...evidence.spawns,
+    ...Object.values(evidence.areaPositions).flatMap((area) => (
+      ['left', 'center', 'right']
+        .map((position) => area[position])
+        .filter(Boolean)
+    )),
+    ...evidence.panelMatrix.map(({ groundCss }) => groundCss),
+  ];
+  const groundInvariant = (
+    groundMeasurements.length >= 27
+    && groundMeasurements.every((measurement) => (
+      measurement.cssDelta <= measurement.tolerance
+      && measurement.playerGeometry.areaId === measurement.areaId
+      && Math.abs(
+        measurement.playerGeometry.playerWorldX
+          - measurement.snapshot.playerX,
+      ) <= 2
+    ))
   );
-  const cameraBoundsInvariant = m14Snapshots.every((snapshot) => (
+  const worldGroundAuxiliaryInvariant = candidateSnapshots.every((snapshot) => (
+    Math.abs(snapshot.playerY - getM15GeometryArea(snapshot.area).ground.y)
+      <= M15_GEOMETRY_FIXTURE.tolerances.renderedFootToGroundCssPx
+  ));
+  const cameraBoundsInvariant = candidateSnapshots.every((snapshot) => (
     snapshot.cameraScrollX >= -1
     && snapshot.cameraScrollX <= snapshot.cameraMaxX + 1
   ));
-  const cameraFollow = (
-    homeRightEdge.cameraScrollX > initial.cameraScrollX + 500
-    && homeRightEdge.cameraScrollX >= homeRightEdge.cameraMaxX - 4
-    && cameraBoundsInvariant
-  );
-  const lockedSnapshots = m14Snapshots.filter((snapshot) => snapshot.inputLocked);
-  const transitionLocked = (
-    transitionChecks.length === 5
-    && lockedSnapshots.length >= 5
-    && lockedSnapshots.every((snapshot) => (
-      snapshot.transitionState !== 'idle'
-      && snapshot.speed === 0
-    ))
-    && transitionChecks.every(({ lockedStart }) => (
-      lockedStart.inputLocked
-      && lockedStart.speed === 0
-    ))
-    && transitionChecks.every((check) => check.inputAttemptedWhileLocked)
-  );
+  const transitionLocked = transitionChecks.every(({ locked }) => (
+    locked.inputLocked === true
+    && locked.transitionState !== 'idle'
+    && locked.speed === 0
+  ));
   const timePreserved = transitionChecks.every(({ departure, arrival }) => (
     Math.abs(departure.timeMinutes - arrival.timeMinutes) <= 2
   ));
   const mutePreserved = transitionChecks.every(({ departure, arrival }) => (
-    departure.audioMuted === true && arrival.audioMuted === true
+    departure.audioMuted === arrival.audioMuted
   ));
-  const areasVisited = new Set(m14Snapshots.map((snapshot) => snapshot.area));
-  const idleReturned = (
-    idleEnd.animation === 'idle-left'
-    && idleEnd.speed === 0
-    && idleEnd.playerX === idleStart.playerX
-    && idleEnd.footstepCount === idleStart.footstepCount
+  const sourceSpawnIdPreserved = [
+    [firstLife.arrival.area, firstLife.arrival.spawnId],
+    [returnedHome.arrival.area, returnedHome.arrival.spawnId],
+    [secondLife.arrival.area, secondLife.arrival.spawnId],
+    [upper.arrival.area, upper.arrival.spawnId],
+    [lower.arrival.area, lower.arrival.spawnId],
+  ].map(([area, spawnId]) => `${area}/${spawnId}`);
+  const expectedSpawnSequence = [
+    'life-road/from-home',
+    'home-street/from-life',
+    'life-road/from-home',
+    'upper-vending-lane/from-life',
+    'life-road/from-upper',
+  ];
+  const phaseCoverage = M15_AREA_IDS.every((areaId) => (
+    M15_TIME_PHASES.every((phase) => evidence.phaseMatrix[areaId]?.[phase])
+  ));
+  const positionCoverage = M15_AREA_IDS.every((areaId) => (
+    ['left', 'center', 'right'].every(
+      (position) => evidence.areaPositions[areaId]?.[position],
+    )
+  ));
+  const debugGeometryCoverage = M15_AREA_IDS.every(
+    (areaId) => evidence.debugGeometry[areaId]?.screenshot,
+  );
+  const panelCoverage = (
+    evidence.panelMatrix.length === 12
+    && evidence.panelMatrix.every(({ geometry }) => (
+      geometry.playerIntersection === 0
+      && geometry.playerDistance >= AREA_PANEL_MIN_PLAYER_GAP
+      && geometry.panelRect.width >= AREA_PANEL_MIN_TOUCH_TARGET
+      && geometry.panelRect.height >= AREA_PANEL_MIN_TOUCH_TARGET
+      && geometry.obstacleMetrics.every(
+        (metric) => metric.intersectionArea === 0,
+      )
+    ))
+  );
+  const areasVisited = new Set(
+    candidateSnapshots.map((snapshot) => snapshot.area),
+  );
+  const m15AssetRequests = [...requestedUrls].filter((url) => (
+    url.includes('/assets/images/m15/')
+    || url.includes('/assets/audio/m15/')
+  ));
+
+  assert(groundInvariant, 'Fixture-backed foot-ground invariant failed.');
+  assert(
+    worldGroundAuxiliaryInvariant,
+    'HUD timeline player ground invariant failed.',
+  );
+  assert(cameraBoundsInvariant, 'Camera escaped its area bounds.');
+  assert(transitionLocked, 'Transition input lock invariant failed.');
+  assert(timePreserved, 'Time changed across an area transition.');
+  assert(mutePreserved, 'Mute changed across an area transition.');
+  assert(
+    sourceSpawnIdPreserved.length === expectedSpawnSequence.length
+      && sourceSpawnIdPreserved.every(
+        (entry, index) => entry === expectedSpawnSequence[index],
+      ),
+    `sourceSpawnId traversal sequence regressed: `
+    + `${JSON.stringify(sourceSpawnIdPreserved)}.`,
+  );
+  assert(phaseCoverage, '3 area x 4 phase coverage is incomplete.');
+  assert(positionCoverage, '3 area x left/center/right coverage is incomplete.');
+  assert(debugGeometryCoverage, 'Three-area geometry debug coverage is incomplete.');
+  assert(panelCoverage, '12-state DOM panel matrix failed.');
+  assert(upMatrix.length === 6 && downMatrix.length === 6);
+  assert(areasVisited.size === M15_AREA_IDS.length, 'Not all M1.5 areas were visited.');
+  assert(m15AssetRequests.length > 0, 'No M1.5 assets were requested.');
+  assert(
+    m15AssetRequests.some((url) => url.includes('/assets/audio/m15/')),
+    'The M1.5 BGM was not requested.',
+  );
+  assert(finalAudio.sourceId !== null, 'The BGM source was lost.');
+  assert(pageErrors.length === 0, `Page errors: ${pageErrors.join(' | ')}`);
+  assert(
+    failedRequests.length === 0,
+    `Failed requests: ${failedRequests.join(' | ')}`,
   );
 
-  assert(verticalInvariant, 'Fixed ground-line verticalInvariant failed.');
-  assert(cameraFollow, 'Horizontal cameraFollow invariant failed.');
-  assert(transitionLocked, 'Transition transitionLocked invariant failed.');
-  assert(timePreserved, 'Time changed while moving between M1.4 areas.');
-  assert(mutePreserved, 'Mute state changed while moving between M1.4 areas.');
-  assert(idleReturned, 'Walk animation did not return to a stable idle state.');
-  assert(areasVisited.size === 3, `Expected all three areas, saw: ${[...areasVisited].join(', ')}`);
-  assert(homeWalkRight.during.animation === 'walk-right', 'Home right-walk animation was not active.');
-  assert(homeWalkLeft.during.animation === 'walk-left', 'Home left-walk animation was not active.');
-  assert(upperWalkRight.during.animation === 'walk-right', 'Upper lane right-walk animation was not active.');
-  assert(upperWalkLeft.during.animation === 'walk-left', 'Upper lane left-walk animation was not active.');
-  assert(pageErrors.length === 0, `Browser page errors: ${pageErrors.join(' | ')}`);
-  assert(failedRequests.length === 0, `Browser request failures: ${failedRequests.join(' | ')}`);
-
-  evidence.initial = initial;
-  evidence.mutedInitial = mutedInitial;
-  evidence.homeWalkRight = homeWalkRight;
-  evidence.homeWalkLeft = homeWalkLeft;
-  evidence.focusLossStop = focusLossStop;
-  evidence.homeRightEdge = homeRightEdge;
-  evidence.firstLifeTransition = firstLifeTransition;
-  evidence.returnedHome = returnedHome;
-  evidence.secondLifeTransition = secondLifeTransition;
-  evidence.lifeBranch = lifeBranch;
-  evidence.upPrompt = upPrompt;
-  evidence.upperTransition = upperTransition;
-  evidence.upperWalkRight = upperWalkRight;
-  evidence.upperWalkLeft = upperWalkLeft;
-  evidence.idle = { start: idleStart, end: idleEnd };
-  evidence.downPrompt = downPrompt;
-  evidence.lowerTransition = lowerTransition;
-  evidence.phases = { morning, day, evening, night };
-
   const invariants = {
-    verticalInvariant,
-    cameraFollow,
+    groundInvariant,
+    worldGroundAuxiliaryInvariant,
+    groundMeasurementCount: groundMeasurements.length,
     cameraBoundsInvariant,
-    focusLossStop,
     transitionLocked,
     timePreserved,
     mutePreserved,
-    idleReturned,
+    sourceSpawnIdPreserved,
+    expectedSpawnSequence,
+    phaseCoverage,
+    positionCoverage,
+    debugGeometryCoverage,
+    panelCoverage,
+    panelStatesThisViewport: evidence.panelMatrix.length,
+    requiredAggregatePanelStatesAcrossThreeViewports: 36,
     areasVisited: [...areasVisited],
     pageErrors: pageErrors.length,
     failedRequests: failedRequests.length,
   };
   record('invariants', invariants);
   statePayload = {
+    schemaVersion: 1,
+    revision: 'M1.5',
     baseUrl,
     expectedCommit,
+    observedCommit,
+    buildCommitDisplay: observedCommit.slice(0, 7),
     viewport,
+    deviceScaleFactor,
+    touchEnabled,
     traceEnabled,
+    browserHeadless,
+    outputDir,
+    runtime: {
+      nodeVersion: process.version,
+      browserVersion: browser.version(),
+      actualBrowserViewport,
+      developerHudRect,
+      initial,
+      initialSpawn,
+      finalAudio,
+    },
+    geometryFixture: {
+      schemaVersion: M15_GEOMETRY_FIXTURE.schemaVersion,
+      revision: M15_GEOMETRY_FIXTURE.revision,
+      measuredAt: M15_GEOMETRY_FIXTURE.measuredAt,
+      measurementMethod: M15_GEOMETRY_FIXTURE.measurementMethod,
+      tolerances: M15_GEOMETRY_FIXTURE.tolerances,
+      player: M15_GEOMETRY_FIXTURE.player,
+      areas: Object.fromEntries(M15_AREA_IDS.map((areaId) => {
+        const geometry = getM15GeometryArea(areaId);
+        return [areaId, {
+          ground: geometry.ground,
+          spawns: geometry.spawns,
+          branchEntrances: geometry.branchEntrances,
+          assets: geometry.assets,
+        }];
+      })),
+    },
     evidence,
     invariants,
     transitionCount: transitionChecks.length,
-    hudSnapshotCount: m14Snapshots.length,
+    hudSnapshotCount: candidateSnapshots.length,
+    requestedM15Assets: m15AssetRequests,
     pageErrors,
     failedRequests,
   };
 } catch (error) {
   failure = error;
   record('failure', error?.stack ?? String(error));
-  const lastHud = page
-    ? await latestHud(page).catch(() => null)
-    : null;
+  await inputController?.cancel().catch(() => {});
+  const lastHud = page ? await latestHud().catch(() => null) : null;
   const hudTail = page
-    ? await hudTimeline(page).then((timeline) => timeline.slice(-12)).catch(() => [])
+    ? await hudTimeline().then((timeline) => timeline.slice(-16)).catch(() => [])
     : [];
+  const audio = page ? await audioDiagnostics().catch(() => null) : null;
   statePayload = {
+    schemaVersion: 1,
+    revision: 'M1.5',
     baseUrl,
     expectedCommit,
+    observedCommit,
+    buildCommitDisplay: observedCommit.slice(0, 7),
     viewport,
+    deviceScaleFactor,
+    touchEnabled,
     traceEnabled,
+    browserHeadless,
+    outputDir,
     evidence,
     transitionChecks,
     lastHud,
     hudTail,
+    audio,
     pageErrors,
     failedRequests,
     failure: error?.stack ?? String(error),
   };
-  if (page) {
-    await page.screenshot({
-      path: path.join(outputDir, 'failure.png'),
-      fullPage: true,
-    }).catch(() => {});
-  }
+  if (page) await capture('failure.png').catch(() => {});
 } finally {
   fs.writeFileSync(
     path.join(outputDir, 'state.json'),
@@ -662,7 +1947,10 @@ try {
       path: path.join(outputDir, 'trace.zip'),
     }).catch((error) => record('trace-error', error?.stack ?? String(error)));
   }
-  fs.writeFileSync(path.join(outputDir, 'runtime.log'), `${records.join('\n')}\n`);
+  fs.writeFileSync(
+    path.join(outputDir, 'runtime.log'),
+    `${records.join('\n')}\n`,
+  );
   if (browser) await browser.close();
 }
 

@@ -124,6 +124,22 @@ def validate() -> list[str]:
         atlas = raw_atlas.convert("RGBA")
     atlas_pixels = np.asarray(atlas)
     alpha = atlas_pixels[..., 3]
+    red = atlas_pixels[..., 0]
+    green = atlas_pixels[..., 1]
+    blue = atlas_pixels[..., 2]
+    red_blue_delta = np.abs(red.astype(np.int16) - blue.astype(np.int16))
+    visible_chroma_residue = (
+        (alpha > 5)
+        & (red > 180)
+        & (blue > 180)
+        & (green < 110)
+        & (red_blue_delta < 100)
+    )
+    require(
+        int(visible_chroma_residue.sum()) == 0,
+        "player atlas retains visible magenta chroma-key pixels",
+        failures,
+    )
     require(int(alpha[0, :].max()) == 0, "atlas top edge is clipped", failures)
     require(int(alpha[-1, :].max()) == 0, "atlas bottom edge is clipped", failures)
     require(int(alpha[:, 0].max()) == 0, "atlas left edge is clipped", failures)

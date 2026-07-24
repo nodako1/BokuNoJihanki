@@ -287,6 +287,7 @@ export class SideScrollTownScene extends Phaser.Scene {
     this.hudElapsed += safeDelta;
     if (this.hudElapsed >= HUD_INTERVAL) {
       this.hudElapsed = 0;
+      if (!branchDirection || locked) this.publishPanelGeometry();
       this.publishHud(branchDirection, movement.moving);
     }
   }
@@ -376,6 +377,19 @@ export class SideScrollTownScene extends Phaser.Scene {
         height: 2,
       },
       facing: this.facing,
+      areaId: this.areaId,
+      playerWorldX: this.player.x,
+      playerWorldY: this.player.y,
+      cameraScrollX: camera.scrollX,
+      cameraScrollY: camera.scrollY,
+      canvasRect: {
+        left: canvasRect.left,
+        top: canvasRect.top,
+        width: canvasRect.width,
+        height: canvasRect.height,
+      },
+      scaleX,
+      scaleY,
     });
   }
 

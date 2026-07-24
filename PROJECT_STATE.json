@@ -2,11 +2,21 @@
   "project": "BokuNoJihanki",
   "gameTitle": "ぼくの自販機",
   "version": "0.1.0",
-  "currentMilestone": "M1.4",
-  "status": "completed-production-verified",
+  "currentMilestone": "M1.5",
+  "currentMilestoneScope": "mandatory-real-device-quality-rebuild",
+  "status": "implementation-in-progress",
+  "statusScope": "m1-reopened-for-real-device-quality; m2-stopped",
   "productionBranch": "main",
   "productionUrl": "https://boku-no-jihanki.vercel.app",
-  "lastProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
+  "currentProductionBaseline": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+  "lastProductionCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+  "m14ImplementationProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
+  "m1Completion": {
+    "status": "reopened",
+    "reason": "real-device visual, grounding, transition-panel, navigation-cue, and audio quality require mandatory correction",
+    "activeCorrection": "M1.5",
+    "mainMergeBlockedUntil": "explicit user approval on the exact Vercel Preview SHA from a real iPhone"
+  },
   "completed": [
     "m0-development-foundation",
     "m1-player-four-direction-movement",
@@ -38,12 +48,23 @@
     "m1.4-quality-and-browser-verification",
     "m1.4-navigation-core-merged",
     "m1.4-production-verification",
-    "m1.4-2d-official-m1-basis"
+    "m1.4-2d-official-m1-basis",
+    "m1.5-cp1-assets-checkpointed",
+    "m1.5-cp2-runtime-checkpointed",
+    "m1.5-cp3-contract-tests-checkpointed"
   ],
-  "inProgress": [],
-  "paused": [],
-  "notStarted": [
+  "inProgress": [
+    "m1.5-local-and-preview-browser-smoke",
+    "m1.5-evidence",
+    "m1.5-independent-candidate-qa",
+    "m1.5-evidence-audit",
+    "m1.5-ci"
+  ],
+  "paused": [
     "m2-vending-machine-scene-integration",
+    "open-pr-31"
+  ],
+  "notStarted": [
     "vending-machine-search",
     "money-system",
     "action-time-consumption",
@@ -52,19 +73,23 @@
     "m3-day-transition",
     "m3-game-shop"
   ],
-  "nextMilestone": "M2",
-  "nextTask": "m2-vending-machine-scene-integration",
+  "nextMilestone": "M1.5",
+  "nextTask": "m1.5-evidence-preview-and-independent-qa",
   "knownIssues": [
     {
-      "severity": "light",
-      "description": "Representative iPhone and Android performance still requires device confirmation."
+      "severity": "blocking",
+      "description": "The rebuilt M1.5 candidate has not yet completed same-SHA local/Preview Browser Smoke, independent candidate QA, Evidence audit, CI, or real-iPhone approval."
+    },
+    {
+      "severity": "blocking",
+      "description": "M2 remains stopped until M1.5 is approved and Production verification is complete."
     },
     {
       "severity": "light",
       "description": "iOS Safari cannot guarantee programmatic orientation lock, so the portrait guard remains mandatory."
     }
   ],
-  "lastUpdated": "2026-07-23T13:20:06Z",
+  "lastUpdated": "2026-07-24T00:46:42Z",
   "developmentRulesVersion": "2.4",
   "evidence": {
     "m12ProductionCommit": "ddfba1f87835ed2c804fbd7f7cdadaaa38936e46",
@@ -73,6 +98,7 @@
     "m13WorldWidth": 5120,
     "m13PlayerAtlasFrames": 36,
     "m13PlayableArea": "residential-only",
+    "m13Preserved": true,
     "m14AreaIds": [
       "home-street",
       "life-road",
@@ -81,7 +107,7 @@
     "m14AreaCount": 3,
     "m14Movement": "horizontal-only-with-branch-input",
     "m14Camera": "horizontal-follow-with-look-ahead",
-    "m14Status": "completed-production-verified",
+    "m14Status": "completed-production-verified-history",
     "m14M1Basis": "2d-side-scroll",
     "m14NavigationCoreMergeCommit": "ee255a1a8413768d0e7dbdf512964268c8eaf276",
     "m14PullRequest": 32,
@@ -90,6 +116,7 @@
     "m14PullRequestBrowserRun": 30008762333,
     "m14PullRequestBrowserArtifact": 8564271801,
     "m14ImplementationProductionCommit": "147f770a4b73077c4e5dc0523839b3fefb789db4",
+    "m14CurrentProductionBaseline": "29223ee31fd4fc4fbca21a37b01fe89277279647",
     "m14VercelProductionStatus": "success",
     "m14MainQualityRun": 30009404756,
     "m14ProductionSmokeRun": 30009405068,
@@ -111,9 +138,6 @@
       "timeOfDay": true,
       "audio": true
     },
-    "m13Preserved": true,
-    "m2EconomyCorePreserved": true,
-    "m2EconomySceneConnected": false,
     "m14AssetGenerationCommand": "python3 tools/art/generate_m14_assets.py",
     "m14ValidationFlow": [
       "npm run check",
@@ -123,6 +147,54 @@
       "production-smoke",
       "production-browser-smoke",
       "production-visual-verification"
-    ]
+    ],
+    "m14EvidenceUse": "historical M1.4 delivery evidence only; it is not M1.5 candidate evidence",
+    "m2EconomyCorePreserved": true,
+    "m2EconomySceneConnected": false,
+    "m15Specification": "docs/specs/M1_5_POLISH.md",
+    "m15BaselineCommit": "29223ee31fd4fc4fbca21a37b01fe89277279647",
+    "m15LostHistoricalCommit": "04c6d0879fc4283d94d0a6d515a1916a0999406b",
+    "m15LostHistoricalCommitStatus": "unpublished temporary-environment commit; nonrecoverable and prohibited as candidate evidence",
+    "m15Branch": "fix/m1-5-real-device-polish-rebuild",
+    "m15CheckpointCommits": {
+      "cp1Assets": "edfb2b5f549e8f0407215402e868ebbe6d23c7f4",
+      "cp2Runtime": "bd33365d8b3504f9ca034517ec01f2ba5081f023",
+      "cp3Tests": "67b61f703a48bb5086ef53f4ffd92594f5ac3d3e"
+    },
+    "m15AreaIds": [
+      "home-street",
+      "life-road",
+      "upper-vending-lane"
+    ],
+    "m15GeometryFixture": "src/game/areas/m15GeometryFixture.mjs",
+    "m15GeometryFixturePolicy": "sole source for runtime, contract tests, debug overlay, and Evidence scripts; tied to exact background SHA-256 values",
+    "m15GroundingToleranceCssPx": 2,
+    "m15SpawnToleranceCssPx": 6,
+    "m15EntranceTriggerCenterToleranceCssPx": 5,
+    "m15AssetManifest": "public/assets/images/m15/asset-manifest.json",
+    "m15AssetGenerationRecord": "tools/art/m15-source/generation.json",
+    "m15AssetRights": "Project-original BokuNoJihanki assets; no third-party game art",
+    "m15PlayerAtlasSha256": "acf3cf78c2dba0c30ed078de5e6b0ee6fe32b7f0cf8dd8f15fc52a8dd41d46b0",
+    "m15AudioAsset": "public/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a",
+    "m15AudioSha256": "9ea9bb8b71d71d9cb60a31372fc1fe5ea5411eb02374d60d78cca04cab3401c6",
+    "m15AudioRights": "Project-original deterministic score and render; no external samples or third-party melody",
+    "m15AudioAnalysis": "public/assets/audio/m15/analysis.json",
+    "m15RequiredViewports": [
+      "1280x720",
+      "844x390 touch",
+      "932x430 DPR3 touch"
+    ],
+    "m15RequiredGateOrder": [
+      "local-quality-and-browser-smoke",
+      "same-sha-vercel-preview-browser-smoke",
+      "ci-and-independent-candidate-qa-and-evidence-audit",
+      "explicit-real-iphone-approval-for-exact-preview-sha",
+      "main-merge",
+      "same-merge-sha-production-deploy-and-smoke"
+    ],
+    "m15CandidateQa": "pending",
+    "m15EvidenceAudit": "pending",
+    "m15RealIPhoneApproval": "pending",
+    "m15ProductionVerification": "pending"
   }
 }

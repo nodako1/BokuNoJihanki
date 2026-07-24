@@ -8,6 +8,9 @@ import {
   M15_TIME_PHASES,
 } from '../src/game/areas/m15GeometryFixture.mjs';
 import {
+  M15_BASELINE_GEOMETRY_FIXTURE,
+} from '../tools/evidence/m15BaselineGeometryFixture.mjs';
+import {
   AREA_PANEL_MIN_PLAYER_GAP,
   AREA_PANEL_MIN_TOUCH_TARGET,
   chooseAreaPanelPlacement,
@@ -18,6 +21,17 @@ const M14_AREAS = ['home-street', 'life-road', 'upper-vending-lane'];
 const M14_PHASES = ['morning', 'day', 'evening', 'night'];
 const M15_AUDIO_FILE =
   'public/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a';
+const M15_BASELINE_COMMIT =
+  '29223ee31fd4fc4fbca21a37b01fe89277279647';
+const M15_LOST_COMMIT =
+  '04c6d0879fc4283d94d0a6d515a1916a0999406b';
+const M15_CHECKPOINT_COMMITS = Object.freeze({
+  cp1Assets: 'edfb2b5f549e8f0407215402e868ebbe6d23c7f4',
+  cp2Runtime: 'bd33365d8b3504f9ca034517ec01f2ba5081f023',
+  cp3Tests: '67b61f703a48bb5086ef53f4ffd92594f5ac3d3e',
+});
+const EXACT_PR_HEAD_CHECKOUT =
+  "ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
 const M15_RUNTIME_FILES = [
   'public/assets/audio/m15/analysis.json',
   M15_AUDIO_FILE,
@@ -47,6 +61,10 @@ const M15_RUNTIME_FILES = [
   'tools/audio/m15/provenance.json',
   'tools/audio/m15/score.json',
   'tools/audio/m15/validate_m15_bgm.py',
+  'tools/evidence/assemble_m15_evidence.py',
+  'tools/evidence/capture_m15_baseline.mjs',
+  'tools/evidence/generate_m15_audio_evidence.py',
+  'tools/evidence/m15BaselineGeometryFixture.mjs',
 ];
 const M14_SCREENSHOTS = [
   '01-title.png',
@@ -287,7 +305,15 @@ const [
   areaPanelDom,
   areaPanelPlacement,
   geometryFixtureSource,
+  baselineGeometryFixtureSource,
+  baselineCapture,
+  audioEvidenceGenerator,
+  evidenceAssembler,
   browserSmoke,
+  viteConfig,
+  buildBadge,
+  buildTypes,
+  qualityWorkflow,
   browserWorkflow,
   productionSmoke,
 ] = await Promise.all([
@@ -327,7 +353,15 @@ const [
   readText('src/ui/areaPanelDom.ts'),
   readText('src/ui/areaPanelPlacement.mjs'),
   readText('src/game/areas/m15GeometryFixture.mjs'),
+  readText('tools/evidence/m15BaselineGeometryFixture.mjs'),
+  readText('tools/evidence/capture_m15_baseline.mjs'),
+  readText('tools/evidence/generate_m15_audio_evidence.py'),
+  readText('tools/evidence/assemble_m15_evidence.py'),
   readText('scripts/browser-smoke.mjs'),
+  readText('vite.config.ts'),
+  readText('src/ui/BuildBadge.tsx'),
+  readText('src/types/build.d.ts'),
+  readText('.github/workflows/quality.yml'),
   readText('.github/workflows/browser-smoke.yml'),
   readText('.github/workflows/production-smoke.yml'),
 ]);
@@ -336,7 +370,7 @@ if (packageJson.name !== 'boku-no-jihanki') {
   failures.push('package.json name must be boku-no-jihanki.');
 }
 if (packageJson.version !== '0.1.0') {
-  failures.push('package.json version remains 0.1.0 through M1.4.');
+  failures.push('package.json version remains 0.1.0 through the M1.5 rebuild.');
 }
 if (
   packageLock.version !== packageJson.version
@@ -344,49 +378,157 @@ if (
 ) {
   failures.push('package-lock root version must match package.json.');
 }
-if (projectState.currentMilestone !== 'M1.4') {
-  failures.push('PROJECT_STATE currentMilestone must be M1.4.');
-}
-if (projectState.nextMilestone !== 'M2') {
-  failures.push('PROJECT_STATE nextMilestone must remain M2.');
-}
 if (projectState.developmentRulesVersion !== '2.4') {
   failures.push('PROJECT_STATE developmentRulesVersion must remain 2.4.');
 }
-if (projectState.status !== 'completed-production-verified') {
-  failures.push('PROJECT_STATE must mark M1.4 as completed-production-verified.');
+if (
+  projectState.currentMilestone !== 'M1.5'
+  || projectState.currentMilestoneScope !== 'mandatory-real-device-quality-rebuild'
+  || projectState.status !== 'implementation-in-progress'
+  || projectState.statusScope !== 'm1-reopened-for-real-device-quality; m2-stopped'
+) {
+  failures.push('PROJECT_STATE must mark the mandatory M1.5 rebuild as in progress.');
 }
 if (
-  projectState.lastProductionCommit
-  !== '147f770a4b73077c4e5dc0523839b3fefb789db4'
+  projectState.currentProductionBaseline !== M15_BASELINE_COMMIT
+  || projectState.lastProductionCommit !== M15_BASELINE_COMMIT
+  || projectState.m14ImplementationProductionCommit
+    !== '147f770a4b73077c4e5dc0523839b3fefb789db4'
 ) {
-  failures.push('PROJECT_STATE lastProductionCommit must match the verified M1.4 implementation.');
+  failures.push(
+    'PROJECT_STATE must distinguish the current Production baseline '
+    + 'from the historical M1.4 implementation commit.',
+  );
 }
-if ((projectState.inProgress?.length ?? 0) !== 0) {
-  failures.push('PROJECT_STATE must not leave M1.4 release work in progress.');
+if (
+  projectState.m1Completion?.status !== 'reopened'
+  || projectState.m1Completion?.activeCorrection !== 'M1.5'
+  || !/explicit user approval.*real iPhone/i.test(
+    projectState.m1Completion?.mainMergeBlockedUntil ?? '',
+  )
+) {
+  failures.push('PROJECT_STATE must keep M1 reopened and main blocked on real-iPhone approval.');
+}
+if (
+  projectState.nextMilestone !== 'M1.5'
+  || projectState.nextTask !== 'm1.5-evidence-preview-and-independent-qa'
+) {
+  failures.push('PROJECT_STATE must keep M1.5 Evidence and QA ahead of M2.');
 }
 for (const item of [
   'm1.3-code-and-assets-preserved',
   'm1.4-navigation-core-merged',
   'm1.4-production-verification',
   'm1.4-2d-official-m1-basis',
+  'm1.5-cp1-assets-checkpointed',
+  'm1.5-cp2-runtime-checkpointed',
+  'm1.5-cp3-contract-tests-checkpointed',
 ]) {
   if (!projectState.completed?.includes(item)) {
     failures.push(`PROJECT_STATE completed list is missing ${item}.`);
   }
 }
-if ((projectState.paused?.length ?? 0) !== 0) {
-  failures.push('PROJECT_STATE must not leave work paused after M1.4 verification.');
+for (const item of [
+  'm1.5-local-and-preview-browser-smoke',
+  'm1.5-evidence',
+  'm1.5-independent-candidate-qa',
+  'm1.5-evidence-audit',
+  'm1.5-ci',
+]) {
+  if (!projectState.inProgress?.includes(item)) {
+    failures.push(`PROJECT_STATE inProgress list is missing ${item}.`);
+  }
 }
-if (!projectState.notStarted?.includes('m2-vending-machine-scene-integration')) {
-  failures.push('PROJECT_STATE must keep M2 economy Scene integration as not started.');
+for (const item of ['m2-vending-machine-scene-integration', 'open-pr-31']) {
+  if (!projectState.paused?.includes(item)) {
+    failures.push(`PROJECT_STATE paused list is missing ${item}.`);
+  }
 }
-if (projectState.nextTask !== 'm2-vending-machine-scene-integration') {
-  failures.push('PROJECT_STATE nextTask must advance to M2 vending-machine Scene integration.');
+if (projectState.notStarted?.includes('m2-vending-machine-scene-integration')) {
+  failures.push('PROJECT_STATE must classify M2 Scene integration as paused, not active or next.');
+}
+
+const expectedM15StateEvidence = {
+  m15Specification: 'docs/specs/M1_5_POLISH.md',
+  m15BaselineCommit: M15_BASELINE_COMMIT,
+  m15LostHistoricalCommit: M15_LOST_COMMIT,
+  m15Branch: 'fix/m1-5-real-device-polish-rebuild',
+  m15GeometryFixture: 'src/game/areas/m15GeometryFixture.mjs',
+  m15GroundingToleranceCssPx: 2,
+  m15SpawnToleranceCssPx: 6,
+  m15EntranceTriggerCenterToleranceCssPx: 5,
+  m15AssetManifest: 'public/assets/images/m15/asset-manifest.json',
+  m15AssetGenerationRecord: 'tools/art/m15-source/generation.json',
+  m15PlayerAtlasSha256:
+    'acf3cf78c2dba0c30ed078de5e6b0ee6fe32b7f0cf8dd8f15fc52a8dd41d46b0',
+  m15AudioAsset: M15_AUDIO_FILE,
+  m15AudioSha256:
+    '9ea9bb8b71d71d9cb60a31372fc1fe5ea5411eb02374d60d78cca04cab3401c6',
+  m15AudioAnalysis: 'public/assets/audio/m15/analysis.json',
+  m15CandidateQa: 'pending',
+  m15EvidenceAudit: 'pending',
+  m15RealIPhoneApproval: 'pending',
+  m15ProductionVerification: 'pending',
+};
+for (const [key, expected] of Object.entries(expectedM15StateEvidence)) {
+  if (projectState.evidence?.[key] !== expected) {
+    failures.push(`PROJECT_STATE evidence ${key} does not match the M1.5 rebuild contract.`);
+  }
+}
+if (
+  !/nonrecoverable/i.test(
+    projectState.evidence?.m15LostHistoricalCommitStatus ?? '',
+  )
+  || !/prohibited as candidate evidence/i.test(
+    projectState.evidence?.m15LostHistoricalCommitStatus ?? '',
+  )
+) {
+  failures.push('PROJECT_STATE must reject the lost unpushed commit as candidate Evidence.');
+}
+if (
+  JSON.stringify(projectState.evidence?.m15CheckpointCommits)
+    !== JSON.stringify(M15_CHECKPOINT_COMMITS)
+) {
+  failures.push('PROJECT_STATE must retain the exact CP1-CP3 remote checkpoint SHAs.');
+}
+if (
+  JSON.stringify(projectState.evidence?.m15AreaIds)
+    !== JSON.stringify(M15_AREA_IDS)
+) {
+  failures.push('PROJECT_STATE must list only the official M1.5 area IDs.');
+}
+if (
+  !/sole source/i.test(projectState.evidence?.m15GeometryFixturePolicy ?? '')
+  || !/SHA-256/i.test(projectState.evidence?.m15GeometryFixturePolicy ?? '')
+) {
+  failures.push('PROJECT_STATE must bind the sole geometry fixture to background hashes.');
+}
+if (
+  JSON.stringify(projectState.evidence?.m15RequiredViewports)
+  !== JSON.stringify([
+    '1280x720',
+    '844x390 touch',
+    '932x430 DPR3 touch',
+  ])
+) {
+  failures.push('PROJECT_STATE must retain all three M1.5 Browser Smoke viewports.');
+}
+if (
+  JSON.stringify(projectState.evidence?.m15RequiredGateOrder)
+  !== JSON.stringify([
+    'local-quality-and-browser-smoke',
+    'same-sha-vercel-preview-browser-smoke',
+    'ci-and-independent-candidate-qa-and-evidence-audit',
+    'explicit-real-iphone-approval-for-exact-preview-sha',
+    'main-merge',
+    'same-merge-sha-production-deploy-and-smoke',
+  ])
+) {
+  failures.push('PROJECT_STATE must enforce Preview, real-iPhone approval, then Production.');
 }
 
 const expectedM14Evidence = {
-  m14Status: 'completed-production-verified',
+  m14Status: 'completed-production-verified-history',
   m14M1Basis: '2d-side-scroll',
   m14NavigationCoreMergeCommit: 'ee255a1a8413768d0e7dbdf512964268c8eaf276',
   m14PullRequest: 32,
@@ -395,6 +537,7 @@ const expectedM14Evidence = {
   m14PullRequestBrowserRun: 30008762333,
   m14PullRequestBrowserArtifact: 8564271801,
   m14ImplementationProductionCommit: '147f770a4b73077c4e5dc0523839b3fefb789db4',
+  m14CurrentProductionBaseline: M15_BASELINE_COMMIT,
   m14VercelProductionStatus: 'success',
   m14MainQualityRun: 30009404756,
   m14ProductionSmokeRun: 30009405068,
@@ -410,6 +553,16 @@ for (const [key, expected] of Object.entries(expectedM14Evidence)) {
   if (projectState.evidence?.[key] !== expected) {
     failures.push(`PROJECT_STATE evidence ${key} does not match verified M1.4 evidence.`);
   }
+}
+if (
+  !/historical M1\.4 delivery evidence only/i.test(
+    projectState.evidence?.m14EvidenceUse ?? '',
+  )
+  || !/not M1\.5 candidate evidence/i.test(
+    projectState.evidence?.m14EvidenceUse ?? '',
+  )
+) {
+  failures.push('PROJECT_STATE must preserve M1.4 history without reusing it for M1.5.');
 }
 
 const expectedBrowserEvidence = {
@@ -653,6 +806,124 @@ if (
   failures.push('M1.5 geometry fixture tolerances must retain the device-quality contract.');
 }
 
+if (
+  M15_BASELINE_GEOMETRY_FIXTURE.schemaVersion !== 1
+  || M15_BASELINE_GEOMETRY_FIXTURE.baselineCommit !== M15_BASELINE_COMMIT
+  || M15_BASELINE_GEOMETRY_FIXTURE.sourceRevision !== 'M1.4'
+  || JSON.stringify(M15_BASELINE_GEOMETRY_FIXTURE.officialAreaIds)
+    !== JSON.stringify(M15_AREA_IDS)
+) {
+  failures.push('M1.5 baseline fixture must bind the exact baseline and official areas.');
+}
+if (
+  !/Visual raster annotation only/i.test(
+    M15_BASELINE_GEOMETRY_FIXTURE.measurement?.sourceIndependence ?? '',
+  )
+  || baselineGeometryFixtureSource.includes(
+    "from '../../src/game/areas/m15GeometryFixture.mjs'",
+  )
+  || baselineGeometryFixtureSource.includes(
+    "from '../src/game/areas/m15GeometryFixture.mjs'",
+  )
+) {
+  failures.push('M1.5 baseline geometry must remain independent of runtime values.');
+}
+for (const areaId of M15_AREA_IDS) {
+  const baselineArea = M15_BASELINE_GEOMETRY_FIXTURE.areas?.[areaId];
+  if (
+    !baselineArea
+    || baselineArea.imageSize?.height !== 720
+    || baselineArea.visualGround?.samples?.map(({ position }) => position).join(',')
+      !== 'left,center,right'
+    || JSON.stringify(baselineArea.visualGround?.verifiedPhases)
+      !== JSON.stringify(M15_TIME_PHASES)
+  ) {
+    failures.push(`M1.5 baseline ${areaId} requires four-phase independent ground annotations.`);
+    continue;
+  }
+  for (const phase of M15_TIME_PHASES) {
+    const background = baselineArea.backgrounds?.[phase];
+    if (
+      !background
+      || background.width !== baselineArea.imageSize.width
+      || background.height !== baselineArea.imageSize.height
+      || await sha256(`public${background.path}`) !== background.sha256
+    ) {
+      failures.push(`M1.5 baseline ${areaId}/${phase} hash binding is invalid.`);
+    }
+  }
+}
+if (
+  M15_BASELINE_GEOMETRY_FIXTURE.areas?.['life-road']
+    ?.paintedUphillEntrance?.present !== true
+  || M15_BASELINE_GEOMETRY_FIXTURE.areas?.['upper-vending-lane']
+    ?.paintedDownwardEntrance?.present !== false
+) {
+  failures.push('M1.5 baseline fixture must retain the independently observed route defects.');
+}
+for (const marker of [
+  "from './m15BaselineGeometryFixture.mjs'",
+  "from '../../src/game/areas/m15GeometryFixture.mjs'",
+  `const EXACT_BASELINE = '${M15_BASELINE_COMMIT}'`,
+  'const REPOSITORY_ROOT = path.resolve(',
+  "requiredEnvironment('EXPECTED_COMMIT')",
+  "requiredEnvironment('BASELINE_ROOT')",
+  'getM15BaselineGeometryArea',
+  'getM15GeometryArea',
+  'fileSha256',
+  'gitBlobSha1',
+  'loadBaselineContract',
+  '`${expectedCommit}^{commit}`',
+  '`${expectedCommit}^{tree}`',
+  "'ls-tree'",
+  "'-rz'",
+  "'--full-tree'",
+  'gitBlobSha1(content)',
+  'entry.objectSha',
+  'does not match the exact baseline blob.',
+  'verifiedFileCount: trackedEntries.length',
+  'verifiedBytes',
+  'Untracked build/dependency extras are intentionally ignored.',
+  'loadPlayerContract',
+  'calculatePlayerGeometry',
+  'const scaleX = canvas.cssRect.width / canvas.backingWidth',
+  'const scaleY = canvas.cssRect.height / canvas.backingHeight',
+  'renderMapping',
+  'mapped independently from the 1280x720 backing store.',
+  'verifyFixtureCoordinateParity',
+  'captureCandidateEntranceCoordinate',
+  'backgroundCenterX',
+  'sameCoordinateComparisons',
+  'candidateFixtureCoordinateParity',
+  "'Input.dispatchTouchEvent'",
+  'CDP real touch joystick drag',
+  'CDP real touch tap',
+  'evidence.panelMatrix.length, 12',
+  'Baseline 3-area x 4-phase capture is incomplete.',
+  'sourceSpawnSequence',
+  'independentVisualFixture: M15_BASELINE_GEOMETRY_FIXTURE',
+  'painted-entrance-trigger-misalignment',
+  'runtime-trigger-without-painted-route',
+  'BASELINE_DEFECTS_OBSERVED_NOT_A_CANDIDATE_PASS',
+  'candidatePass: false',
+  'context.tracing.start',
+  "'state.json'",
+  "'runtime.log'",
+  "'trace.zip'",
+  'assert.equal(pageErrors.length, 0',
+  'Baseline failed requests:',
+]) {
+  if (!baselineCapture.includes(marker)) {
+    failures.push(`M1.5 baseline capture is missing ${marker}.`);
+  }
+}
+if (/gitOutput\(\s*baselineRoot\b/.test(baselineCapture)) {
+  failures.push(
+    'M1.5 baseline capture must verify archive files against the current '
+    + 'repository baseline tree, without requiring archive .git metadata.',
+  );
+}
+
 const m15FileRecords = new Map(
   (m15Manifest.files ?? []).map((file) => [file.path, file]),
 );
@@ -788,6 +1059,61 @@ if (
   failures.push('M1.5 BGM provenance and project-original rights must remain explicit.');
 }
 for (const marker of [
+  'Refusing non-empty Evidence directory',
+  'run_independent_validator',
+  'verify_visualization_pcm',
+  'truePeakOversampleFactor',
+  '"decodedFramesMatchValidator"',
+  '"channelsMatchValidator"',
+  '"durationMatchesValidator"',
+  '"samplePeakMatchesValidator"',
+  '"dcMatchesValidator"',
+  '"loopBoundaryMatchesValidator"',
+  'git_output("rev-parse", "HEAD")',
+  '"analysis.json"',
+  '"waveform.png"',
+  '"spectrogram.png"',
+  '"loop-boundary.png"',
+  '"sha256-manifest.json"',
+  '"inputFiles"',
+  '"measurementPositions"',
+  '"normalizedCommand"',
+  '"toolchain"',
+  '"--expected-commit"',
+  'complete 40-character Git SHA',
+  'actual_commit != expected_commit',
+  'Refusing audio Evidence from a dirty worktree',
+  'tools/audio/m15/validate_m15_bgm.py',
+  'public/assets/audio/m15/analysis.json',
+]) {
+  if (!audioEvidenceGenerator.includes(marker)) {
+    failures.push(`M1.5 audio Evidence generator is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  `EXACT_BASELINE_SHA = "${M15_BASELINE_COMMIT}"`,
+  'exact 40-character hexadecimal commit SHA',
+  'All nine Browser Smoke run directories must be distinct.',
+  'state.get("observedCommit") == candidate_sha',
+  'state.get("browserHeadless") is False',
+  'heartbeat.get("verified") is True',
+  'heartbeat.get("innerFrozenCallbacks") == []',
+  'len(heartbeat["postActiveCallbacks"]) >= 1',
+  'validate_audio_directory',
+  'validate_tracked_assets',
+  'assert_phase_and_ground_pairing',
+  'All input validation is complete before the first output byte is written.',
+  'Refusing non-empty Evidence output directory',
+  '"sha256-manifest.json"',
+  '"README.md"',
+  '"metrics.json"',
+  '"candidatePass": False',
+]) {
+  if (!evidenceAssembler.includes(marker)) {
+    failures.push(`M1.5 Evidence assembler is missing ${marker}.`);
+  }
+}
+for (const marker of [
   "BGM_ASSET_URL = '/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a'",
   'bgmBusGain',
   'ambienceBusGain',
@@ -897,6 +1223,14 @@ if (
   [
     areaData,
     geometryFixtureSource,
+    baselineGeometryFixtureSource,
+    baselineCapture,
+    audioEvidenceGenerator,
+    browserSmoke,
+    qualityWorkflow,
+    browserWorkflow,
+    productionSmoke,
+    projectState,
     m15Manifest,
   ].some((source) => JSON.stringify(source).includes('home-yard'))
 ) {
@@ -1005,9 +1339,9 @@ for (const marker of [
   'upper-vending-lane',
   '上のエリアへ移動',
   '下のエリアへ移動',
-  'verticalInvariant',
-  'cameraFollow',
-  'focusLossStop',
+  'groundInvariant',
+  'cameraBoundsInvariant',
+  'sourceSpawnIdPreserved',
   'transitionLocked',
   'timePreserved',
   'mutePreserved',
@@ -1027,26 +1361,296 @@ for (const marker of [
   }
 }
 for (const marker of [
-  'Test pull request build at 844x390 mobile landscape',
-  'Test deployed Production at 844x390 mobile landscape',
-  "BROWSER_VIEWPORT_WIDTH: '844'",
-  "BROWSER_VIEWPORT_HEIGHT: '390'",
-  "BROWSER_TRACE: 'false'",
-  'diagnostics/browser-smoke-mobile-844x390',
+  "from '../src/game/areas/m15GeometryFixture.mjs'",
+  'getM15GeometryArea',
+  'M15_TIME_PHASES',
+  "positiveIntegerFromEnv('BROWSER_VIEWPORT_WIDTH', 1280)",
+  "positiveIntegerFromEnv('BROWSER_VIEWPORT_HEIGHT', 720)",
+  "'Input.dispatchTouchEvent'",
+  'page.touchscreen.tap',
+  'AREA_PANEL_MIN_PLAYER_GAP',
+  'AREA_PANEL_MIN_TOUCH_TARGET',
+  'evidence.panelMatrix.length === 12',
+  'requiredAggregatePanelStatesAcrossThreeViewports: 36',
+  'fixtureGroundMeasurement',
+  "'boku-no-jihanki:player-screen-geometry'",
+  'lastPlayerGeometry',
+  'renderedFootScreenY',
+  'fixtureGroundScreenY',
+  'playerGeometry.footRect.top + playerGeometry.footRect.height / 2',
+  'geometry.ground.y - playerGeometry.cameraScrollY',
+  'cssDelta <= tolerance',
+  'backgroundSha256: geometry.assets.backgroundSha256',
+  'foregroundSha256: geometry.assets.foregroundSha256',
+  '`debug-geometry-${areaId}.png`',
+  'groundMeasurements.length >= 27',
+  'debugGeometryCoverage',
+  'phaseCoverage',
+  '__BOKU_M15_AUDIO__',
+  'sourceId',
+  'BGM loop boundary did not advance naturally.',
+  'BGM loop replaced its source.',
+  "'Page.setWebLifecycleState'",
+  "'Page.setLifecycleEventsEnabled'",
+  "'Page.lifecycleEvent'",
+  "'visibilitychange'",
+  "visibilityOverride = 'hidden'",
+  "method: 'deterministic-document-visibility-override'",
+  'frozenResponse',
+  'activeResponse',
+  "method: 'cdp-page-lifecycle'",
+  'frozenCommand',
+  'activeCommand',
+  'domEventObserved',
+  'headlessConstraint',
+  'relatedUnitTest',
+  'waitForAudioAdvance(beforeFreeze)',
+  'frozen-active recovery replaced the BGM source.',
+  'frozen-active recovery changed the logical mute setting.',
+  'frozen-active recovery error:',
+  'heartbeatSuspension',
+  'calibratedGaps',
+  'innerFrozenCallbacks.length === 0',
+  'postActiveCallbacks.length >= 1',
+  'minimumSuspensionGapMs',
+  'CDP frozen state did not suspend the page heartbeat:',
+  'HUD timeline player ground invariant failed.',
+  'pageErrors.length === 0',
+  'failedRequests.length === 0',
+  'EXPECTED_COMMIT must be a complete 40-character Git SHA.',
+  "getAttribute('data-build-commit')",
+  'observedCommit.toLowerCase() === expectedCommit.toLowerCase()',
+  'pageErrors.length = 0',
+  'requestedUrls.clear()',
+  'm15-smoke-exact=',
+  'Timed out waiting for commit ${expectedCommit} at ${baseUrl}.',
+  "'state.json'",
+  "'runtime.log'",
+  "'trace.zip'",
 ]) {
-  if (!browserWorkflow.includes(marker)) {
-    failures.push(`Browser Smoke workflow is missing mobile landscape gate ${marker}.`);
+  if (!browserSmoke.includes(marker)) {
+    failures.push(`M1.5 Browser Smoke is missing ${marker}.`);
+  }
+}
+if (
+  browserSmoke.includes("document.dispatchEvent(new Event('freeze'))")
+  || browserSmoke.includes("document.dispatchEvent(new Event('resume'))")
+) {
+  failures.push(
+    'M1.5 Browser Smoke must use actual CDP frozen/active commands, not '
+    + 'synthetic DOM freeze/resume events.',
+  );
+}
+if (browserSmoke.includes('expectedCommit.length === 0')) {
+  failures.push('M1.5 Browser Smoke must never bypass complete-SHA verification.');
+}
+const exactBadgeWaitOrder = [
+  'let commitMatched = false',
+  "getAttribute('data-build-commit')",
+  'observedCommit.toLowerCase() === expectedCommit.toLowerCase()',
+  'collectRuntimeFailures = true',
+  'm15-smoke-exact=',
+].map((marker) => browserSmoke.indexOf(marker));
+if (
+  exactBadgeWaitOrder.some((index) => index < 0)
+  || exactBadgeWaitOrder.some(
+    (index, markerIndex) => (
+      markerIndex > 0 && index <= exactBadgeWaitOrder[markerIndex - 1]
+    ),
+  )
+) {
+  failures.push(
+    'M1.5 Browser Smoke must wait for the exact commit badge before collecting results.',
+  );
+}
+for (const [source, marker, label] of [
+  [viteConfig, '__BUILD_COMMIT_FULL__', 'Vite full build SHA define'],
+  [buildBadge, 'data-build-commit={__BUILD_COMMIT_FULL__}', 'build badge full SHA metadata'],
+  [buildTypes, 'declare const __BUILD_COMMIT_FULL__: string;', 'build full SHA type'],
+]) {
+  if (!source.includes(marker)) {
+    failures.push(`M1.5 exact-SHA contract is missing ${label}.`);
   }
 }
 for (const marker of [
-  'M1.4 SIDE-SCROLL HUD',
-  '/assets/images/m14',
+  'private publishPanelGeometry(): void',
+  'this.game.canvas.getBoundingClientRect()',
+  'this.player.getBounds()',
+  'const scaleX = canvasRect.width / this.game.canvas.width',
+  'const scaleY = canvasRect.height / this.game.canvas.height',
+  'publishPlayerScreenGeometry({',
+  'footRect: {',
+  'cameraScrollY: camera.scrollY',
+  'private drawGeometryDebug(): void',
+  'const geometry = getM15GeometryArea(this.areaId)',
+  'graphics.lineBetween(0, groundY, geometry.worldWidth, groundY)',
+  'geometry.ground.samples',
+  'geometry.branchEntrances',
+  'Object.values(geometry.spawns)',
+  'COLOR ground/sample=green bg-entry=blue trigger=orange spawn=yellow foot=red',
+]) {
+  if (!sideScrollScene.includes(marker)) {
+    failures.push(`SideScrollTownScene rendered geometry is missing ${marker}.`);
+  }
+}
+for (const marker of [
+  'PLAYER_SCREEN_GEOMETRY_EVENT',
+  'interface PlayerScreenGeometry',
+  'footRect: ScreenRectSnapshot',
+  'cameraScrollY: number',
+  'scaleX: number',
+  'scaleY: number',
+  'publishPlayerScreenGeometry(geometry: PlayerScreenGeometry)',
+]) {
+  if (!gameBridge.includes(marker)) {
+    failures.push(`gameBridge rendered geometry contract is missing ${marker}.`);
+  }
+}
+for (const [workflowName, workflow] of [
+  ['Quality', qualityWorkflow],
+  ['Browser Smoke', browserWorkflow],
+]) {
+  if (!workflow.includes(EXACT_PR_HEAD_CHECKOUT)) {
+    failures.push(`${workflowName} workflow must checkout the exact pull-request head SHA.`);
+  }
+  if (!workflow.includes('node-version: 22')) {
+    failures.push(`${workflowName} workflow must use Node.js 22.`);
+  }
+}
+const workflowDeviceIds = [...browserWorkflow.matchAll(
+  /^\s+- device_id:\s+(\S+)\s*$/gm,
+)].map((match) => match[1]);
+if (
+  JSON.stringify(workflowDeviceIds)
+  !== JSON.stringify([
+    'desktop-1280x720',
+    'touch-844x390',
+    'touch-932x430-dpr3',
+  ])
+) {
+  failures.push('Browser Smoke workflow must define exactly the three M1.5 device jobs.');
+}
+for (const marker of [
+  "VERCEL_GIT_COMMIT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+  'device_id: desktop-1280x720',
+  "width: '1280'",
+  "height: '720'",
+  "dpr: '1'",
+  "touch: 'false'",
+  "trace: 'true'",
+  'device_id: touch-844x390',
+  "width: '844'",
+  "height: '390'",
+  "dpr: '2'",
+  "touch: 'true'",
+  "trace: 'false'",
+  'device_id: touch-932x430-dpr3',
+  "width: '932'",
+  "height: '430'",
+  "dpr: '3'",
+  "'PROJECT_STATE.json'",
+  "'docs/**'",
+  "'tools/evidence/**'",
+  'M15_PREVIEW_URL: https://',
+  "BROWSER_HEADLESS: 'false'",
+  'timeout-minutes: 60',
+  'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
+]) {
+  if (!browserWorkflow.includes(marker)) {
+    failures.push(`Browser Smoke workflow is missing M1.5 viewport/head gate ${marker}.`);
+  }
+}
+if (
+  (browserWorkflow.match(
+    /run: xvfb-run -a node scripts\/browser-smoke\.mjs/g,
+  )?.length ?? 0) !== 3
+) {
+  failures.push(
+    'M1.5 Browser Smoke must run headed Chromium under Xvfb for local, '
+      + 'Preview, and Production lifecycle measurements.',
+  );
+}
+const exactPullRequestCommit =
+  'EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}';
+if (
+  (browserWorkflow.match(
+    /EXPECTED_COMMIT: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/g,
+  )?.length ?? 0) !== 2
+) {
+  failures.push(
+    'Browser Smoke workflow must bind both local and Preview runs to the exact PR head.',
+  );
+}
+const localSmokeStep = browserWorkflow.indexOf(
+  '- name: Test exact local pull request build',
+);
+const previewSmokeStep = browserWorkflow.indexOf(
+  '- name: Test exact Vercel Preview',
+);
+const productionSmokeStep = browserWorkflow.indexOf(
+  '- name: Test exact deployed Production',
+);
+if (
+  localSmokeStep < 0
+  || previewSmokeStep <= localSmokeStep
+  || productionSmokeStep <= previewSmokeStep
+) {
+  failures.push(
+    'Browser Smoke workflow must run the local candidate before the exact Vercel Preview.',
+  );
+} else {
+  const localStepSource = browserWorkflow.slice(localSmokeStep, previewSmokeStep);
+  const previewStepSource = browserWorkflow.slice(
+    previewSmokeStep,
+    productionSmokeStep,
+  );
+  for (const marker of [
+    exactPullRequestCommit,
+    'BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}',
+    'BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}',
+    'BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}',
+    'BROWSER_TOUCH: ${{ matrix.touch }}',
+    'BROWSER_TRACE: ${{ matrix.trace }}',
+  ]) {
+    if (!localStepSource.includes(marker) || !previewStepSource.includes(marker)) {
+      failures.push(
+        `Browser Smoke local and Preview matrix steps must both include ${marker}.`,
+      );
+    }
+  }
+  for (const marker of [
+    'BASE_URL: http://127.0.0.1:4173',
+    'diagnostics/local-${{ matrix.device_id }}',
+  ]) {
+    if (!localStepSource.includes(marker)) {
+      failures.push(`Browser Smoke local matrix step is missing ${marker}.`);
+    }
+  }
+  for (const marker of [
+    'BASE_URL: ${{ env.M15_PREVIEW_URL }}',
+    'diagnostics/preview-${{ matrix.device_id }}',
+    "PRODUCTION_WAIT_MS: '900000'",
+  ]) {
+    if (!previewStepSource.includes(marker)) {
+      failures.push(`Browser Smoke exact Preview matrix step is missing ${marker}.`);
+    }
+  }
+}
+for (const marker of [
+  'Verify Vercel Production contains approved M1.5',
+  'M1.5 SIDE-SCROLL HUD',
+  '/assets/images/m15',
+  '/assets/audio/m15/summer-morning-loop-9ea9bb8b71d7.m4a',
+  'grep -Fq "${GITHUB_SHA}"',
+  'home-street',
+  'life-road',
   'upper-vending-lane',
   '上のエリアへ移動',
+  '下のエリアへ移動',
   'player-atlas',
 ]) {
   if (!productionSmoke.includes(marker)) {
-    failures.push(`Production Smoke must verify M1.4 runtime marker ${marker}.`);
+    failures.push(`Future Production Smoke must verify M1.5 runtime marker ${marker}.`);
   }
 }
 

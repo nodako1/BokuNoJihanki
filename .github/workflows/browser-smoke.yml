@@ -8,12 +8,15 @@ on:
       - '.github/workflows/browser-smoke.yml'
       - '.github/workflows/production-smoke.yml'
       - '.vercel-production-retry'
+      - 'PROJECT_STATE.json'
+      - 'docs/**'
       - 'index.html'
       - 'package.json'
       - 'package-lock.json'
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
       - 'src/**'
+      - 'tools/evidence/**'
       - 'vercel.json'
       - 'vite.config.ts'
   push:
@@ -23,12 +26,15 @@ on:
       - '.github/workflows/browser-smoke.yml'
       - '.github/workflows/production-smoke.yml'
       - '.vercel-production-retry'
+      - 'PROJECT_STATE.json'
+      - 'docs/**'
       - 'index.html'
       - 'package.json'
       - 'package-lock.json'
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
       - 'src/**'
+      - 'tools/evidence/**'
       - 'vercel.json'
       - 'vite.config.ts'
   workflow_dispatch:
@@ -43,13 +49,40 @@ concurrency:
 
 jobs:
   smoke:
-    name: Render and operate the real game in Chromium
+    name: Render and operate M1.5 (${{ matrix.device_id }})
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - device_id: desktop-1280x720
+            width: '1280'
+            height: '720'
+            dpr: '1'
+            touch: 'false'
+            trace: 'true'
+          - device_id: touch-844x390
+            width: '844'
+            height: '390'
+            dpr: '2'
+            touch: 'true'
+            trace: 'false'
+          - device_id: touch-932x430-dpr3
+            width: '932'
+            height: '430'
+            dpr: '3'
+            touch: 'true'
+            trace: 'false'
+    env:
+      M15_PREVIEW_URL: https://boku-no-jihanki-git-fix-m1-5-r-8c699e-rutantan88-7611s-projects.vercel.app
+      BROWSER_HEADLESS: 'false'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -83,55 +116,56 @@ jobs:
           cat /tmp/vite-preview.log
           exit 1
 
-      - name: Test pull request build in a real browser
+      - name: Test exact local pull request build
         if: github.event_name == 'pull_request'
         env:
           BASE_URL: http://127.0.0.1:4173
           EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}
-          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke
+          BROWSER_ARTIFACT_DIR: diagnostics/local-${{ matrix.device_id }}
+          BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}
+          BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}
+          BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}
+          BROWSER_TOUCH: ${{ matrix.touch }}
+          BROWSER_TRACE: ${{ matrix.trace }}
           PRODUCTION_WAIT_MS: '30000'
-        run: node scripts/browser-smoke.mjs
+        run: xvfb-run -a node scripts/browser-smoke.mjs
 
-      - name: Test pull request build at 844x390 mobile landscape
+      - name: Test exact Vercel Preview
         if: github.event_name == 'pull_request'
         env:
-          BASE_URL: http://127.0.0.1:4173
+          BASE_URL: ${{ env.M15_PREVIEW_URL }}
           EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha }}
-          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke-mobile-844x390
-          BROWSER_VIEWPORT_WIDTH: '844'
-          BROWSER_VIEWPORT_HEIGHT: '390'
-          BROWSER_TRACE: 'false'
-          PRODUCTION_WAIT_MS: '30000'
-        run: node scripts/browser-smoke.mjs
+          BROWSER_ARTIFACT_DIR: diagnostics/preview-${{ matrix.device_id }}
+          BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}
+          BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}
+          BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}
+          BROWSER_TOUCH: ${{ matrix.touch }}
+          BROWSER_TRACE: ${{ matrix.trace }}
+          PRODUCTION_WAIT_MS: '900000'
+        run: xvfb-run -a node scripts/browser-smoke.mjs
 
-      - name: Test deployed Production in a real browser
+      - name: Test exact deployed Production
         if: github.event_name != 'pull_request'
         env:
           BASE_URL: https://boku-no-jihanki.vercel.app
           EXPECTED_COMMIT: ${{ github.sha }}
-          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke
+          BROWSER_ARTIFACT_DIR: diagnostics/production-${{ matrix.device_id }}
+          BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}
+          BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}
+          BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}
+          BROWSER_TOUCH: ${{ matrix.touch }}
+          BROWSER_TRACE: ${{ matrix.trace }}
           PRODUCTION_WAIT_MS: '900000'
-        run: node scripts/browser-smoke.mjs
-
-      - name: Test deployed Production at 844x390 mobile landscape
-        if: github.event_name != 'pull_request'
-        env:
-          BASE_URL: https://boku-no-jihanki.vercel.app
-          EXPECTED_COMMIT: ${{ github.sha }}
-          BROWSER_ARTIFACT_DIR: diagnostics/browser-smoke-mobile-844x390
-          BROWSER_VIEWPORT_WIDTH: '844'
-          BROWSER_VIEWPORT_HEIGHT: '390'
-          BROWSER_TRACE: 'false'
-          PRODUCTION_WAIT_MS: '900000'
-        run: node scripts/browser-smoke.mjs
+        run: xvfb-run -a node scripts/browser-smoke.mjs
 
       - name: Upload screenshots, logs and trace
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-smoke-${{ github.run_id }}
+          name: browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}
           path: |
-            diagnostics/browser-smoke
-            diagnostics/browser-smoke-mobile-844x390
+            diagnostics/local-${{ matrix.device_id }}
+            diagnostics/preview-${{ matrix.device_id }}
+            diagnostics/production-${{ matrix.device_id }}
           if-no-files-found: error
           retention-days: 14
