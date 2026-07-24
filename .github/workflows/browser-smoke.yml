@@ -17,6 +17,7 @@ on:
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
       - 'scripts/run-headed-browser-smoke.sh'
+      - 'scripts/x11-tab-visibility.mjs'
       - 'src/**'
       - 'tools/evidence/**'
       - 'vercel.json'
@@ -37,6 +38,7 @@ on:
       - 'public/**'
       - 'scripts/browser-smoke.mjs'
       - 'scripts/run-headed-browser-smoke.sh'
+      - 'scripts/x11-tab-visibility.mjs'
       - 'src/**'
       - 'tools/evidence/**'
       - 'vercel.json'
@@ -122,6 +124,7 @@ jobs:
             fontconfig \
             fonts-noto-cjk \
             openbox \
+            xdotool \
             x11-utils
           M15_FONTCONFIG_FILE="$(
             realpath .github/fontconfig/m15-noto-cjk.conf
@@ -206,7 +209,7 @@ jobs:
           openbox --version
           dpkg-query --show \
             --showformat='${binary:Package}\t${Version}\n' \
-            fontconfig fonts-noto-cjk openbox x11-utils xvfb
+            fontconfig fonts-noto-cjk openbox xdotool x11-utils xvfb
           printf 'Japanese font: %s\nFile: %s\nSHA-256: %s\nCount: %s\n' \
             "$JAPANESE_FONT_MATCH" \
             "$JAPANESE_FONT_FILE" \
@@ -219,6 +222,20 @@ jobs:
           test -x "$CHROME_PATH"
           echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"
           "$CHROME_PATH" --version
+
+      - name: Preflight native X11 tab visibility
+        env:
+          BROWSER_ARTIFACT_DIR: diagnostics/visibility-preflight-${{ matrix.device_id }}
+          BROWSER_HEADLESS: 'false'
+          BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}
+          BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}
+          BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}
+          BROWSER_TOUCH: ${{ matrix.touch }}
+          BROWSER_TRACE: ${{ matrix.trace }}
+        run: |
+          test -x "$BROWSER_EXECUTABLE_PATH"
+          xvfb-run -a bash scripts/run-headed-browser-smoke.sh \
+            node tools/evidence/probe_m15_x11_visibility.mjs
 
       - name: Prepare immutable baseline build
         if: github.event_name == 'pull_request'
@@ -327,6 +344,7 @@ jobs:
         with:
           name: browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}
           path: |
+            diagnostics/visibility-preflight-${{ matrix.device_id }}
             diagnostics/baseline-${{ matrix.device_id }}
             diagnostics/local-${{ matrix.device_id }}
             diagnostics/preview-${{ matrix.device_id }}

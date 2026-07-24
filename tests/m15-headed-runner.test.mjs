@@ -80,6 +80,14 @@ fi
 `,
   );
   await executable(
+    path.join(binaryDirectory, 'xdotool'),
+    `#!/usr/bin/env bash
+if [[ "\${1:-}" == "version" ]]; then
+  echo "xdotool version 3.20211022.1"
+fi
+`,
+  );
+  await executable(
     path.join(binaryDirectory, 'node'),
     `#!/usr/bin/env bash
 printf '%s' "$*" > "$M15_FAKE_NODE_MARKER"

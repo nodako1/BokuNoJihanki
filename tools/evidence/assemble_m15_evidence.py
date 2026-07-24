@@ -631,68 +631,168 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
             "--disable-backgrounding-occluded-windows",
             "--disable-renderer-backgrounding",
         ]
+        and lifecycle_launch.get("chromiumArgs")
+        == [
+            "--use-gl=swiftshader",
+            "--enable-webgl",
+            "--enable-unsafe-swiftshader",
+            "--ignore-gpu-blocklist",
+            "--ozone-platform=x11",
+        ]
         and isinstance(lifecycle_launch.get("reason"), str)
         and "native Chromium hidden/visible" in lifecycle_launch["reason"],
         f"{run.role}/{run.device_id}: native browser backgrounding was not enabled.",
     )
     hidden_visible = nested(lifecycle, "hiddenVisible")
     require(
-        hidden_visible.get("method") == "cdp-browser-window-minimize-restore",
-        f"{run.role}/{run.device_id}: visibility recovery did not use a real browser-window lifecycle.",
-    )
-    window_control = nested(hidden_visible, "windowControl")
-    target_id = window_control.get("targetId")
-    window_id = window_control.get("windowId")
-    geometry_tolerance = finite_number(
-        window_control.get("geometryRestoreToleranceDip"),
-        f"{run.role}/{run.device_id}: browser-window geometry restore tolerance",
+        hidden_visible.get("method") == "x11-xdotool-tab-switch",
+        f"{run.role}/{run.device_id}: visibility recovery did not use a real X11 Chrome tab switch.",
     )
     require(
-        isinstance(target_id, str)
-        and bool(target_id)
-        and isinstance(window_id, int)
-        and not isinstance(window_id, bool)
-        and isinstance(nested(window_control, "originalBounds"), dict)
-        and nested(window_control, "minimizeCommand", "succeeded") is True
-        and nested(window_control, "restoreNormalCommand", "succeeded") is True,
-        f"{run.role}/{run.device_id}: browser-window CDP commands are incomplete.",
+        "windowControl" not in hidden_visible
+        and "minimiz" not in json.dumps(hidden_visible, ensure_ascii=True).lower(),
+        f"{run.role}/{run.device_id}: obsolete browser-window minimize Evidence is forbidden.",
     )
-    original_window_bounds = nested(window_control, "originalBounds")
-    restored_window_bounds = nested(window_control, "restoredBounds")
-    geometry_keys = ("left", "top", "width", "height")
-    original_geometry = {
-        key: finite_number(
-            original_window_bounds.get(key),
-            f"{run.role}/{run.device_id}: original browser-window {key}",
-        )
-        for key in geometry_keys
-    }
-    restored_geometry = {
-        key: finite_number(
-            restored_window_bounds.get(key),
-            f"{run.role}/{run.device_id}: restored browser-window {key}",
-        )
-        for key in geometry_keys
-    }
+    tab_control = nested(hidden_visible, "x11TabControl")
     require(
-        geometry_tolerance == 2
-        and original_window_bounds.get("windowState") == "normal"
-        and restored_window_bounds.get("windowState") == "normal"
-        and original_geometry["width"] > 0
-        and original_geometry["height"] > 0
-        and restored_geometry["width"] > 0
-        and restored_geometry["height"] > 0
-        and nested(window_control, "restoreGeometryCommand", "succeeded")
-        is True
+        isinstance(tab_control, dict),
+        f"{run.role}/{run.device_id}: x11TabControl must be an object.",
+    )
+    tool = nested(tab_control, "tool")
+    browser_pid = tab_control.get("browserPid")
+    candidate_target = nested(tab_control, "candidateTarget")
+    foreground_target = nested(tab_control, "foregroundTarget")
+    require(
+        isinstance(tool, dict)
+        and isinstance(candidate_target, dict)
+        and isinstance(foreground_target, dict),
+        f"{run.role}/{run.device_id}: X11 tool and target records must be objects.",
+    )
+    candidate_target_id = candidate_target.get("targetId")
+    foreground_target_id = foreground_target.get("targetId")
+    candidate_window_id = candidate_target.get("browserWindowId")
+    foreground_window_id = foreground_target.get("browserWindowId")
+    require(
+        tool.get("name") == "xdotool"
+        and isinstance(tool.get("version"), str)
+        and bool(tool["version"].strip())
+        and isinstance(browser_pid, int)
+        and not isinstance(browser_pid, bool)
+        and browser_pid > 0,
+        f"{run.role}/{run.device_id}: X11 control tool or Chrome browser PID is invalid.",
+    )
+    require(
+        isinstance(candidate_target_id, str)
+        and bool(candidate_target_id)
+        and isinstance(foreground_target_id, str)
+        and bool(foreground_target_id)
+        and candidate_target_id != foreground_target_id
+        and isinstance(candidate_window_id, int)
+        and not isinstance(candidate_window_id, bool)
+        and candidate_window_id > 0
+        and isinstance(foreground_window_id, int)
+        and not isinstance(foreground_window_id, bool)
+        and foreground_window_id == candidate_window_id
+        and foreground_target.get("internalNewTab") is True
+        and tab_control.get("contextPageEventObserved") is True,
+        f"{run.role}/{run.device_id}: candidate/foreground CDP tab identity is invalid.",
+    )
+    page_counts = nested(tab_control, "pageCounts")
+    require(
+        isinstance(page_counts, dict)
         and all(
-            abs(restored_geometry[key] - original_geometry[key])
-            <= geometry_tolerance
-            for key in geometry_keys
-        ),
-        f"{run.role}/{run.device_id}: browser-window geometry was not restored.",
+            isinstance(page_counts.get(key), int)
+            and not isinstance(page_counts.get(key), bool)
+            for key in ("before", "afterOpen", "afterCleanup")
+        )
+        and page_counts.get("before") == 1
+        and page_counts.get("afterOpen") == 2
+        and page_counts.get("afterCleanup") == 1,
+        f"{run.role}/{run.device_id}: Chrome context page counts do not prove one-tab cleanup.",
     )
+    commands = nested(tab_control, "commands")
+    require(
+        isinstance(commands, dict),
+        f"{run.role}/{run.device_id}: X11 command Evidence must be an object.",
+    )
+    require(
+        nested(commands, "openTab", "gesture") == "Ctrl+T"
+        and nested(commands, "openTab", "succeeded") is True
+        and nested(commands, "returnTab", "gesture") == "Ctrl+Shift+Tab"
+        and nested(commands, "returnTab", "succeeded") is True,
+        f"{run.role}/{run.device_id}: X11 tab-switch keyboard gestures are incomplete.",
+    )
+    snapshots = nested(tab_control, "x11Snapshots")
+    snapshot_names = (
+        "beforeOpen",
+        "afterOpen",
+        "beforeReturn",
+        "afterReturn",
+        "afterCleanup",
+    )
+    require(
+        isinstance(snapshots, dict) and set(snapshots) == set(snapshot_names),
+        f"{run.role}/{run.device_id}: X11 active-window snapshot coverage is incomplete.",
+    )
+    active_window_ids: list[int] = []
+    for snapshot_name in snapshot_names:
+        snapshot = nested(snapshots, snapshot_name)
+        require(
+            isinstance(snapshot, dict),
+            f"{run.role}/{run.device_id}: {snapshot_name} must be an X11 snapshot object.",
+        )
+        xdotool_window_id = snapshot.get("xdotoolActiveWindowId")
+        root_window_id = snapshot.get("rootActiveWindowId")
+        wm_pid = snapshot.get("wmPid")
+        wm_class = snapshot.get("wmClass")
+        require(
+            isinstance(xdotool_window_id, int)
+            and not isinstance(xdotool_window_id, bool)
+            and xdotool_window_id > 0
+            and isinstance(root_window_id, int)
+            and not isinstance(root_window_id, bool)
+            and root_window_id == xdotool_window_id
+            and isinstance(wm_pid, int)
+            and not isinstance(wm_pid, bool)
+            and wm_pid == browser_pid,
+            f"{run.role}/{run.device_id}: {snapshot_name} does not identify the same active Chrome X11 window.",
+        )
+        require(
+            isinstance(wm_class, dict)
+            and set(wm_class) == {"instance", "class"}
+            and isinstance(wm_class.get("instance"), str)
+            and re.fullmatch(
+                r"google-chrome(?:-stable)?",
+                wm_class["instance"],
+                flags=re.IGNORECASE,
+            )
+            is not None
+            and isinstance(wm_class.get("class"), str)
+            and re.fullmatch(
+                r"Google-chrome",
+                wm_class["class"],
+                flags=re.IGNORECASE,
+            )
+            is not None,
+            f"{run.role}/{run.device_id}: {snapshot_name} WM_CLASS is not Google Chrome.",
+        )
+        active_window_ids.append(xdotool_window_id)
+    require(
+        len(set(active_window_ids)) == 1,
+        f"{run.role}/{run.device_id}: X11 active Chrome window changed during the tab lifecycle.",
+    )
+    require(
+        tab_control.get("foregroundClosed") is True
+        and tab_control.get("cleanupComplete") is True,
+        f"{run.role}/{run.device_id}: foreground witness tab cleanup is incomplete.",
+    )
+    before_hidden = nested(hidden_visible, "beforeHidden")
     visibility_sources = [
         nested(hidden_visible, name, "sourceId")
+        for name in ("beforeHidden", "hidden", "visible")
+    ]
+    visibility_mute_states = [
+        nested(hidden_visible, name, "muted")
         for name in ("beforeHidden", "hidden", "visible")
     ]
     require(
@@ -700,9 +800,21 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         and len(set(visibility_sources)) == 1,
         f"{run.role}/{run.device_id}: visibility recovery replaced the BGM source.",
     )
+    require(
+        all(isinstance(muted, bool) for muted in visibility_mute_states)
+        and len(set(visibility_mute_states)) == 1,
+        f"{run.role}/{run.device_id}: visibility recovery changed or omitted the logical mute state.",
+    )
     hidden_audio = nested(hidden_visible, "hidden")
     hidden_automation = nested(hidden_audio, "masterGainAutomation")
     hidden_settled = nested(hidden_visible, "hiddenSettledState")
+    hidden_candidate = nested(hidden_settled, "candidate")
+    hidden_foreground = nested(hidden_settled, "foreground")
+    hidden_candidate_audio = nested(hidden_candidate, "audio")
+    hidden_candidate_automation = nested(
+        hidden_candidate_audio,
+        "masterGainAutomation",
+    )
     hidden_target = finite_number(
         hidden_automation.get("target"),
         f"{run.role}/{run.device_id}: hidden gain target",
@@ -711,15 +823,27 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         hidden_audio.get("masterGain"),
         f"{run.role}/{run.device_id}: hidden actual gain",
     )
+    hidden_candidate_target = finite_number(
+        hidden_candidate_automation.get("target"),
+        f"{run.role}/{run.device_id}: hidden settled candidate gain target",
+    )
+    hidden_candidate_gain = finite_number(
+        hidden_candidate_audio.get("masterGain"),
+        f"{run.role}/{run.device_id}: hidden settled candidate actual gain",
+    )
     require(
-        nested(hidden_settled, "browserWindowBounds", "windowState")
-        == "minimized"
-        and nested(window_control, "minimizedBounds")
-        == nested(hidden_settled, "browserWindowBounds")
-        and hidden_settled.get("documentHidden") is True
-        and hidden_settled.get("visibilityState") == "hidden"
-        and nested(hidden_settled, "audio", "documentHidden") is True
+        hidden_candidate.get("documentHidden") is True
+        and hidden_candidate.get("visibilityState") == "hidden"
+        and hidden_candidate_audio.get("documentHidden") is True
+        and hidden_candidate_audio.get("sourceId") == hidden_audio.get("sourceId")
+        and hidden_candidate_audio.get("muted") == hidden_audio.get("muted")
+        and hidden_candidate_target == 0
+        and hidden_candidate_automation.get("reason") == "visibility-hidden"
+        and hidden_candidate_gain <= 0.01
+        and hidden_foreground.get("documentHidden") is False
+        and hidden_foreground.get("visibilityState") == "visible"
         and hidden_audio.get("documentHidden") is True
+        and hidden_audio.get("muted") == before_hidden.get("muted")
         and hidden_target == 0
         and hidden_automation.get("reason") == "visibility-hidden"
         and hidden_gain <= 0.01,
@@ -728,6 +852,13 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
     visible_audio = nested(hidden_visible, "visible")
     visible_automation = nested(visible_audio, "masterGainAutomation")
     visible_settled = nested(hidden_visible, "visibleSettledState")
+    visible_candidate = nested(visible_settled, "candidate")
+    visible_foreground = nested(visible_settled, "foreground")
+    visible_candidate_audio = nested(visible_candidate, "audio")
+    visible_candidate_automation = nested(
+        visible_candidate_audio,
+        "masterGainAutomation",
+    )
     visible_target = finite_number(
         visible_automation.get("target"),
         f"{run.role}/{run.device_id}: visible gain target",
@@ -736,18 +867,67 @@ def validate_candidate_audio_and_lifecycle(run: Run) -> None:
         visible_audio.get("masterGain"),
         f"{run.role}/{run.device_id}: visible actual gain",
     )
+    visible_candidate_target = finite_number(
+        visible_candidate_automation.get("target"),
+        f"{run.role}/{run.device_id}: visible settled candidate gain target",
+    )
+    visible_candidate_gain = finite_number(
+        visible_candidate_audio.get("masterGain"),
+        f"{run.role}/{run.device_id}: visible settled candidate actual gain",
+    )
     require(
-        nested(visible_settled, "browserWindowBounds", "windowState")
-        == "normal"
-        and nested(window_control, "restoredBounds")
-        == nested(visible_settled, "browserWindowBounds")
-        and visible_settled.get("documentHidden") is False
-        and visible_settled.get("visibilityState") == "visible"
-        and nested(visible_settled, "audio", "documentHidden") is False
+        visible_candidate.get("documentHidden") is False
+        and visible_candidate.get("visibilityState") == "visible"
+        and visible_candidate_audio.get("documentHidden") is False
+        and visible_candidate_audio.get("sourceId") == visible_audio.get("sourceId")
+        and visible_candidate_audio.get("muted") == visible_audio.get("muted")
+        and visible_candidate_target > 0
+        and visible_candidate_automation.get("reason") == "visibility-visible"
+        and abs(visible_candidate_gain - visible_candidate_target) <= 0.02
+        and visible_foreground.get("documentHidden") is True
+        and visible_foreground.get("visibilityState") == "hidden"
         and visible_audio.get("documentHidden") is False
+        and visible_audio.get("muted") == before_hidden.get("muted")
+        and visible_audio.get("lastRecoveryError") is None
         and visible_target > 0
+        and visible_automation.get("reason") == "visibility-visible"
         and abs(visible_gain - visible_target) <= 0.02,
         f"{run.role}/{run.device_id}: actual visible-tab gain did not recover.",
+    )
+    visibility_duration = finite_number(
+        visible_candidate_audio.get("duration"),
+        f"{run.role}/{run.device_id}: visibility source duration",
+    )
+    require(
+        visibility_duration > 1,
+        f"{run.role}/{run.device_id}: visibility source duration is invalid.",
+    )
+    visible_recovery_start_offset = finite_number(
+        visible_candidate_audio.get("offset"),
+        f"{run.role}/{run.device_id}: visible-settled audio offset",
+    )
+    resumed_visibility_offset = finite_number(
+        visible_audio.get("offset"),
+        f"{run.role}/{run.device_id}: resumed audio offset",
+    )
+    visibility_resume_delta = (
+        resumed_visibility_offset - visible_recovery_start_offset
+    ) % visibility_duration
+    recorded_visibility_resume_delta = finite_number(
+        hidden_visible.get("visibleRecoveryDelta"),
+        f"{run.role}/{run.device_id}: recorded visible recovery delta",
+    )
+    require(
+        0.15 <= visibility_resume_delta < visibility_duration / 2,
+        f"{run.role}/{run.device_id}: visible-tab audio offset did not resume forward.",
+    )
+    require(
+        math.isclose(
+            recorded_visibility_resume_delta,
+            visibility_resume_delta,
+            abs_tol=1e-6,
+        ),
+        f"{run.role}/{run.device_id}: recorded visible recovery delta is inconsistent.",
     )
     visibility_events = hidden_visible.get("visibilityEvents")
     require(
@@ -2060,6 +2240,8 @@ def build_contacts(
 def run_metrics(run: Run) -> dict[str, Any]:
     state = run.state
     runtime = state.get("runtime", {})
+    lifecycle = state.get("evidence", {}).get("lifecycle", {})
+    hidden_visible = lifecycle.get("hiddenVisible", {})
     log_path = run.source / "runtime.log"
     trace_path = run.source / "trace.zip"
     completion_path = run.source / "completion.json"
@@ -2083,6 +2265,24 @@ def run_metrics(run: Run) -> dict[str, Any]:
         "nodeVersion": runtime.get("nodeVersion"),
         "browserVersion": runtime.get("browserVersion"),
         "browserExecutablePath": runtime.get("browserExecutablePath"),
+        "lifecycle": {
+            "visibilityMethod": hidden_visible.get("method"),
+            "x11TabControl": hidden_visible.get("x11TabControl"),
+            "visibilityOffsets": {
+                name: hidden_visible.get(name, {}).get("offset")
+                for name in ("beforeHidden", "hidden", "visible")
+            },
+            "visibleSettledOffset": (
+                hidden_visible.get("visibleSettledState", {})
+                .get("candidate", {})
+                .get("audio", {})
+                .get("offset")
+            ),
+            "visibleRecoveryDelta": hidden_visible.get(
+                "visibleRecoveryDelta",
+            ),
+            "frozenActiveMethod": lifecycle.get("frozenActive", {}).get("method"),
+        },
         "runtimeLog": (
             {"path": str(log_path), **file_record(log_path)}
             if log_path.is_file() and not log_path.is_symlink()
@@ -2261,7 +2461,13 @@ def build_readme(
             "snapshots, objective audio analysis, and SHA-256 manifest are "
             "included under `raw/`, `selected/`, and at bundle root.",
             "",
-            "## Headless lifecycle constraint",
+            "## Native lifecycle capture",
+            "",
+            "Each candidate run proves a real X11 Chrome tab switch with "
+            "`xdotool`, one unchanged active X11 window/PID, distinct CDP tab "
+            "targets in the same browser window, `1 -> 2 -> 1` page cleanup, "
+            "mutually inverted candidate/witness visibility, and resumed audio "
+            "gain and offset.",
             "",
             *[f"- {constraint}" for constraint in lifecycle_constraints],
             "",

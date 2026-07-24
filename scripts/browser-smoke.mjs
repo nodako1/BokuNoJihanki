@@ -15,6 +15,12 @@ import {
   areaPanelRectDistance,
   createAreaPanelRect,
 } from '../src/ui/areaPanelPlacement.mjs';
+import {
+  M15_BROWSER_LIFECYCLE_LAUNCH,
+  M15_CHROMIUM_X11_ARGS,
+  M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
+  captureX11TabVisibilityLifecycle,
+} from './x11-tab-visibility.mjs';
 
 function positiveIntegerFromEnv(name, fallback) {
   const rawValue = process.env[name];
@@ -81,18 +87,7 @@ const touchEnabled = booleanFromEnv('BROWSER_TOUCH', false);
 const requestedTraceEnabled = booleanFromEnv('BROWSER_TRACE', true);
 let traceEnabled = requestedTraceEnabled;
 const browserHeadless = booleanFromEnv('BROWSER_HEADLESS', true);
-const ignoredPlaywrightBackgroundingArgs = Object.freeze([
-  '--disable-background-timer-throttling',
-  '--disable-backgrounding-occluded-windows',
-  '--disable-renderer-backgrounding',
-]);
-const browserLifecycleLaunch = Object.freeze({
-  ignoredPlaywrightDefaultArgs: Object.freeze([
-    ...ignoredPlaywrightBackgroundingArgs,
-  ]),
-  reason:
-    'Preserve native Chromium hidden/visible and background lifecycle behavior.',
-});
+const browserLifecycleLaunch = M15_BROWSER_LIFECYCLE_LAUNCH;
 const hostEnvironment = Object.freeze({
   runnerOsImage: (process.env.M15_RUNNER_OS_IMAGE ?? '').trim(),
   platform: process.platform,
@@ -1450,258 +1445,184 @@ async function verifyAudioTimeline() {
 }
 
 async function verifyVisibilityAndFreezeRecovery() {
+  assert(
+    browserHeadless === false,
+    'Native visibility Evidence requires headed Chromium.',
+  );
   const beforeHidden = await audioDiagnostics();
   const beforeVisibilityHud = await latestHud();
   const visibilityEventStartIndex = await page.evaluate(
     () => globalThis.__m15CandidateSmoke?.lifecycleEvents?.length ?? 0,
   );
-  const { targetInfo } = await cdpSession.send('Target.getTargetInfo');
-  assert(
-    typeof targetInfo?.targetId === 'string' && targetInfo.targetId,
-    'CDP did not expose the candidate page target ID.',
-  );
-  const windowForTarget = await browserCdpSession.send(
-    'Browser.getWindowForTarget',
-    { targetId: targetInfo.targetId },
-  );
-  assert(
-    Number.isInteger(windowForTarget?.windowId),
-    'CDP did not expose the candidate browser window ID.',
-  );
-  const windowId = windowForTarget.windowId;
-  const originalBounds = await browserCdpSession.send(
-    'Browser.getWindowBounds',
-    { windowId },
-  );
-  const originalGeometry = Object.fromEntries(
-    ['left', 'top', 'width', 'height']
-      .filter((key) => Number.isFinite(originalBounds?.bounds?.[key]))
-      .map((key) => [key, originalBounds.bounds[key]]),
-  );
-  const geometryRestoreToleranceDip = 2;
-  assert(
-    Object.keys(originalGeometry).length === 4,
-    'CDP did not expose complete original browser window geometry.',
-  );
-  assert(
-    originalBounds?.bounds?.windowState === 'normal'
-      && originalGeometry.width > 0
-      && originalGeometry.height > 0,
-    'CDP did not expose a normal browser window with positive geometry.',
-  );
-  const windowControl = {
-    targetId: targetInfo.targetId,
-    windowId,
-    originalBounds: originalBounds.bounds,
-    geometryRestoreToleranceDip,
-    minimizeCommand: null,
-    minimizedBounds: null,
-    restoreNormalCommand: null,
-    restoreGeometryCommand: null,
-    restoredBounds: null,
-  };
-  let hiddenState = null;
-  let visibleState = null;
-  let hiddenAudio = null;
-  let visibleAudio = null;
-  let staleTraversal = null;
-  let restoreAttempted = false;
-  try {
-    const minimizeResponse = await browserCdpSession.send(
-      'Browser.setWindowBounds',
-      {
-        windowId,
-        bounds: { windowState: 'minimized' },
-      },
-    );
-    windowControl.minimizeCommand = {
-      succeeded: true,
-      response: minimizeResponse,
-    };
-    hiddenState = await pollFromHost(
-      'a minimized browser window with real hidden state and settled output gain',
-      async () => {
-        const [pageState, bounds] = await Promise.all([
-          page.evaluate(() => ({
-            documentHidden: document.hidden,
-            visibilityState: document.visibilityState,
-            audio:
-              globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
-          })),
-          browserCdpSession.send(
-            'Browser.getWindowBounds',
-            { windowId },
-          ),
-        ]);
-        return {
-          ...pageState,
-          browserWindowBounds: bounds.bounds,
-        };
-      },
-      (snapshot) => (
-        snapshot?.browserWindowBounds?.windowState === 'minimized'
-        && snapshot.documentHidden === true
-        && snapshot.visibilityState === 'hidden'
-        && snapshot.audio?.documentHidden === true
-        && snapshot.audio?.masterGainAutomation?.target === 0
-        && snapshot.audio?.masterGain <= 0.01
-      ),
-      12_000,
-    );
-    windowControl.minimizedBounds = hiddenState.browserWindowBounds;
-    const hidden = hiddenState.audio;
-    hiddenAudio = hidden;
-    assert(
-      hidden.sourceId === beforeHidden.sourceId,
-      'hidden state replaced the BGM source.',
-    );
-    assert(
-      hidden.muted === beforeHidden.muted,
-      'hidden state changed the logical mute setting.',
-    );
-
-    // Queue an adversarial late panel click while input is suspended. The
-    // visible edge must clear it before the next game update.
-    const hiddenPanelClick = await page.getByRole('button', {
-      name: PANEL_LABELS.up,
-      exact: true,
-    }).evaluate((button) => {
-      const smoke = globalThis.__m15CandidateSmoke;
-      const requestCountBefore = smoke?.traversalRequests?.length ?? 0;
-      button.click();
-      const traversalRequest =
-        smoke?.traversalRequests?.at(-1) ?? null;
+  const tabLifecycle = await captureX11TabVisibilityLifecycle({
+    browser,
+    browserCdpSession,
+    context,
+    candidatePage: page,
+    timeoutMs: 12_000,
+    hiddenReady: async ({
+      candidatePage,
+      settledState,
+    }) => {
+      const audio = await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      );
+      if (
+        audio?.documentHidden !== true
+        || !Number.isFinite(audio?.masterGain)
+        || audio?.masterGainAutomation?.target !== 0
+        || audio?.masterGainAutomation?.reason !== 'visibility-hidden'
+        || audio?.masterGain > 0.01
+      ) {
+        return null;
+      }
       return {
-        clickedAt: performance.now(),
-        visibilityState: document.visibilityState,
-        requestCountBefore,
-        requestCountAfter: smoke?.traversalRequests?.length ?? 0,
-        traversalRequest,
-      };
-    });
-    assert(
-      hiddenPanelClick.visibilityState === 'hidden',
-      'Stale traversal probe did not run while the real tab was hidden.',
-    );
-    assert(
-      hiddenPanelClick.requestCountAfter
-        === hiddenPanelClick.requestCountBefore + 1
-      && hiddenPanelClick.traversalRequest?.direction === 'up'
-      && hiddenPanelClick.traversalRequest?.visibilityState === 'hidden',
-      'Hidden panel tap did not enqueue one observable traversal request.',
-    );
-
-    restoreAttempted = true;
-    const restoreBounds = {
-      ...originalGeometry,
-      windowState: 'normal',
-    };
-    const restoreResponse = await browserCdpSession.send(
-      'Browser.setWindowBounds',
-      {
-        windowId,
-        bounds: restoreBounds,
-      },
-    );
-    windowControl.restoreNormalCommand = {
-      succeeded: true,
-      combinedWithGeometry: true,
-      bounds: restoreBounds,
-      response: restoreResponse,
-    };
-    windowControl.restoreGeometryCommand = {
-      succeeded: true,
-      combinedWithNormal: true,
-      bounds: restoreBounds,
-      response: restoreResponse,
-    };
-    await page.bringToFront();
-    visibleState = await pollFromHost(
-      'the restored browser window to become visible with restored output gain',
-      async () => {
-        const [pageState, bounds] = await Promise.all([
-          page.evaluate(() => ({
-            documentHidden: document.hidden,
-            visibilityState: document.visibilityState,
-            audio:
-              globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
-          })),
-          browserCdpSession.send(
-            'Browser.getWindowBounds',
-            { windowId },
-          ),
-        ]);
-        return {
-          ...pageState,
-          browserWindowBounds: bounds.bounds,
-        };
-      },
-      (snapshot) => (
-        snapshot?.browserWindowBounds?.windowState === 'normal'
-        && Object.entries(originalGeometry).every(([key, value]) => (
-          Math.abs(snapshot.browserWindowBounds[key] - value)
-            <= geometryRestoreToleranceDip
-        ))
-        && snapshot.documentHidden === false
-        && snapshot.visibilityState === 'visible'
-        && snapshot.audio?.documentHidden === false
-        && snapshot.audio?.masterGainAutomation?.target > 0
-        && Math.abs(
-          snapshot.audio.masterGain
-            - snapshot.audio.masterGainAutomation.target,
-        ) <= 0.02
-      ),
-      12_000,
-    );
-    windowControl.restoredBounds = visibleState.browserWindowBounds;
-    const visible = await waitForAudioAdvance(beforeHidden);
-    visibleAudio = visible;
-    await new Promise((resolve) => {
-      setTimeout(resolve, 750);
-    });
-    const afterVisibilityHud = await latestHud();
-    staleTraversal = {
-      injected: hiddenPanelClick,
-      before: beforeVisibilityHud,
-      after: afterVisibilityHud,
-      didNotTransition:
-        afterVisibilityHud.area === beforeVisibilityHud.area
-        && afterVisibilityHud.spawnId === beforeVisibilityHud.spawnId
-        && afterVisibilityHud.lastTransitionId
-          === beforeVisibilityHud.lastTransitionId
-        && afterVisibilityHud.transitionState === 'idle',
-    };
-    assert(
-      staleTraversal.didNotTransition,
-      'A traversal request queued while hidden executed after visibility recovery.',
-    );
-    assert(
-      visible.sourceId === beforeHidden.sourceId,
-      'hidden-visible recovery replaced the BGM source.',
-    );
-    assert(
-      visible.muted === beforeHidden.muted,
-      'hidden-visible recovery changed the logical mute setting.',
-    );
-    assert(
-      visible.lastRecoveryError === null,
-      `hidden-visible recovery error: ${visible.lastRecoveryError}.`,
-    );
-  } finally {
-    if (!restoreAttempted || windowControl.restoredBounds === null) {
-      await browserCdpSession.send(
-        'Browser.setWindowBounds',
-        {
-          windowId,
-          bounds: {
-            ...originalGeometry,
-            windowState: 'normal',
-          },
+        candidate: {
+          ...settledState.candidate,
+          audio,
         },
-      ).catch(() => {});
-    }
-    if (page && !page.isClosed()) await page.bringToFront().catch(() => {});
-  }
+        foreground: settledState.foreground,
+      };
+    },
+    whileHidden: async ({ candidatePage }) => {
+      const hidden = await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      );
+      assert(
+        hidden?.sourceId === beforeHidden.sourceId,
+        'hidden state replaced the BGM source.',
+      );
+      assert(
+        hidden.muted === beforeHidden.muted,
+        'hidden state changed the logical mute setting.',
+      );
+
+      // Queue an adversarial late panel click while input is suspended. The
+      // visible edge must clear it before the next game update.
+      const hiddenPanelClick = await candidatePage.getByRole('button', {
+        name: PANEL_LABELS.up,
+        exact: true,
+      }).evaluate((button) => {
+        const smoke = globalThis.__m15CandidateSmoke;
+        const requestCountBefore = smoke?.traversalRequests?.length ?? 0;
+        button.click();
+        const traversalRequest =
+          smoke?.traversalRequests?.at(-1) ?? null;
+        return {
+          clickedAt: performance.now(),
+          visibilityState: document.visibilityState,
+          requestCountBefore,
+          requestCountAfter: smoke?.traversalRequests?.length ?? 0,
+          traversalRequest,
+        };
+      });
+      assert(
+        hiddenPanelClick.visibilityState === 'hidden',
+        'Stale traversal probe did not run while the real tab was hidden.',
+      );
+      assert(
+        hiddenPanelClick.requestCountAfter
+          === hiddenPanelClick.requestCountBefore + 1
+        && hiddenPanelClick.traversalRequest?.direction === 'up'
+        && hiddenPanelClick.traversalRequest?.visibilityState === 'hidden',
+        'Hidden panel tap did not enqueue one observable traversal request.',
+      );
+      return { hidden, hiddenPanelClick };
+    },
+    visibleReady: async ({
+      candidatePage,
+      settledState,
+    }) => {
+      const audio = await candidatePage.evaluate(
+        () => globalThis.__BOKU_M15_AUDIO__?.getDiagnostics() ?? null,
+      );
+      const target = audio?.masterGainAutomation?.target;
+      if (
+        audio?.documentHidden !== false
+        || !Number.isFinite(audio?.masterGain)
+        || !Number.isFinite(target)
+        || !(target > 0)
+        || audio?.masterGainAutomation?.reason !== 'visibility-visible'
+        || Math.abs(audio.masterGain - target) > 0.02
+      ) {
+        return null;
+      }
+      return {
+        candidate: {
+          ...settledState.candidate,
+          audio,
+        },
+        foreground: settledState.foreground,
+      };
+    },
+    afterVisible: async ({ readyResult }) => {
+      const visibleRecoveryBaseline = readyResult?.candidate?.audio;
+      assert(
+        visibleRecoveryBaseline?.documentHidden === false,
+        'Visible recovery baseline audio diagnostics are missing.',
+      );
+      const visible = await waitForAudioAdvance(visibleRecoveryBaseline);
+      const visibleRecoveryDelta = cyclicOffsetDelta(
+        visibleRecoveryBaseline.offset,
+        visible.offset,
+        visibleRecoveryBaseline.duration,
+      );
+      await new Promise((resolve) => {
+        setTimeout(resolve, 750);
+      });
+      const afterVisibilityHud = await latestHud();
+      const staleTraversal = {
+        injected: null,
+        before: beforeVisibilityHud,
+        after: afterVisibilityHud,
+        didNotTransition:
+          afterVisibilityHud.area === beforeVisibilityHud.area
+          && afterVisibilityHud.spawnId === beforeVisibilityHud.spawnId
+          && afterVisibilityHud.lastTransitionId
+            === beforeVisibilityHud.lastTransitionId
+          && afterVisibilityHud.transitionState === 'idle',
+      };
+      assert(
+        staleTraversal.didNotTransition,
+        'A traversal request queued while hidden executed after visibility recovery.',
+      );
+      assert(
+        visible.sourceId === beforeHidden.sourceId,
+        'hidden-visible recovery replaced the BGM source.',
+      );
+      assert(
+        visible.muted === beforeHidden.muted,
+        'hidden-visible recovery changed the logical mute setting.',
+      );
+      assert(
+        visible.lastRecoveryError === null,
+        `hidden-visible recovery error: ${visible.lastRecoveryError}.`,
+      );
+      return {
+        visible,
+        visibleRecoveryDelta,
+        staleTraversal,
+      };
+    },
+  });
+  const hiddenState = tabLifecycle.hiddenReadyResult;
+  const visibleState = tabLifecycle.visibleReadyResult;
+  const hiddenAudio = tabLifecycle.whileHiddenResult?.hidden;
+  const visibleAudio = tabLifecycle.afterVisibleResult?.visible;
+  const visibleRecoveryDelta =
+    tabLifecycle.afterVisibleResult?.visibleRecoveryDelta;
+  const staleTraversal = tabLifecycle.afterVisibleResult?.staleTraversal;
+  assert(
+    hiddenState
+      && visibleState
+      && hiddenAudio
+      && visibleAudio
+      && Number.isFinite(visibleRecoveryDelta)
+      && staleTraversal,
+    'Native X11 tab lifecycle callbacks did not return complete Evidence.',
+  );
+  staleTraversal.injected =
+    tabLifecycle.whileHiddenResult.hiddenPanelClick;
   const visibilityEvents = await page.evaluate(
     (startIndex) => (
       globalThis.__m15CandidateSmoke?.lifecycleEvents?.slice(startIndex)
@@ -1724,12 +1645,13 @@ async function verifyVisibilityAndFreezeRecovery() {
       + `${JSON.stringify(visibilityEvents)}.`,
   );
   evidence.lifecycle.hiddenVisible = {
-    method: 'cdp-browser-window-minimize-restore',
-    windowControl,
+    method: 'x11-xdotool-tab-switch',
+    x11TabControl: tabLifecycle.x11TabControl,
     beforeHidden,
     hiddenSettledState: hiddenState,
     hidden: hiddenAudio,
     visible: visibleAudio,
+    visibleRecoveryDelta,
     visibleSettledState: visibleState,
     visibilityEvents,
     staleTraversal,
@@ -1976,17 +1898,14 @@ try {
     headless: browserHeadless,
     executablePath: browserExecutablePath,
     // Playwright normally disables Chromium backgrounding so automation
-    // remains deterministic.  Those switches also prevent a minimized
-    // headed window from entering the real Page Visibility hidden state.
-    // Ignore only those three switches; the smoke test then waits for native
-    // hidden/visible DOM events and the actual audio-gain response.
-    ignoreDefaultArgs: [...ignoredPlaywrightBackgroundingArgs],
-    args: [
-      '--use-gl=swiftshader',
-      '--enable-webgl',
-      '--enable-unsafe-swiftshader',
-      '--ignore-gpu-blocklist',
+    // remains deterministic. Those switches also suppress native Page
+    // Visibility when a real Chrome UI tab moves to the background.
+    // Restore normal backgrounding, pin X11, then prove hidden/visible through
+    // the real active Chrome window and keyboard tab-selection path.
+    ignoreDefaultArgs: [
+      ...M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS,
     ],
+    args: [...M15_CHROMIUM_X11_ARGS],
   });
   browserCdpSession = await browser.newBrowserCDPSession();
   context = await browser.newContext({

@@ -47,11 +47,13 @@ const M15_RUNTIME_FILES = [
   'src/ui/areaPanelPlacement.mjs',
   'src/ui/areaPanelPlacement.d.mts',
   'src/game/systems/audioEngine.ts',
+  'scripts/x11-tab-visibility.mjs',
   'tests/m15-audio-contract.test.mjs',
   'tests/m15-evidence-environment.test.mjs',
   'tests/m15-geometry-panel-contract.test.mjs',
   'tests/m15-headed-runner.test.mjs',
   'tests/m15-input-protection.test.mjs',
+  'tests/m15-x11-tab-visibility.test.mjs',
   'tools/art/generate_m15_assets.py',
   'tools/art/validate_m15_assets.py',
   'tools/art/m15-source/generation.json',
@@ -68,6 +70,7 @@ const M15_RUNTIME_FILES = [
   'tools/evidence/capture_m15_baseline.mjs',
   'tools/evidence/generate_m15_audio_evidence.py',
   'tools/evidence/m15BaselineGeometryFixture.mjs',
+  'tools/evidence/probe_m15_x11_visibility.mjs',
 ];
 const M14_SCREENSHOTS = [
   '01-title.png',
@@ -314,6 +317,8 @@ const [
   audioEvidenceGenerator,
   evidenceAssembler,
   browserSmoke,
+  x11TabVisibility,
+  x11VisibilityPreflight,
   viteConfig,
   buildBadge,
   buildTypes,
@@ -364,6 +369,8 @@ const [
   readText('tools/evidence/generate_m15_audio_evidence.py'),
   readText('tools/evidence/assemble_m15_evidence.py'),
   readText('scripts/browser-smoke.mjs'),
+  readText('scripts/x11-tab-visibility.mjs'),
+  readText('tools/evidence/probe_m15_x11_visibility.mjs'),
   readText('vite.config.ts'),
   readText('src/ui/BuildBadge.tsx'),
   readText('src/types/build.d.ts'),
@@ -1150,21 +1157,50 @@ for (const marker of [
   '"--disable-background-timer-throttling"',
   '"--disable-backgrounding-occluded-windows"',
   '"--disable-renderer-backgrounding"',
+  'lifecycle_launch.get("chromiumArgs")',
+  '"--use-gl=swiftshader"',
+  '"--enable-webgl"',
+  '"--enable-unsafe-swiftshader"',
+  '"--ignore-gpu-blocklist"',
+  '"--ozone-platform=x11"',
   '"native Chromium hidden/visible" in lifecycle_launch["reason"]',
-  'hidden_visible.get("method") == "cdp-browser-window-minimize-restore"',
-  'nested(hidden_settled, "browserWindowBounds", "windowState")',
-  'nested(visible_settled, "browserWindowBounds", "windowState")',
-  'nested(window_control, "minimizeCommand", "succeeded") is True',
-  'nested(window_control, "restoreNormalCommand", "succeeded") is True',
-  'nested(window_control, "restoreGeometryCommand", "succeeded")',
-  'geometry_tolerance == 2',
-  'original_window_bounds.get("windowState") == "normal"',
-  'restored_window_bounds.get("windowState") == "normal"',
-  'original_geometry["width"] > 0',
-  'abs(restored_geometry[key] - original_geometry[key])',
-  'hidden_settled.get("visibilityState") == "hidden"',
-  'visible_settled.get("visibilityState") == "visible"',
+  'hidden_visible.get("method") == "x11-xdotool-tab-switch"',
+  '"windowControl" not in hidden_visible',
+  '"minimiz" not in json.dumps(hidden_visible, ensure_ascii=True).lower()',
+  'tab_control = nested(hidden_visible, "x11TabControl")',
+  'tool = nested(tab_control, "tool")',
+  'browser_pid = tab_control.get("browserPid")',
+  'candidate_target = nested(tab_control, "candidateTarget")',
+  'foreground_target = nested(tab_control, "foregroundTarget")',
+  'foreground_target.get("internalNewTab") is True',
+  'tab_control.get("contextPageEventObserved") is True',
+  'page_counts = nested(tab_control, "pageCounts")',
+  'page_counts.get("before") == 1',
+  'page_counts.get("afterOpen") == 2',
+  'page_counts.get("afterCleanup") == 1',
+  'nested(commands, "openTab", "gesture") == "Ctrl+T"',
+  'nested(commands, "returnTab", "gesture") == "Ctrl+Shift+Tab"',
+  'snapshots = nested(tab_control, "x11Snapshots")',
+  'xdotool_window_id = snapshot.get("xdotoolActiveWindowId")',
+  'root_window_id = snapshot.get("rootActiveWindowId")',
+  'wm_pid = snapshot.get("wmPid")',
+  'wm_class = snapshot.get("wmClass")',
+  'root_window_id == xdotool_window_id',
+  'wm_pid == browser_pid',
+  'len(set(active_window_ids)) == 1',
+  'tab_control.get("foregroundClosed") is True',
+  'tab_control.get("cleanupComplete") is True',
+  'hidden_candidate.get("visibilityState") == "hidden"',
+  'hidden_foreground.get("visibilityState") == "visible"',
+  'visible_candidate.get("visibilityState") == "visible"',
+  'visible_foreground.get("visibilityState") == "hidden"',
   'visible_event_index > hidden_event_index',
+  'visible_recovery_start_offset = finite_number(',
+  'visibility_resume_delta = (',
+  'recorded_visibility_resume_delta = finite_number(',
+  'hidden_visible.get("visibleRecoveryDelta")',
+  'math.isclose(',
+  '0.15 <= visibility_resume_delta < visibility_duration / 2',
   'request_count_after == request_count_before + 1',
   'nested(injected, "traversalRequest", "visibilityState") == "hidden"',
   'recomputed_stale_rejection',
@@ -1216,6 +1252,99 @@ if (
 if (/if role != ["']baseline["']:/.test(evidenceAssembler)) {
   failures.push(
     'M1.5 Evidence assembler must require completion hashes for baseline runs.',
+  );
+}
+for (const marker of [
+  "import { execFile as execFileCallback } from 'node:child_process';",
+  'execFile(command, args, {',
+  'shell: false',
+  "runFixedCommand('xdotool', ['version'])",
+  "runFixedCommand('xdotool', ['getactivewindow'])",
+  "runFixedCommand('xprop', ['-root', '_NET_ACTIVE_WINDOW'])",
+  "'_NET_WM_PID'",
+  "'WM_CLASS'",
+  "'SystemInfo.getProcessInfo'",
+  "'Target.getTargetInfo'",
+  "'Browser.getWindowForTarget'",
+  "'--disable-background-timer-throttling'",
+  "'--disable-backgrounding-occluded-windows'",
+  "'--disable-renderer-backgrounding'",
+  'Preserve native Chromium hidden/visible',
+  'wmPid === expectedBrowserPid',
+  "context.waitForEvent('page'",
+  'predicate: (openedPage) => !pagesBeforeOpen.has(openedPage)',
+  "sendXdotoolChord('ctrl+t')",
+  "sendXdotoolChord('ctrl+shift+Tab')",
+  "foregroundPage.goto('about:blank'",
+  'navigatedForegroundTarget.targetId === foregroundTarget.targetId',
+  'pageCounts.before === 1',
+  'pageCounts.afterOpen === 2',
+  'pageCounts.afterCleanup === 1',
+  'foregroundTarget.targetId !== candidateTarget.targetId',
+  'foregroundTarget.browserWindowId === candidateTarget.browserWindowId',
+  'candidate.documentHidden === expectedCandidateHidden',
+  'foreground.documentHidden !== expectedCandidateHidden',
+  'xdotoolActiveWindowId',
+  'rootActiveWindowId',
+  'browserPid',
+  'candidateTarget',
+  'foregroundTarget',
+  'contextPageEventObserved',
+  'foregroundClosed',
+  'cleanupComplete',
+]) {
+  if (!x11TabVisibility.includes(marker)) {
+    failures.push(`M1.5 X11 tab visibility helper is missing ${marker}.`);
+  }
+}
+for (const [forbiddenPattern, label] of [
+  [/shell:\s*true/, 'shell-mediated command execution'],
+  [/Browser\.setWindowBounds/, 'CDP browser-window minimization'],
+  [/\bbringToFront\b/, 'Playwright foreground forcing'],
+  [/foregroundPage\.setContent/, 'privileged new-tab WebUI document rewrite'],
+  [
+    /Object\.defineProperty\(\s*document\s*,\s*['"](?:hidden|visibilityState)['"]/,
+    'synthetic Page Visibility property',
+  ],
+  [
+    /dispatchEvent\(\s*new Event\(\s*['"]visibilitychange['"]/,
+    'synthetic visibilitychange event',
+  ],
+]) {
+  if (forbiddenPattern.test(x11TabVisibility)) {
+    failures.push(`M1.5 X11 tab visibility helper still contains ${label}.`);
+  }
+}
+for (const marker of [
+  "from '../../scripts/x11-tab-visibility.mjs'",
+  "booleanFromEnvironment('BROWSER_HEADLESS', false) === false",
+  'headless: false',
+  'viewport,',
+  'deviceScaleFactor,',
+  'hasTouch: touchEnabled',
+  'isMobile: touchEnabled',
+  'captureX11TabVisibilityLifecycle({',
+  'x11TabControl: lifecycle.x11TabControl',
+  "path.join(",
+  "'visibility-preflight.json'",
+  "status: 'passed'",
+  'initialVisibility.documentHidden === false',
+  "initialVisibility.visibilityState === 'visible'",
+  "event.type === 'visibilitychange'",
+  'hiddenIndex >= 0 && visibleIndex > hiddenIndex',
+]) {
+  if (!x11VisibilityPreflight.includes(marker)) {
+    failures.push(`M1.5 X11 visibility preflight is missing ${marker}.`);
+  }
+}
+if (
+  /Object\.defineProperty\(\s*document\s*,\s*['"](?:hidden|visibilityState)['"]/
+    .test(x11VisibilityPreflight)
+  || /dispatchEvent\(\s*new Event\(\s*['"]visibilitychange['"]/
+    .test(x11VisibilityPreflight)
+) {
+  failures.push(
+    'M1.5 X11 visibility preflight must not synthesize Page Visibility.',
   );
 }
 for (const marker of [
@@ -1515,30 +1644,23 @@ for (const marker of [
   "'Page.setLifecycleEventsEnabled'",
   "'Page.lifecycleEvent'",
   "'visibilitychange'",
-  'ignoredPlaywrightBackgroundingArgs',
-  'const browserLifecycleLaunch = Object.freeze({',
-  'ignoreDefaultArgs: [...ignoredPlaywrightBackgroundingArgs]',
-  "'--disable-background-timer-throttling'",
-  "'--disable-backgrounding-occluded-windows'",
-  "'--disable-renderer-backgrounding'",
-  'Preserve native Chromium hidden/visible',
+  'M15_BROWSER_LIFECYCLE_LAUNCH',
+  'M15_CHROMIUM_X11_ARGS',
+  'M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS',
+  'captureX11TabVisibilityLifecycle',
+  "from './x11-tab-visibility.mjs'",
+  'ignoreDefaultArgs: [',
+  '...M15_IGNORED_PLAYWRIGHT_BACKGROUNDING_ARGS',
   'browser.newBrowserCDPSession()',
-  "'Browser.getWindowForTarget'",
-  "'Browser.getWindowBounds'",
-  "'Browser.setWindowBounds'",
-  "bounds: { windowState: 'minimized' }",
-  "windowState: 'normal'",
-  'await page.bringToFront();',
+  'const tabLifecycle = await captureX11TabVisibilityLifecycle({',
+  'candidatePage: page',
+  "method: 'x11-xdotool-tab-switch'",
+  'x11TabControl: tabLifecycle.x11TabControl',
+  'hiddenSettledState: hiddenState',
+  'visibleSettledState: visibleState',
+  'const visibleRecoveryDelta = cyclicOffsetDelta(',
+  'visibleRecoveryDelta,',
   'visibilityState: document.visibilityState',
-  "method: 'cdp-browser-window-minimize-restore'",
-  "snapshot?.browserWindowBounds?.windowState === 'minimized'",
-  "snapshot?.browserWindowBounds?.windowState === 'normal'",
-  "originalBounds?.bounds?.windowState === 'normal'",
-  "windowState: 'normal'",
-  'combinedWithGeometry: true',
-  'combinedWithNormal: true',
-  'geometryRestoreToleranceDip = 2',
-  'Object.entries(originalGeometry).every',
   "hiddenPanelClick.visibilityState === 'hidden'",
   'hiddenPanelClick.requestCountAfter',
   "hiddenPanelClick.traversalRequest?.visibilityState === 'hidden'",
@@ -1548,8 +1670,13 @@ for (const marker of [
   'A traversal request queued while hidden executed after visibility recovery.',
   "value.masterGainAutomation?.reason === (muted ? 'mute' : 'unmute')",
   'value.masterGain - value.masterGainAutomation.target',
-  'snapshot.audio?.masterGainAutomation?.target === 0',
-  'snapshot.audio?.masterGain <= 0.01',
+  'audio?.documentHidden !== true',
+  'audio?.masterGainAutomation?.target !== 0',
+  "audio?.masterGainAutomation?.reason !== 'visibility-hidden'",
+  'audio?.masterGain > 0.01',
+  'audio?.documentHidden !== false',
+  "audio?.masterGainAutomation?.reason !== 'visibility-visible'",
+  'Math.abs(audio.masterGain - target) > 0.02',
   'frozenResponse',
   'activeResponse',
   "method: 'cdp-page-lifecycle'",
@@ -1618,6 +1745,15 @@ for (const [legacyPattern, label] of [
   [
     /deterministic-document-visibility-override/,
     'fake visibility Evidence method',
+  ],
+  [
+    /cdp-browser-window-minimize-restore/,
+    'obsolete CDP browser-window visibility method',
+  ],
+  [/Browser\.setWindowBounds/, 'obsolete CDP browser-window minimization'],
+  [
+    /windowState:\s*['"]minimized['"]/,
+    'obsolete minimized browser-window state',
   ],
   [
     /Object\.defineProperty\(\s*document\s*,\s*['"](?:hidden|visibilityState)['"]/,
@@ -1840,6 +1976,9 @@ for (const marker of [
   'Install browser, real X11 window manager and Japanese font',
   'fontconfig',
   'fonts-noto-cjk',
+  'xdotool',
+  'x11-utils',
+  'fontconfig fonts-noto-cjk openbox xdotool x11-utils xvfb',
   '.github/fontconfig/m15-noto-cjk.conf',
   'export FONTCONFIG_FILE="$M15_FONTCONFIG_FILE"',
   'echo "FONTCONFIG_FILE=$M15_FONTCONFIG_FILE" >> "$GITHUB_ENV"',
@@ -1869,6 +2008,9 @@ for (const marker of [
   "dpkg-query --show \\",
   'CHROME_PATH="$(command -v google-chrome)"',
   'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
+  'Preflight native X11 tab visibility',
+  'diagnostics/visibility-preflight-${{ matrix.device_id }}',
+  'node tools/evidence/probe_m15_x11_visibility.mjs',
   'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
   'retention-days: 90',
   'name: Assemble exact-head M1.5 Evidence',
@@ -1921,6 +2063,9 @@ if (
 }
 for (const marker of [
   'openbox --sm-disable',
+  'command -v xdotool >/dev/null',
+  'printf \'xdotoolPath=%s\\n\' "$(command -v xdotool)"',
+  'xdotool version',
   'xprop -root _NET_SUPPORTING_WM_CHECK',
   'xprop -id "$candidate_window_id"',
   'candidate_support_window_id="${BASH_REMATCH[1]}"',
@@ -1929,6 +2074,7 @@ for (const marker of [
   'window_support_property',
   'window_name_property',
   'window-manager-environment.txt',
+  'fontconfig fonts-noto-cjk openbox xdotool x11-utils xvfb',
   'M15_RUNNER_OS_IMAGE',
   'M15_JAPANESE_FONT_MATCH',
   'M15_JAPANESE_FONT_SHA256',
@@ -1960,6 +2106,15 @@ if (
     'Browser Smoke workflow must bind both local and Preview runs to the exact PR head.',
   );
 }
+const installBrowserStep = browserWorkflow.indexOf(
+  '- name: Install browser, real X11 window manager and Japanese font',
+);
+const selectChromeStep = browserWorkflow.indexOf(
+  '- name: Select headed Google Chrome with AAC support',
+);
+const visibilityPreflightStep = browserWorkflow.indexOf(
+  '- name: Preflight native X11 tab visibility',
+);
 const prepareBaselineStep = browserWorkflow.indexOf(
   '- name: Prepare immutable baseline build',
 );
@@ -1976,17 +2131,54 @@ const productionSmokeStep = browserWorkflow.indexOf(
   '- name: Test exact deployed Production',
 );
 if (
-  prepareBaselineStep < 0
+  installBrowserStep < 0
+  || selectChromeStep <= installBrowserStep
+  || visibilityPreflightStep <= selectChromeStep
+  || prepareBaselineStep <= visibilityPreflightStep
   || baselineCaptureStep <= prepareBaselineStep
   || localSmokeStep <= baselineCaptureStep
   || previewSmokeStep <= localSmokeStep
   || productionSmokeStep <= previewSmokeStep
 ) {
   failures.push(
-    'Browser Smoke workflow must build/capture the immutable baseline before '
-      + 'the local candidate and exact Vercel Preview.',
+    'Browser Smoke workflow must select Chrome, prove native X11 tab '
+      + 'visibility, then build/capture the immutable baseline before the '
+      + 'local candidate and exact Vercel Preview.',
   );
 } else {
+  const installBrowserStepSource = browserWorkflow.slice(
+    installBrowserStep,
+    selectChromeStep,
+  );
+  for (const marker of [
+    'sudo apt-get install --yes --no-install-recommends',
+    'xdotool \\',
+    'x11-utils',
+    "dpkg-query --show \\",
+    'fontconfig fonts-noto-cjk openbox xdotool x11-utils xvfb',
+  ]) {
+    if (!installBrowserStepSource.includes(marker)) {
+      failures.push(`Browser Smoke X11 package setup is missing ${marker}.`);
+    }
+  }
+  const preflightStepSource = browserWorkflow.slice(
+    visibilityPreflightStep,
+    prepareBaselineStep,
+  );
+  for (const marker of [
+    "BROWSER_HEADLESS: 'false'",
+    'BROWSER_VIEWPORT_WIDTH: ${{ matrix.width }}',
+    'BROWSER_VIEWPORT_HEIGHT: ${{ matrix.height }}',
+    'BROWSER_DEVICE_SCALE_FACTOR: ${{ matrix.dpr }}',
+    'BROWSER_TOUCH: ${{ matrix.touch }}',
+    'diagnostics/visibility-preflight-${{ matrix.device_id }}',
+    'xvfb-run -a bash scripts/run-headed-browser-smoke.sh',
+    'node tools/evidence/probe_m15_x11_visibility.mjs',
+  ]) {
+    if (!preflightStepSource.includes(marker)) {
+      failures.push(`Browser Smoke X11 preflight is missing ${marker}.`);
+    }
+  }
   const prepareBaselineStepSource = browserWorkflow.slice(
     prepareBaselineStep,
     baselineCaptureStep,
@@ -2057,6 +2249,15 @@ if (
       failures.push(`Browser Smoke exact Preview matrix step is missing ${marker}.`);
     }
   }
+}
+if (
+  (browserWorkflow.match(
+    /diagnostics\/visibility-preflight-\$\{\{ matrix\.device_id \}\}/g,
+  )?.length ?? 0) !== 2
+) {
+  failures.push(
+    'Browser Smoke workflow must both write and upload each X11 preflight diagnostic.',
+  );
 }
 for (const marker of [
   'Verify Vercel Production contains approved M1.5',

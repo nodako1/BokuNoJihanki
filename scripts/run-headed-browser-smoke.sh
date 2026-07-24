@@ -9,6 +9,7 @@ fi
 
 command -v openbox >/dev/null
 command -v xprop >/dev/null
+command -v xdotool >/dev/null
 
 artifact_root="${BROWSER_ARTIFACT_DIR:-diagnostics/browser-smoke}"
 mkdir -p "$artifact_root"
@@ -23,6 +24,8 @@ environment_log="$artifact_root/window-manager-environment.txt"
   printf 'japaneseFontPackageVersion=%s\n' \
     "${M15_JAPANESE_FONT_PACKAGE_VERSION:-}"
   printf 'japaneseFontSha256=%s\n' "${M15_JAPANESE_FONT_SHA256:-}"
+  printf 'xdotoolPath=%s\n' "$(command -v xdotool)"
+  xdotool version
   if [[ -r /etc/os-release ]]; then
     sed -n '1,80p' /etc/os-release
   fi
@@ -33,7 +36,7 @@ environment_log="$artifact_root/window-manager-environment.txt"
   if command -v dpkg-query >/dev/null; then
     dpkg-query --show \
       --showformat='${binary:Package}\t${Version}\n' \
-      fontconfig fonts-noto-cjk openbox x11-utils xvfb || true
+      fontconfig fonts-noto-cjk openbox xdotool x11-utils xvfb || true
   fi
   if command -v Xvfb >/dev/null; then
     Xvfb -version 2>&1 || true
