@@ -1372,6 +1372,9 @@ for (const marker of [
   'AREA_PANEL_MIN_TOUCH_TARGET',
   'evidence.panelMatrix.length === 12',
   'requiredAggregatePanelStatesAcrossThreeViewports: 36',
+  'triggerBoundaryWorldX',
+  'fixtureWorldX: entrance.triggerRange.minX + 4',
+  'fixtureWorldX: entrance.triggerRange.maxX - 4',
   'fixtureGroundMeasurement',
   "'boku-no-jihanki:player-screen-geometry'",
   'lastPlayerGeometry',
@@ -1548,7 +1551,6 @@ for (const marker of [
   "height: '720'",
   "dpr: '1'",
   "touch: 'false'",
-  "trace: 'true'",
   'device_id: touch-844x390',
   "width: '844'",
   "height: '390'",
@@ -1569,10 +1571,15 @@ for (const marker of [
   'CHROME_PATH="$(command -v google-chrome)"',
   'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
   'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
+  'Raw tracing',
+  'protected Preview credential',
 ]) {
   if (!browserWorkflow.includes(marker)) {
     failures.push(`Browser Smoke workflow is missing M1.5 viewport/head gate ${marker}.`);
   }
+}
+if ((browserWorkflow.match(/trace: 'false'/g)?.length ?? 0) !== 3) {
+  failures.push('Browser Smoke raw tracing must stay disabled for all three device jobs.');
 }
 if (
   (browserWorkflow.match(

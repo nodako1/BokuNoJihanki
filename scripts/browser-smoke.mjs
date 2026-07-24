@@ -979,17 +979,20 @@ async function capturePanelMatrix(direction) {
   const triggerSamples = [
     {
       name: 'start',
-      fixtureWorldX: entrance.triggerRange.minX,
+      triggerBoundaryWorldX: entrance.triggerRange.minX,
+      fixtureWorldX: entrance.triggerRange.minX + 4,
       targetWorldX: entrance.triggerRange.minX + 4,
     },
     {
       name: 'center',
+      triggerBoundaryWorldX: entrance.triggerCenterX,
       fixtureWorldX: entrance.triggerCenterX,
       targetWorldX: entrance.triggerCenterX,
     },
     {
       name: 'end',
-      fixtureWorldX: entrance.triggerRange.maxX,
+      triggerBoundaryWorldX: entrance.triggerRange.maxX,
+      fixtureWorldX: entrance.triggerRange.maxX - 4,
       targetWorldX: entrance.triggerRange.maxX - 4,
     },
   ];

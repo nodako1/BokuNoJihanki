@@ -55,13 +55,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Screenshots, state and runtime logs are formal Evidence. Raw tracing
+        # stays off so instrumentation cannot perturb input or retain a
+        # protected Preview credential.
         include:
           - device_id: desktop-1280x720
             width: '1280'
             height: '720'
             dpr: '1'
             touch: 'false'
-            trace: 'true'
+            trace: 'false'
           - device_id: touch-844x390
             width: '844'
             height: '390'

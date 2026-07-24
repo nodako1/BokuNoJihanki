@@ -361,6 +361,9 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'page.touchscreen.tap',
     'evidence.panelMatrix.length === 12',
     'requiredAggregatePanelStatesAcrossThreeViewports: 36',
+    'triggerBoundaryWorldX',
+    'fixtureWorldX: entrance.triggerRange.minX + 4',
+    'fixtureWorldX: entrance.triggerRange.maxX - 4',
     'fixtureGroundMeasurement',
     "'boku-no-jihanki:player-screen-geometry'",
     'lastPlayerGeometry',
@@ -516,7 +519,6 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     "height: '720'",
     "dpr: '1'",
     "touch: 'false'",
-    "trace: 'true'",
     'device_id: touch-844x390',
     "width: '844'",
     "height: '390'",
@@ -537,9 +539,12 @@ test('M1.5 Browser Smoke and workflows enforce exact SHA and device contracts', 
     'CHROME_PATH="$(command -v google-chrome)"',
     'echo "BROWSER_EXECUTABLE_PATH=$CHROME_PATH" >> "$GITHUB_ENV"',
     'browser-smoke-${{ github.run_id }}-${{ matrix.device_id }}',
+    'Raw tracing',
+    'protected Preview credential',
   ]) {
     assert.ok(browserWorkflow.includes(marker), marker);
   }
+  assert.equal(browserWorkflow.match(/trace: 'false'/g)?.length, 3);
   const localSmokeStep = browserWorkflow.indexOf(
     '- name: Test exact local pull request build',
   );
